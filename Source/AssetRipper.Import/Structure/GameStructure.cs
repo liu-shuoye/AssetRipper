@@ -77,7 +77,7 @@ public sealed class GameStructure : IDisposable
 	{
 		Logger.SendStatusChange("loading_step_create_file_collection");
 
-		GameAssetFactory assetFactory = new GameAssetFactory(AssemblyManager);
+		GameAssetFactory assetFactory = new(AssemblyManager);
 
 		IEnumerable<string> filePaths;
 		if (PlatformStructure is null || MixedStructure is null)

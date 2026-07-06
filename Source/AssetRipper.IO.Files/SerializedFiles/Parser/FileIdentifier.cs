@@ -3,16 +3,16 @@
 namespace AssetRipper.IO.Files.SerializedFiles.Parser;
 
 /// <summary>
-/// A serialized file may be linked with other serialized files to create shared dependencies.
+/// 一个序列化文件可以与其他序列化文件链接，以创建共享依赖关系。
 /// </summary>
 public struct FileIdentifier
 {
 	/// <summary>
-	/// 2.1.0 and greater
+	/// 2.1.0 及以上
 	/// </summary>
 	public static bool HasAssetPath(FormatVersion generation) => generation >= FormatVersion.Unknown_6;
 	/// <summary>
-	/// 1.2.0 and greater
+	/// 1.2.0 及以上
 	/// </summary>
 	public static bool HasHash(FormatVersion generation) => generation >= FormatVersion.Unknown_5;
 
@@ -69,22 +69,22 @@ public struct FileIdentifier
 	}
 
 	/// <summary>
-	/// File path without such prefixes as archive:/directory/fileName
+	/// 文件路径，不包含如 archive:/directory/fileName 这样的前缀
 	/// </summary>
 	public string PathName { get; set; }
 
 	/// <summary>
-	/// Virtual asset path. Used for cached files, otherwise it's empty.
-	/// The file with that path usually doesn't exist, so it's probably an alias.
+	/// 虚拟资产路径。用于缓存文件，否则为空。
+	/// 该路径下的文件通常不存在，所以这很可能是别名。
 	/// </summary>
 	public Utf8String AssetPath { get; set; }
 	/// <summary>
-	/// The type of the file
+	/// 文件类型
 	/// </summary>
 	public AssetType Type { get; set; }
 	/// <summary>
-	/// Actual file path. This path is relative to the path of the current file.
-	/// The folder "library" often needs to be translated to "resources" in order to find the file on the file system.
+	/// 实际文件路径。此路径是相对于当前文件路径的。
+	/// 文件夹 "library" 通常需要翻译成 "resources" 才能在文件系统中找到文件。
 	/// </summary>
 	public string PathNameOrigin { get; set; }
 
