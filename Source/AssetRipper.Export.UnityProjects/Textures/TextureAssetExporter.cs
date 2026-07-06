@@ -47,7 +47,7 @@ public class TextureAssetExporter : BinaryAssetExporter
 		if (TextureConverter.TryConvertToBitmap(texture, out DirectBitmap bitmap))
 		{
 			using Stream stream = fileSystem.File.Create(path);
-			bitmap.Save(stream, ImageExportFormat);
+			bitmap.Save(stream, ImageExportFormat, path);
 			return true;
 		}
 		else

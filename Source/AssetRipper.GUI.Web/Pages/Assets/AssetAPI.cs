@@ -52,11 +52,14 @@ internal static class AssetAPI
 		public const string Text = Base + "/Text";
 		public const string Binary = Base + "/Binary";
 	}
+
 	private const string Extension = "Extension";
 	private const string Path = "Path";
 
 	#region View
+
 	public static string GetViewUrl(AssetPath path) => $"{Urls.View}?{GetPathQuery(path)}";
+
 	public static Task GetView(HttpContext context)
 	{
 		context.Response.DisableCaching();
@@ -69,9 +72,11 @@ internal static class AssetAPI
 			return failureTask;
 		}
 	}
+
 	#endregion
 
 	#region Image
+
 	public static string GetImageUrl(AssetPath path, string? extension = null)
 	{
 		return $"{Urls.Image}?{GetPathQuery(path)}{GetExtensionQuerySuffix(extension)}";
@@ -94,7 +99,7 @@ internal static class AssetAPI
 			}
 
 			MemoryStream stream = new();
-			bitmap.Save(stream, format);
+			bitmap.Save(stream, format, extension);
 			return Results.Bytes(stream.ToArray(), $"image/{extension}").ExecuteAsync(context);
 		}
 		else
@@ -158,9 +163,11 @@ internal static class AssetAPI
 			return false;
 		}
 	}
+
 	#endregion
 
 	#region Audio
+
 	public static string GetAudioUrl(AssetPath path, string? extension = null)
 	{
 		return $"{Urls.Audio}?{GetPathQuery(path)}{GetExtensionQuerySuffix(extension)}";
@@ -205,9 +212,11 @@ internal static class AssetAPI
 	{
 		return asset is IAudioClip;
 	}
+
 	#endregion
 
 	#region Model
+
 	public static string GetModelUrl(AssetPath path)
 	{
 		return $"{Urls.Model}?{GetPathQuery(path)}";
@@ -255,9 +264,11 @@ internal static class AssetAPI
 	{
 		return asset is IMesh;
 	}
+
 	#endregion
 
 	#region Font
+
 	public static string GetFontUrl(AssetPath path)
 	{
 		return $"{Urls.Font}?{GetPathQuery(path)}";
@@ -315,9 +326,11 @@ internal static class AssetAPI
 			return false;
 		}
 	}
+
 	#endregion
 
 	#region Video
+
 	public static string GetVideoUrl(AssetPath path)
 	{
 		return $"{Urls.Video}?{GetPathQuery(path)}";
@@ -350,13 +363,16 @@ internal static class AssetAPI
 	{
 		return asset is IVideoClip clip && clip.CheckIntegrity();
 	}
+
 	#endregion
 
 	#region Json
+
 	public static string GetJsonUrl(AssetPath path)
 	{
 		return $"{Urls.Json}?{GetPathQuery(path)}";
 	}
+
 	public static Task GetJson(HttpContext context)
 	{
 		context.Response.DisableCaching();
@@ -377,13 +393,16 @@ internal static class AssetAPI
 			return Results.Text(ex.ToString()).ExecuteAsync(context);
 		}
 	}
+
 	#endregion
 
 	#region Yaml
+
 	public static string GetYamlUrl(AssetPath path)
 	{
 		return $"{Urls.Yaml}?{GetPathQuery(path)}";
 	}
+
 	public static Task GetYaml(HttpContext context)
 	{
 		context.Response.DisableCaching();
@@ -404,6 +423,7 @@ internal static class AssetAPI
 				writer.WriteTail(stringWriter);
 				text = stringWriter.ToString();
 			}
+
 			return Results.Text(text, "application/yaml").ExecuteAsync(context);
 		}
 		catch (Exception ex)
@@ -411,9 +431,11 @@ internal static class AssetAPI
 			return Results.Text(ex.ToString()).ExecuteAsync(context);
 		}
 	}
+
 	#endregion
 
 	#region Text
+
 	public static string GetTextUrl(AssetPath path)
 	{
 		return $"{Urls.Text}?{GetPathQuery(path)}";
@@ -490,9 +512,11 @@ internal static class AssetAPI
 			}
 		}
 	}
+
 	#endregion
 
 	#region Binary Data
+
 	public static string GetBinaryUrl(AssetPath path)
 	{
 		return $"{Urls.Binary}?{GetPathQuery(path)}";
@@ -515,6 +539,7 @@ internal static class AssetAPI
 	{
 		return asset is RawDataObject { RawData.Length: > 0 };
 	}
+
 	#endregion
 
 	private static string GetPathQuery(AssetPath path) => $"{Path}={path.ToJson().ToUrl()}";

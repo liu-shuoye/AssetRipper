@@ -8,6 +8,7 @@ namespace AssetRipper.Export.PrimaryContent.Textures;
 public sealed class TerrainHeatmapExporter : IContentExtractor
 {
 	public ImageExportFormat ImageFormat { get; }
+
 	public TerrainHeatmapExporter(ImageExportFormat imageFormat)
 	{
 		ImageFormat = imageFormat;
@@ -32,7 +33,7 @@ public sealed class TerrainHeatmapExporter : IContentExtractor
 		ITerrainData terrain = (ITerrainData)asset;
 		DirectBitmap bitmap = TerrainHeatmap.GetBitmap(terrain);
 		using Stream stream = fileSystem.File.Create(path);
-		bitmap.Save(stream, ImageFormat);
+		bitmap.Save(stream, ImageFormat, path);
 		return true;
 	}
 }

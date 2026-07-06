@@ -6,13 +6,9 @@ using AssetRipper.SourceGenerated.Extensions;
 
 namespace AssetRipper.Export.PrimaryContent.Textures;
 
-public sealed class TextureExporter : IContentExtractor
+public sealed class TextureExporter(ImageExportFormat imageFormat) : IContentExtractor
 {
-	public ImageExportFormat ImageFormat { get; }
-	public TextureExporter(ImageExportFormat imageFormat)
-	{
-		ImageFormat = imageFormat;
-	}
+	private ImageExportFormat ImageFormat { get; } = imageFormat;
 
 	public bool TryCreateCollection(IUnityObjectBase asset, [NotNullWhen(true)] out ExportCollectionBase? exportCollection)
 	{
@@ -33,7 +29,7 @@ public sealed class TextureExporter : IContentExtractor
 		if (TextureConverter.TryConvertToBitmap((IImageTexture)asset, out DirectBitmap bitmap))
 		{
 			using Stream stream = fileSystem.File.Create(path);
-			bitmap.Save(stream, ImageFormat);
+			bitmap.Save(stream, ImageFormat, path);
 			return true;
 		}
 		else
@@ -42,14 +38,20 @@ public sealed class TextureExporter : IContentExtractor
 		}
 	}
 
-	private sealed class ImageExportCollection : SingleExportCollection<IImageTexture>
+	private sealed class ImageExportCollection(IContentExtractor contentExtractor, IImageTexture asset) : SingleExportCollection<IImageTexture>(contentExtractor, asset)
 	{
 		private ImageExportFormat ExportFormat => ((TextureExporter)ContentExtractor).ImageFormat;
 
 		protected override string ExportExtension => ExportFormat.GetFileExtension();
 
-		public ImageExportCollection(IContentExtractor contentExtractor, IImageTexture asset) : base(contentExtractor, asset)
+		protected override string GetExportExtension(IUnityObjectBase asset)
 		{
+			if (ExportFormat == ImageExportFormat.Original)
+			{
+				return asset.GetBestExtension() ?? base.GetExportExtension(asset);
+			}
+
+			return base.GetExportExtension(asset);
 		}
 	}
 }

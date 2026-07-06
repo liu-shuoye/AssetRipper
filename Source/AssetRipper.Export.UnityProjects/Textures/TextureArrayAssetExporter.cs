@@ -43,6 +43,7 @@ public sealed class TextureArrayAssetExporter : BinaryAssetExporter
 						WarnResourceFileNotFound(cubemapArray.Name, cubemapArray.StreamData);
 						return false;
 					}
+
 					success = TextureConverter.TryConvertToBitmap(cubemapArray, out bitmap);
 				}
 				break;
@@ -53,6 +54,7 @@ public sealed class TextureArrayAssetExporter : BinaryAssetExporter
 						WarnResourceFileNotFound(texture2DArray.Name, texture2DArray.StreamData);
 						return false;
 					}
+
 					success = TextureConverter.TryConvertToBitmap(texture2DArray, out bitmap);
 				}
 				break;
@@ -63,6 +65,7 @@ public sealed class TextureArrayAssetExporter : BinaryAssetExporter
 						WarnResourceFileNotFound(texture3D.Name, texture3D.StreamData);
 						return false;
 					}
+
 					success = TextureConverter.TryConvertToBitmap(texture3D, out bitmap);
 				}
 				break;
@@ -76,7 +79,7 @@ public sealed class TextureArrayAssetExporter : BinaryAssetExporter
 		if (success)
 		{
 			using Stream stream = fileSystem.File.Create(path);
-			bitmap.Save(stream, ImageExportFormat);
+			bitmap.Save(stream, ImageExportFormat, path);
 			return true;
 		}
 		else

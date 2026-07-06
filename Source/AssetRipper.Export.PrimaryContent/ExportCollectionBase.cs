@@ -2,10 +2,15 @@
 
 namespace AssetRipper.Export.PrimaryContent;
 
+/// <summary> 导出集合的基类 </summary>
 public abstract class ExportCollectionBase
 {
+	/// <summary> 是否包含指定的资产。 </summary>
 	public abstract bool Contains(IUnityObjectBase asset);
+
+	/// <summary> 出集合。 </summary>
 	public abstract bool Export(string projectDirectory, FileSystem fileSystem);
+
 	protected void ExportAsset(IUnityObjectBase asset, string path, string name, FileSystem fileSystem)
 	{
 		if (!fileSystem.Directory.Exists(path))
@@ -13,7 +18,7 @@ public abstract class ExportCollectionBase
 			fileSystem.Directory.Create(path);
 		}
 
-		string fullName = $"{name}.{ExportExtension}";
+		string fullName = $"{name}.{GetExportExtension(asset)}";
 		string uniqueName = fileSystem.GetUniqueName(path, fullName, FileSystem.MaxFileNameLength);
 		string filePath = fileSystem.Path.Join(path, uniqueName);
 		ContentExtractor.Export(asset, filePath, fileSystem);
@@ -34,8 +39,13 @@ public abstract class ExportCollectionBase
 			fileName = FileSystem.FixInvalidFileNameCharacters(fileName);
 		}
 
-		fileName = $"{fileName}.{ExportExtension}";
+		fileName = $"{fileName}.{GetExportExtension(asset)}";
 		return GetUniqueFileName(dirPath, fileName, fileSystem);
+	}
+
+	protected virtual string GetExportExtension(IUnityObjectBase asset)
+	{
+		return ExportExtension;
 	}
 
 	protected virtual string ExportExtension => "asset";

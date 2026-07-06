@@ -3,35 +3,45 @@
 public enum ImageExportFormat
 {
 	/// <summary>
-	/// Lossless. Bitmap<br/>
+	/// 无损压缩. Bitmap<br/>
 	/// <see href="https://en.wikipedia.org/wiki/BMP_file_format"/>
 	/// </summary>
 	Bmp,
+
 	/// <summary>
-	/// Lossless. OpenEXR<br/>
+	/// 无损压缩. OpenEXR<br/>
 	/// <see href="https://en.wikipedia.org/wiki/OpenEXR"/>
 	/// </summary>
 	Exr,
+
 	/// <summary>
-	/// Lossless. Radiance HDR<br/>
+	/// 无损压缩. Radiance HDR<br/>
 	/// <see href="https://en.wikipedia.org/wiki/RGBE_image_format"/>
 	/// </summary>
 	Hdr,
+
 	/// <summary>
-	/// Lossy. Joint Photographic Experts Group<br/>
+	/// 有损压缩. Joint Photographic Experts Group<br/>
 	/// <see href="https://en.wikipedia.org/wiki/JPEG"/>
 	/// </summary>
 	Jpeg,
+
 	/// <summary>
-	/// Lossless. Portable Network Graphics<br/>
+	/// 无损压缩. Portable Network Graphics<br/>
 	/// <see href="https://en.wikipedia.org/wiki/Portable_Network_Graphics"/>
 	/// </summary>
 	Png,
+
 	/// <summary>
-	/// Lossless. Truevision TGA<br/>
+	/// 无损压缩. Truevision TGA<br/>
 	/// <see href="https://en.wikipedia.org/wiki/Truevision_TGA"/>
 	/// </summary>
 	Tga,
+
+	/// <summary>
+	/// 资产的原始格式。
+	/// </summary>
+	Original,
 }
 
 public static class ImageExportFormatExtensions
@@ -46,6 +56,7 @@ public static class ImageExportFormatExtensions
 			ImageExportFormat.Jpeg => "jpeg",
 			ImageExportFormat.Png => "png",
 			ImageExportFormat.Tga => "tga",
+			ImageExportFormat.Original => string.Empty,
 			_ => throw new ArgumentOutOfRangeException(nameof(_this)),
 		};
 	}
@@ -65,5 +76,22 @@ public static class ImageExportFormatExtensions
 			_ => (ImageExportFormat)(-1),
 		};
 		return format >= 0;
+	}
+
+	public static ImageExportFormat GetFromExtension(string path)
+	{
+		string extension = Path.GetExtension(path).ToLowerInvariant();
+		ImageExportFormat format = extension switch
+		{
+			".bmp" => ImageExportFormat.Bmp,
+			".exr" => ImageExportFormat.Exr,
+			".hdr" => ImageExportFormat.Hdr,
+			".jpeg" => ImageExportFormat.Jpeg,
+			".jpg" => ImageExportFormat.Jpeg,
+			".png" => ImageExportFormat.Png,
+			".tga" => ImageExportFormat.Tga,
+			_ => (ImageExportFormat)(-1),
+		};
+		return format;
 	}
 }

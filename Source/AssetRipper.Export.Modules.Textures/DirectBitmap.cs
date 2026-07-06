@@ -84,8 +84,12 @@ public abstract class DirectBitmap
 
 	public abstract DirectBitmap DeepClone();
 
-	public void Save(Stream stream, ImageExportFormat format)
+	public void Save(Stream stream, ImageExportFormat format, string path)
 	{
+		if (ImageExportFormat.Original == format)
+		{
+			format = ImageExportFormatExtensions.GetFromExtension(path);
+		}
 		switch (format)
 		{
 			case ImageExportFormat.Bmp:
@@ -106,6 +110,7 @@ public abstract class DirectBitmap
 			case ImageExportFormat.Tga:
 				SaveAsTga(stream);
 				break;
+			case ImageExportFormat.Original:
 			default:
 				throw new ArgumentOutOfRangeException(nameof(format));
 		}
