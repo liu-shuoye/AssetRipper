@@ -1,4 +1,5 @@
 using AssetRipper.IO.Files.SerializedFiles.IO;
+using AssetRipper.IO.Files.Streams.Smart;
 
 namespace AssetRipper.IO.Files.SerializedFiles.Parser;
 
@@ -65,14 +66,14 @@ public struct ObjectInfo
 		// Size of the object data.
 		int byteSize = reader.ReadInt32();
 
-		// Read object data
-		{
-			long currentPosition = reader.BaseStream.Position;
-			long dataPosition = dataOffset + byteStart;
-			reader.BaseStream.Position = dataPosition;
-			ObjectData = reader.ReadBytes(byteSize);
-			reader.BaseStream.Position = currentPosition;
-		}
+		// Defer reading the object data until ObjectData is accessed.
+		// Holding a SmartStream reference keeps the backing stream alive for lazy reads.
+		// CreateReference() gives this ObjectInfo its own refcount contribution, so
+		// disposing this ObjectInfo only releases its own reference and does not
+		// nullify the stream for any other holder.
+		owningStream = ((SmartStream)reader.BaseStream).CreateReference();
+		byteOffset = dataOffset + byteStart;
+		this.byteSize = byteSize;
 
 		if (HasSerializedTypeIndex(reader.Generation))
 		{
@@ -236,10 +237,76 @@ public struct ObjectInfo
 	public bool Stripped { get; set; }
 	public SerializedType? Type { get; set; }
 	/// <summary>
+	/// The stream from which the object data can be lazily read. Held via <see cref="SmartStream.CreateReference"/>
+	/// so that releasing it only decrements this <see cref="ObjectInfo"/>'s own refcount contribution.
+	/// </summary>
+	private SmartStream? owningStream;
+	/// <summary>
+	/// The absolute offset within <see cref="owningStream"/> of the object data.
+	/// </summary>
+	private long byteOffset;
+	/// <summary>
+	/// The size in bytes of the object data.
+	/// </summary>
+	private int byteSize;
+	/// <summary>
+	/// The cached object data, or null if it has not yet been read or has been released.
+	/// </summary>
+	private byte[]? objectData;
+
+	/// <summary>
 	/// The data for the object.
 	/// </summary>
+	/// <remarks>
+	/// The data is read lazily from <see cref="owningStream"/> the first time it is accessed.
+	/// Once read, it is cached in <see cref="objectData"/> until <see cref="ReleaseObjectData"/> is called.
+	/// </remarks>
 	[AllowNull]
-	public byte[] ObjectData { readonly get => field ?? []; set; }
+	public byte[] ObjectData
+	{
+		get
+		{
+			if (objectData is not null)
+			{
+				return objectData;
+			}
+			// Capture the field into a local so the compiler can track its non-null state
+			// through the call. Fields are not assumed to keep their checked value.
+			SmartStream? stream = owningStream;
+			if (stream is not null)
+			{
+				objectData = SerializedReader.ReadAssetDataAt(stream, byteOffset, byteSize);
+				return objectData;
+			}
+			return [];
+		}
+		set => objectData = value;
+	}
+
+	/// <summary>
+	/// Releases the cached object data so it can be garbage collected.
+	/// </summary>
+	/// <remarks>
+	/// The data can be re-read from <see cref="owningStream"/> after this method is called,
+	/// provided the stream has not been released via <see cref="ReleaseStreamReference"/>.
+	/// </remarks>
+	public void ReleaseObjectData()
+	{
+		objectData = null;
+	}
+
+	/// <summary>
+	/// Releases the reference to the owning <see cref="SmartStream"/>.
+	/// </summary>
+	/// <remarks>
+	/// After this is called, <see cref="ObjectData"/> can no longer be lazily read and will
+	/// return an empty array. This is intended to be called from <see cref="SerializedFile.Dispose"/>.
+	/// </remarks>
+	internal void ReleaseStreamReference()
+	{
+		owningStream?.FreeReference();
+		owningStream = null;
+	}
 
 	public ObjectInfo()
 	{

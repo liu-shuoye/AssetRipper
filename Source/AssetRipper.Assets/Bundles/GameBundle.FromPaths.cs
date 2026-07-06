@@ -1,10 +1,12 @@
-﻿using AssetRipper.Assets.Collections;
+using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.IO;
 using AssetRipper.IO.Files;
+using AssetRipper.IO.Files.BundleFiles.FileStream;
 using AssetRipper.IO.Files.CompressedFiles;
 using AssetRipper.IO.Files.ResourceFiles;
 using AssetRipper.IO.Files.SerializedFiles;
 using AssetRipper.IO.Files.SerializedFiles.Parser;
+using AssetRipper.IO.Files.Streams.Smart;
 
 namespace AssetRipper.Assets.Bundles;
 
@@ -15,44 +17,130 @@ partial class GameBundle
 	/// </summary>
 	/// <param name="paths">The set of paths to load.</param>
 	/// <param name="assetFactory">The factory for reading assets.</param>
-	/// <param name="dependencyProvider"></param>
-	/// <param name="resourceProvider"></param>
-	/// <param name="defaultVersion">The default version to use if a file does not have a version, ie the version has been stripped.</param>
-	public static GameBundle FromPaths(IEnumerable<string> paths, AssetFactoryBase assetFactory, FileSystem fileSystem, IGameInitializer? initializer = null)
+	/// <param name="fileSystem">The file system used to resolve paths.</param>
+	/// <param name="initializer">Optional initializer for dependency/resource providers and lifecycle hooks.</param>
+	/// <param name="maxInMemoryBundleBlockSize">
+	/// The maximum size in bytes of a single decompressed bundle block (or decompressed file)
+	/// that is kept entirely in memory. When a decompressed payload exceeds this threshold it is
+	/// spilled to a temporary file. Defaults to <c>50 * 1024 * 1024</c> (50 MB).
+	/// </param>
+	/// <param name="fileBatchSize">
+	/// The number of files to deserialize per batch during
+	/// <see cref="InitializeFromPaths"/>. Smaller batches reduce peak memory usage at the
+	/// cost of more iterations. Values <c>&lt;= 0</c> are treated as <c>1</c>.
+	/// Defaults to <see cref="GameBundleDefaults.DefaultFileBatchSize"/>.
+	/// </param>
+	/// <remarks>
+	/// The threshold is propagated to <see cref="BundleFileBlockReader.CurrentMaxInMemoryBundleBlockSize"/>
+	/// for the duration of this call and restored to its previous value afterwards. AssetRipper's
+	/// import pipeline is single-threaded, so this global mutation is safe in practice.
+	/// </remarks>
+	public static GameBundle FromPaths(
+		IEnumerable<string> paths,
+		AssetFactoryBase assetFactory,
+		FileSystem fileSystem,
+		IGameInitializer? initializer = null,
+		int maxInMemoryBundleBlockSize = GameBundleDefaults.DefaultMaxInMemoryBundleBlockSize,
+		int fileBatchSize = GameBundleDefaults.DefaultFileBatchSize)
 	{
 		GameBundle gameBundle = new();
 		initializer?.OnCreated(gameBundle, assetFactory);
-		gameBundle.InitializeFromPaths(paths, assetFactory, fileSystem, initializer);
-		initializer?.OnPathsLoaded(gameBundle, assetFactory);
-		gameBundle.InitializeAllDependencyLists(initializer?.DependencyProvider);
-		initializer?.OnDependenciesInitialized(gameBundle, assetFactory);
+
+		// Propagate the configured threshold to the block reader for the duration of this call.
+		// The previous value is restored in `finally` so nested or subsequent calls are unaffected.
+		int previousThreshold = BundleFileBlockReader.CurrentMaxInMemoryBundleBlockSize;
+		BundleFileBlockReader.CurrentMaxInMemoryBundleBlockSize = maxInMemoryBundleBlockSize;
+		try
+		{
+			gameBundle.InitializeFromPaths(paths, assetFactory, fileSystem, initializer, fileBatchSize, maxInMemoryBundleBlockSize);
+			initializer?.OnPathsLoaded(gameBundle, assetFactory);
+			gameBundle.InitializeAllDependencyLists(initializer?.DependencyProvider);
+			initializer?.OnDependenciesInitialized(gameBundle, assetFactory);
+		}
+		finally
+		{
+			BundleFileBlockReader.CurrentMaxInMemoryBundleBlockSize = previousThreshold;
+		}
 		return gameBundle;
 	}
 
-	private void InitializeFromPaths(IEnumerable<string> paths, AssetFactoryBase assetFactory, FileSystem fileSystem, IGameInitializer? initializer)
+	private void InitializeFromPaths(
+		IEnumerable<string> paths,
+		AssetFactoryBase assetFactory,
+		FileSystem fileSystem,
+		IGameInitializer? initializer,
+		int fileBatchSize,
+		int maxInMemoryBundleBlockSize)
 	{
 		ResourceProvider = initializer?.ResourceProvider;
 		List<FileBase> fileStack = LoadFilesAndDependencies(paths, fileSystem, initializer?.DependencyProvider);
 		UnityVersion defaultVersion = initializer is null ? default : initializer.DefaultVersion;
 
+		// Validate and clamp the batch size. A non-positive value falls back to 1 so each
+		// file is processed and disposed individually (the most memory-conservative behavior).
+		int batchSize = fileBatchSize <= 0 ? 1 : fileBatchSize;
+		int spillThreshold = maxInMemoryBundleBlockSize <= 0 ? GameBundleDefaults.DefaultMaxInMemoryBundleBlockSize : maxInMemoryBundleBlockSize;
+
+		// Batched processing: pop up to `batchSize` files per batch, deserialize them into
+		// collections/bundles, spill any oversized ResourceFiles to temp files, and finally
+		// dispose the SerializedFiles in the batch so their owning streams (held open by
+		// ObjectInfo for lazy reads) are released before the next batch is loaded.
+		List<SerializedFile> batchSerializedFiles = new(batchSize);
 		while (fileStack.Count > 0)
 		{
-			switch (RemoveLastItem(fileStack))
+			batchSerializedFiles.Clear();
+			int batchCount = Math.Min(batchSize, fileStack.Count);
+			for (int i = 0; i < batchCount; i++)
 			{
-				case SerializedFile serializedFile:
-					SerializedAssetCollection.FromSerializedFile(this, serializedFile, assetFactory, defaultVersion);
-					break;
-				case FileContainer container:
-					SerializedBundle serializedBundle = SerializedBundle.FromFileContainer(container, assetFactory, defaultVersion);
-					AddBundle(serializedBundle);
-					break;
-				case ResourceFile resourceFile:
-					AddResource(resourceFile);
-					break;
-				case FailedFile failedFile:
-					AddFailed(failedFile);
-					break;
+				FileBase file = RemoveLastItem(fileStack);
+				switch (file)
+				{
+					case SerializedFile serializedFile:
+						SerializedAssetCollection.FromSerializedFile(this, serializedFile, assetFactory, defaultVersion);
+						batchSerializedFiles.Add(serializedFile);
+						break;
+					case FileContainer container:
+						SerializedBundle serializedBundle = SerializedBundle.FromFileContainer(container, assetFactory, defaultVersion);
+						AddBundle(serializedBundle);
+						// The container's SerializedFiles have been consumed by SerializedBundle.FromFileContainer.
+						// Track them so their owning streams are released at the end of this batch.
+						foreach (SerializedFile serializedFileInContainer in container.FetchSerializedFiles())
+						{
+							batchSerializedFiles.Add(serializedFileInContainer);
+						}
+						break;
+					case ResourceFile resourceFile:
+						SpillResourceFileIfLarge(resourceFile, spillThreshold);
+						AddResource(resourceFile);
+						break;
+					case FailedFile failedFile:
+						AddFailed(failedFile);
+						break;
+				}
 			}
+
+			// Release the per-batch SerializedFile owning streams so the next batch does not
+			// accumulate file handles. SerializedFile.Dispose releases the lazy-read SmartStream
+			// references held by each ObjectInfo (Task 6) without invalidating the metadata
+			// (Dependencies, Objects, Types) that may still be referenced by SerializedAssetCollection.
+			foreach (SerializedFile serializedFile in batchSerializedFiles)
+			{
+				serializedFile.Dispose();
+			}
+		}
+	}
+
+	/// <summary>
+	/// Spills a <see cref="ResourceFile"/>'s in-memory payload to a temporary file when its size
+	/// exceeds <paramref name="spillThreshold"/>. The original in-memory <see cref="SmartStream"/>
+	/// is replaced with a temp-file-backed stream tracked via <see cref="RegisterTempStream"/>.
+	/// </summary>
+	private void SpillResourceFileIfLarge(ResourceFile resourceFile, int spillThreshold)
+	{
+		SmartStream? tempStream = resourceFile.TrySpillToTempFile(spillThreshold);
+		if (tempStream is not null)
+		{
+			RegisterTempStream(tempStream);
 		}
 	}
 
@@ -108,6 +196,13 @@ partial class GameBundle
 			}
 		}
 
+		// Note: dependency discovery is interleaved with file loading (a SerializedFile's
+		// Dependencies property is read here, and any unresolved dependency is loaded via
+		// dependencyProvider.FindDependency and appended to `files`). The growing-list
+		// iteration below ensures transitive dependencies are discovered. Because metadata
+		// loading is cheap relative to data deserialization, this pass is performed in full
+		// before the caller deserializes assets in batches (Strategy B: load all metadata
+		// first, then batch-deserialize and release).
 		for (int i = 0; i < files.Count; i++)
 		{
 			FileBase file = files[i];

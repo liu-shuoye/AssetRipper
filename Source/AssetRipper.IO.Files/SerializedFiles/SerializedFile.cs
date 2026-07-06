@@ -223,4 +223,21 @@ public sealed class SerializedFile : FileBase
 			UserInformation = builder.UserInformation,
 		};
 	}
+
+	protected override void Dispose(bool disposing)
+	{
+		if (disposing && m_objects is { } objects)
+		{
+			// Release the lazy-read SmartStream references held by each ObjectInfo so the
+			// underlying stream can be closed/finalized. ObjectInfo is a struct, so iterate
+			// by reference to mutate the actual array elements rather than copies.
+			for (int i = 0; i < objects.Length; i++)
+			{
+				ref ObjectInfo obj = ref objects[i];
+				obj.ReleaseObjectData();
+				obj.ReleaseStreamReference();
+			}
+		}
+		base.Dispose(disposing);
+	}
 }

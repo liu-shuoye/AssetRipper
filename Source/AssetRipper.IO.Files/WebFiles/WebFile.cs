@@ -1,4 +1,5 @@
 ﻿using AssetRipper.IO.Endian;
+using AssetRipper.IO.Files.BundleFiles.FileStream;
 using AssetRipper.IO.Files.ResourceFiles;
 using AssetRipper.IO.Files.Streams;
 using AssetRipper.IO.Files.Streams.Smart;
@@ -40,10 +41,12 @@ public sealed class WebFile : FileContainer
 
 		foreach (WebFileEntry entry in entries)
 		{
-			byte[] buffer = new byte[entry.Size];
+			int threshold = BundleFileBlockReader.CurrentMaxInMemoryBundleBlockSize;
+			using SmartStream destStream = SmartStream.CreateBySize(entry.Size, threshold);
 			stream.Position = entry.Offset + basePosition;
-			stream.ReadExactly(buffer, 0, buffer.Length);
-			ResourceFile file = new ResourceFile(buffer, FilePath, entry.Name);
+			CopyExact(stream, destStream, entry.Size);
+			destStream.Position = 0;
+			ResourceFile file = new ResourceFile(destStream, FilePath, entry.Name);
 			AddResourceFile(file);
 		}
 	}
@@ -112,5 +115,26 @@ public sealed class WebFile : FileContainer
 			}
 		}
 		return false;
+	}
+
+	/// <summary>
+	/// Copies exactly <paramref name="size"/> bytes from <paramref name="source"/> to
+	/// <paramref name="destination"/> using a small intermediate buffer, so that the destination
+	/// can be either a memory-backed or temp-file-backed <see cref="SmartStream"/> without
+	/// allocating a full <c>byte[<paramref name="size"/>]</c> array up-front.
+	/// </summary>
+	private static void CopyExact(Stream source, Stream destination, int size)
+	{
+		// 80 KiB matches Stream.CopyTo's default buffer size and keeps large entry reads off
+		// the large object heap while still being efficient.
+		byte[] buffer = new byte[Math.Min(size, 81920)];
+		int remaining = size;
+		while (remaining > 0)
+		{
+			int toRead = Math.Min(remaining, buffer.Length);
+			source.ReadExactly(buffer, 0, toRead);
+			destination.Write(buffer, 0, toRead);
+			remaining -= toRead;
+		}
 	}
 }

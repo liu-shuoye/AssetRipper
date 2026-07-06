@@ -14,4 +14,10 @@
 		<PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<InternalsVisibleTo Include="AssetRipper.IO.Files.Tests" />
+		<InternalsVisibleTo Include="AssetRipper.Assets" />
+		<InternalsVisibleTo Include="AssetRipper.Assets.Tests" />
+	</ItemGroup>
+
 </Project>
