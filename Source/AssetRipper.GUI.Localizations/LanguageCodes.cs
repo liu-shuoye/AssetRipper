@@ -2,7 +2,7 @@
 
 public static partial class LanguageCodes
 {
-	public const string English = "en-US";
+	public const string English = "zh-Hans";
 
 	public static bool Exists([NotNullWhen(true)] string? code)
 	{
