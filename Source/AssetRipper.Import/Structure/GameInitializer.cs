@@ -5,6 +5,9 @@ using AssetRipper.IO.Files;
 
 namespace AssetRipper.Import.Structure;
 
+/// <summary>
+/// 默认游戏结构的游戏初始化器。
+/// </summary>
 internal sealed partial record class GameInitializer : DefaultGameInitializer
 {
 	public UnityVersion TargetVersion { get; }

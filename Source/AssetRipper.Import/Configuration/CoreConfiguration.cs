@@ -30,9 +30,9 @@ public class CoreConfiguration
 	/// 创建新unity项目的路径
 	/// </summary>
 	public string ProjectRootPath => Path.Join(ExportRootPath, "ExportedProject");
-	public string AssetsPath => Path.Join(ProjectRootPath, "Assets");
-	public string ProjectSettingsPath => Path.Join(ProjectRootPath, "ProjectSettings");
-	public string AuxiliaryFilesPath => Path.Join(ExportRootPath, "AuxiliaryFiles");
+	public string AssetsPath => Path.Join(ProjectRootPath, "Assets"); // 资源路径
+	public string ProjectSettingsPath => Path.Join(ProjectRootPath, "ProjectSettings"); // 项目设置路径
+	public string AuxiliaryFilesPath => Path.Join(ExportRootPath, "AuxiliaryFiles"); // 辅助文件路径
 	#endregion
 
 	#region Project Settings

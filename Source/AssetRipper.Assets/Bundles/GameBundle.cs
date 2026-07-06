@@ -9,6 +9,31 @@ namespace AssetRipper.Assets.Bundles;
 public sealed partial class GameBundle : Bundle
 {
 	/// <summary>
+	/// Temporary <see cref="SmartStream"/> instances created by batch loading (for example,
+	/// when a large in-memory <see cref="ResourceFile"/> is spilled to disk via
+	/// <see cref="SmartStream.CreateTemp"/>). These are tracked separately so that
+	/// <see cref="Dispose"/> can deterministically release them even if a code path forgets
+	/// to dispose the owning <see cref="ResourceFile"/>.
+	/// </summary>
+	/// <remarks>
+	/// The underlying <see cref="FileStream"/> created by <see cref="SmartStream.CreateTemp"/>
+	/// uses <see cref="FileOptions.DeleteOnClose"/>, so disposing the <see cref="SmartStream"/>
+	/// also deletes the backing temp file.
+	/// </remarks>
+	private readonly List<SmartStream> tempStreams = new();
+
+	/// <summary>
+	/// Tracks a spilled <see cref="SmartStream"/> so its underlying temp file is released
+	/// when this <see cref="GameBundle"/> is disposed. The stream is also typically referenced
+	/// by a <see cref="ResourceFile"/>, so this is a defense-in-depth measure.
+	/// </summary>
+	internal void RegisterTempStream(SmartStream stream)
+	{
+		ArgumentNullException.ThrowIfNull(stream);
+		tempStreams.Add(stream);
+	}
+
+	/// <summary>
 	/// 用于此捆绑包的 <see cref="IResourceProvider"/>。
 	/// </summary>
 	public IResourceProvider? ResourceProvider { get; set; }

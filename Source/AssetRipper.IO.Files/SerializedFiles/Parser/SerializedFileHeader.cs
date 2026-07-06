@@ -60,7 +60,7 @@ public sealed record class SerializedFileHeader
 		int metadataSize = reader.ReadInt32();
 		ulong headerDefinedFileSize = reader.ReadUInt32();
 
-		// 先读取Generation，因为格式在gen 22（unity 2020）中发生了巨大变化
+		// 先读取Generation，格式在gen 22（unity 2020）中发生了巨大变化
 		// Generation is always at [base + 0x8]
 		FormatVersion generation = (FormatVersion)reader.ReadInt32();
 		if (!Enum.IsDefined(generation))
@@ -72,8 +72,8 @@ public sealed record class SerializedFileHeader
 		if (generation >= FormatVersion.LargeFilesSupport)
 		{
 			//22 Format:
-			//First known value is at 0x14, and is metadata size as a 32-bit integer.
-			//Then the file size as a 64-bit integer.
+			//第一个已知值在0x14处，是一个32位整数的元数据大小。
+			//然后是64位整数的文件大小。
 			reader.BaseStream.Position = initialPosition + 0x14;
 			metadataSize = reader.ReadInt32();
 			headerDefinedFileSize = reader.ReadUInt64();
@@ -95,14 +95,14 @@ public sealed record class SerializedFileHeader
 
 	public void Read(EndianReader reader)
 	{
-		//For gen 22+ these will be zero
+		//对于gen 22+这些将是零
 		MetadataSize = reader.ReadInt32();
 		FileSize = reader.ReadUInt32();
 
-		//Read generation
+		//读取Generation
 		Version = (FormatVersion)reader.ReadInt32();
 
-		//For gen 22+ this will be zero
+		//对于gen 22+这是零
 		DataOffset = reader.ReadUInt32();
 
 		if (HasEndianess(Version))
