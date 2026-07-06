@@ -26,6 +26,7 @@ public static class SchemeReader
 		new FileStreamBundleScheme(),
 	};
 
+	/// <summary> 从指定路径加载文件。 </summary>
 	public static FileBase LoadFile(string filePath, FileSystem fileSystem)
 	{
 		SmartStream stream = SmartStream.OpenReadMulti(filePath, fileSystem);
@@ -38,6 +39,7 @@ public static class SchemeReader
 		return ReadFile(smartStream, filePath, fileName);
 	}
 
+	/// <summary> 从指定流读取文件。 </summary>
 	public static FileBase ReadFile(SmartStream stream, string filePath, string fileName)
 	{
 		foreach (IScheme scheme in schemes)

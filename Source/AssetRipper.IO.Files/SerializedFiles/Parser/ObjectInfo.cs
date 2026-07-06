@@ -4,36 +4,36 @@ using AssetRipper.IO.Files.Streams.Smart;
 namespace AssetRipper.IO.Files.SerializedFiles.Parser;
 
 /// <summary>
-/// Contains information for a block of raw serialized object data.
+/// 包含一组原始序列化对象数据的信息。
 /// </summary>
 public struct ObjectInfo
 {
 	/// <summary>
-	/// 5.0.0unk and greater / Format Version at least 14
+	/// 5.0.0unk 及更高版本 / 格式版本至少为 14
 	/// </summary>
 	public static bool IsLongID(FormatVersion generation) => generation >= FormatVersion.Unknown_14;
 	/// <summary>
-	/// Less than 5.5.0 / Format Version less than 16
+	/// 小于 5.5.0 / 格式版本小于 16
 	/// </summary>
 	public static bool HasClassID(FormatVersion generation) => generation < FormatVersion.RefactoredClassId;
 	/// <summary>
-	/// Less than 5.0.0unk / Format Version less than 11
+	/// 小于 5.0.0unk / 格式版本小于 11
 	/// </summary>
 	public static bool HasIsDestroyed(FormatVersion generation) => generation < FormatVersion.HasScriptTypeIndex;
 	/// <summary>
-	/// 5.0.0unk to 5.5.0unk exclusive / Format Version at least 11 but less than 17
+	/// 5.0.0unk 到 5.5.0unk 之间（不包括 5.5.0unk）/ 格式版本至少为 11 但小于 17
 	/// </summary>
 	public static bool HasScriptTypeIndex(FormatVersion generation) => generation >= FormatVersion.HasScriptTypeIndex && generation < FormatVersion.RefactorTypeData;
 	/// <summary>
-	/// 5.0.1 to 5.5.0unk exclusive / Format Version at least 15 but less than 17
+	/// 5.0.1 到 5.5.0unk 之间（不包括 5.5.0unk）/ 格式版本至少为 15 但小于 17
 	/// </summary>
 	public static bool HasStripped(FormatVersion generation) => generation >= FormatVersion.SupportsStrippedObject && generation < FormatVersion.RefactorTypeData;
 	/// <summary>
-	/// 5.5.0unk and greater / Format Version at least 17
+	/// 5.5.0unk 及更高版本 / 格式版本至少为 17
 	/// </summary>
 	public static bool HasSerializedTypeIndex(FormatVersion generation) => generation >= FormatVersion.RefactorTypeData;
 	/// <summary>
-	/// 2020.1.0 and greater / Format Version at least 22
+	/// 2020.1.0 及更高版本 / 格式版本至少为 22
 	/// </summary>
 	public static bool HasLargeFilesSupport(FormatVersion generation) => generation >= FormatVersion.LargeFilesSupport;
 

@@ -3,28 +3,28 @@ using AssetRipper.IO.Endian;
 namespace AssetRipper.IO.Files.SerializedFiles.Parser;
 
 /// <summary>
-/// The file header is found at the beginning of an asset file. The header is always using big endian byte order.
+/// 文件头位于资源文件的开头。该文件头始终采用大端字节序。
 /// </summary>
 public sealed record class SerializedFileHeader
 {
 	/// <summary>
-	/// Size of the metadata parts of the file
+	/// 文件元数据部分的大小
 	/// </summary>
 	public long MetadataSize { get; set; }
 	/// <summary>
-	/// Size of the whole file
+	/// 文件总大小
 	/// </summary>
 	public long FileSize { get; set; }
 	/// <summary>
-	/// File format version. The number is required for backward compatibility and is normally incremented after the file format has been changed in a major update
+	/// 文件格式版本。该数字用于向后兼容，并且通常在文件格式在主要更新后增加
 	/// </summary>
 	public FormatVersion Version { get; set; }
 	/// <summary>
-	/// Offset to the serialized object data. It starts at the data for the first object
+	/// 序列化对象数据的偏移量。它从第一个对象的数据开始
 	/// </summary>
 	public long DataOffset { get; set; }
 	/// <summary>
-	/// Presumably controls the byte order of the data structure. This field is normally set to 0, which may indicate a little endian byte order.
+	/// 恰好控制数据结构的字节顺序。该字段通常设置为0，可能表示小端字节顺序。
 	/// </summary>
 	public bool Endianess { get; set; }
 
@@ -34,12 +34,12 @@ public sealed record class SerializedFileHeader
 
 
 	/// <summary>
-	/// 3.5.0 and greater / Format Version 9 +
+	/// 3.5.0及更高版本 / 格式版本9 +
 	/// </summary>
 	public static bool HasEndianess(FormatVersion generation) => generation >= FormatVersion.Unknown_9;
 
 	/// <summary>
-	/// 2020.1.0 and greater / Format Version 22 +
+	/// 2020.1.0及更高版本 / 格式版本22 +
 	/// </summary>
 	public static bool HasLargeFilesSupport(FormatVersion generation) => generation >= FormatVersion.LargeFilesSupport;
 
@@ -47,20 +47,20 @@ public sealed record class SerializedFileHeader
 	{
 		long initialPosition = reader.BaseStream.Position;
 
-		//Sanity check that there is enough room here first.
+		//先检查这里是否有足够的空间。
 		if (reader.BaseStream.Position + HeaderMinSize > reader.BaseStream.Length)
 		{
 			return false;
 		}
 
-		//Pre-22 format: 
-		// - Metadata Size
-		// - File Size
+		//22格式之前：
+		// - 元数据大小
+		// - 文件大小
 		// - Generation
 		int metadataSize = reader.ReadInt32();
 		ulong headerDefinedFileSize = reader.ReadUInt32();
 
-		// Read generation first, the format changed hugely in gen 22 (unity 2020)
+		// 先读取Generation，格式在gen 22（unity 2020）中发生了巨大变化
 		// Generation is always at [base + 0x8]
 		FormatVersion generation = (FormatVersion)reader.ReadInt32();
 		if (!Enum.IsDefined(generation))
@@ -72,8 +72,8 @@ public sealed record class SerializedFileHeader
 		if (generation >= FormatVersion.LargeFilesSupport)
 		{
 			//22 Format:
-			//First known value is at 0x14, and is metadata size as a 32-bit integer.
-			//Then the file size as a 64-bit integer.
+			//第一个已知值在0x14处，是一个32位整数的元数据大小。
+			//然后是64位整数的文件大小。
 			reader.BaseStream.Position = initialPosition + 0x14;
 			metadataSize = reader.ReadInt32();
 			headerDefinedFileSize = reader.ReadUInt64();
@@ -95,14 +95,14 @@ public sealed record class SerializedFileHeader
 
 	public void Read(EndianReader reader)
 	{
-		//For gen 22+ these will be zero
+		//对于gen 22+这些将是零
 		MetadataSize = reader.ReadInt32();
 		FileSize = reader.ReadUInt32();
 
-		//Read generation
+		//读取Generation
 		Version = (FormatVersion)reader.ReadInt32();
 
-		//For gen 22+ this will be zero
+		//对于gen 22+这是零
 		DataOffset = reader.ReadUInt32();
 
 		if (HasEndianess(Version))
