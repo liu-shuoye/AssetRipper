@@ -38,14 +38,13 @@ using AssetRipper.SourceGenerated.Subclasses.Vector4f;
 
 namespace AssetRipper.Import.AssetCreation;
 
-public sealed class GameAssetFactory : AssetFactoryBase
+/// <summary>
+/// 游戏资源工厂
+/// </summary>
+/// <param name="assemblyManager"></param>
+public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFactoryBase
 {
-	public GameAssetFactory(IAssemblyManager assemblyManager)
-	{
-		AssemblyManager = assemblyManager ?? throw new ArgumentNullException(nameof(assemblyManager));
-	}
-
-	private IAssemblyManager AssemblyManager { get; }
+	private IAssemblyManager AssemblyManager { get; } = assemblyManager ?? throw new ArgumentNullException(nameof(assemblyManager));
 
 	public override IUnityObjectBase? ReadAsset(AssetInfo assetInfo, ReadOnlyArraySegment<byte> assetData, SerializedType? assetType)
 	{
@@ -154,12 +153,12 @@ public sealed class GameAssetFactory : AssetFactoryBase
 			{
 				if (IsAllZero(assetData[reader.Position..]))
 				{
-					//Assume padding.
+					//假设填充。
 					error = null;
 				}
 				else if (reader.Length - reader.Position == 24 && asset is ITexture2D texture)
 				{
-					//Some Chinese Unity versions have extra fields appended to the global type trees.
+					//某些中文版Unity的全局类型树中附加了额外的字段。
 					ReadExtraTextureFields(texture, ref reader);
 					error = null;
 				}
@@ -207,7 +206,7 @@ public sealed class GameAssetFactory : AssetFactoryBase
 
 	private static string MakeError_IncorrectNumberOfBytesRead(IUnityObjectBase asset, ref EndianSpanReader reader)
 	{
-		return $"Read {reader.Position} but expected {reader.Length} for asset type {(ClassIDType)asset.ClassID}. V: {asset.Collection.Version} P: {asset.Collection.Platform} N: {asset.Collection.Name} Path: {asset.Collection.FilePath}";
+		return $"读取了 {reader.Position}，但期望值为 {reader.Length}，资产类型为 {(ClassIDType)asset.ClassID}. 版本: {asset.Collection.Version} 平台: {asset.Collection.Platform} 名称: {asset.GetBestName()} 集合名称: {asset.Collection.Name}";
 	}
 
 	/// <summary>
@@ -236,7 +235,7 @@ public sealed class GameAssetFactory : AssetFactoryBase
 
 	private static string MakeError_ReadException(IUnityObjectBase asset, Exception ex)
 	{
-		return $"Error during reading of asset type {(ClassIDType)asset.ClassID}. V: {asset.Collection.Version} P: {asset.Collection.Platform} N: {asset.Collection.Name} Path: {asset.Collection.FilePath}\n{ex}";
+		return $"读取资源类型时发生错误 {(ClassIDType)asset.ClassID}. 版本: {asset.Collection.Version} 平台: {asset.Collection.Platform} 名称: {asset.GetBestName()} 集合名称: {asset.Collection.Name} \n{ex}";
 	}
 
 	public static IUnityAssetBase CreateEngineAsset(string name, UnityVersion version)

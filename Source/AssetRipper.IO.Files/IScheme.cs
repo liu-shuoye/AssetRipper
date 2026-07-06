@@ -5,13 +5,13 @@ namespace AssetRipper.IO.Files;
 public interface IScheme
 {
 	/// <summary>
-	/// Checks if the file can be read by this scheme.
+	/// 检查该方案是否可以读取此文件。
 	/// </summary>
 	/// <remarks>
-	/// Implementations are expected to reset the <paramref name="stream"/> to its initial position.
+	/// 实现应将 <paramref name="stream"/> 重置为其初始位置。
 	/// </remarks>
-	/// <param name="stream">The stream for the file.</param>
-	/// <returns>True if the file can be read.</returns>
+	/// <param name="stream">文件的流。</param>
+	/// <returns>如果文件可读，则为真。</returns>
 	bool CanRead(SmartStream stream);
 	FileBase Read(SmartStream stream, string filePath, string fileName);
 }

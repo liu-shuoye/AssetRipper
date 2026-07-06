@@ -11,6 +11,7 @@ using AssetRipper.IO.Files.ResourceFiles;
 
 namespace AssetRipper.Import.Structure;
 
+/// <summary> 游戏结构 </summary>
 public sealed class GameStructure : IDisposable
 {
 	public GameBundle FileCollection { get; private set; }
@@ -60,12 +61,13 @@ public sealed class GameStructure : IDisposable
 		return new GameStructure(toProcess, fileSystem, configuration);
 	}
 
+	/// <summary> 初始化游戏集合 </summary>
 	[MemberNotNull(nameof(FileCollection))]
 	private void InitializeGameCollection(UnityVersion defaultVersion, UnityVersion targetVersion)
 	{
 		Logger.SendStatusChange("loading_step_create_file_collection");
 
-		GameAssetFactory assetFactory = new GameAssetFactory(AssemblyManager);
+		GameAssetFactory assetFactory = new(AssemblyManager);
 
 		IEnumerable<string> filePaths;
 		if (PlatformStructure is null || MixedStructure is null)
@@ -84,11 +86,12 @@ public sealed class GameStructure : IDisposable
 			new GameInitializer(PlatformStructure, MixedStructure, FileSystem, defaultVersion, targetVersion));
 	}
 
+	/// <summary> 初始化程序集管理器 </summary>
 	[MemberNotNull(nameof(AssemblyManager))]
 	private void InitializeAssemblyManager(CoreConfiguration configuration)
 	{
 		ScriptingBackend scriptBackend = GetScriptingBackend(configuration.DisableScriptImport);
-		Logger.Info(LogCategory.Import, $"Files use the '{scriptBackend}' scripting backend.");
+		Logger.Info(LogCategory.Import, $"文件使用 '{scriptBackend}' 脚本后端。");
 
 		AssemblyManager = scriptBackend switch
 		{
@@ -112,6 +115,7 @@ public sealed class GameStructure : IDisposable
 		}
 	}
 
+	/// <summary> 获取脚本后端 </summary>
 	private ScriptingBackend GetScriptingBackend(bool disableScriptImport)
 	{
 		if (disableScriptImport)
@@ -138,6 +142,7 @@ public sealed class GameStructure : IDisposable
 		return ScriptingBackend.Unknown;
 	}
 
+	/// <summary> 请求程序集 </summary>
 	private void OnRequestAssembly(string assembly)
 	{
 		string assemblyName = $"{assembly}.dll";
@@ -160,12 +165,14 @@ public sealed class GameStructure : IDisposable
 		Logger.Info(LogCategory.Import, $"Assembly '{assembly}' has been loaded");
 	}
 
+	/// <summary> 释放资源 </summary>
 	public void Dispose()
 	{
 		Dispose(true);
 		GC.SuppressFinalize(this);
 	}
 
+	/// <summary> 释放 </summary>
 	private void Dispose(bool _)
 	{
 		AssemblyManager?.Dispose();

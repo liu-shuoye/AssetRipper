@@ -7,6 +7,7 @@ using System.Text;
 
 namespace AssetRipper.Import;
 
+/// <summary>  AssetRipper运行时信息 </summary>
 public static partial class AssetRipperRuntimeInformation
 {
 	public static class Build
@@ -24,12 +25,12 @@ public static partial class AssetRipperRuntimeInformation
 		}
 
 		/// <summary>
-		/// Either "Debug" or "Release"
+		/// “调试”或“发布”
 		/// </summary>
 		public static string Configuration => Debug ? "Debug" : "Release";
 
 		/// <summary>
-		/// Either "Compiled" or "Published"
+		/// “已编译”或“已发布”
 		/// </summary>
 		public static string Type => File.Exists(Path.Join(LocalFileSystem.ExecutingDirectory, "AssetRipper.Assets.dll")) ? "Compiled" : "Published";
 
@@ -64,12 +65,12 @@ public static partial class AssetRipperRuntimeInformation
 	}
 
 	/// <summary>
-	/// Get the current time.
+	/// 获取当前时间。
 	/// </summary>
 	/// <remarks>
-	/// This format matches the format used in <see cref="CompileTime"/>
+	/// 此格式与<see cref="CompileTime"/>中使用的格式一致
 	/// </remarks>
-	/// <returns>A string like "Thu Nov 24 18:39:37 UTC 2022"</returns>
+	/// <returns>类似 "Thu Nov 24 18:39:37 UTC 2022" 的字符串</returns>
 	public static string CurrentTime
 	{
 		get
@@ -119,12 +120,12 @@ public static partial class AssetRipperRuntimeInformation
 	}
 
 	/// <summary>
-	/// Get the time the application was compiled.
+	/// 获取应用程序编译的时间。
 	/// </summary>
 	/// <remarks>
-	/// This format matches the format used in <see cref="CurrentTime"/>
+	/// 此格式与<see cref="CurrentTime"/>中使用的格式一致
 	/// </remarks>
-	/// <returns>A string like "Thu Nov 24 18:39:37 UTC 2022"</returns>
+	/// <returns>类似 "Thu Nov 24 18:39:37 UTC 2022" 的字符串</returns>
 	public static string CompileTime
 	{
 		get
@@ -246,7 +247,7 @@ public static partial class AssetRipperRuntimeInformation
 			string output = process.StandardOutput.ReadToEnd();
 			process.WaitForExit();
 
-			// Output is in format: hw.memsize: 17179869184
+			// 输出格式为：hw.memsize: 17179869184
 			string[] parts = output.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 			if (parts.Length == 2 && long.TryParse(parts[1], out long memoryInBytes))
 			{
@@ -257,6 +258,7 @@ public static partial class AssetRipperRuntimeInformation
 		catch
 		{
 		}
+
 		totalMemoryInKilobytes = default;
 		return false;
 	}
@@ -285,6 +287,7 @@ public static partial class AssetRipperRuntimeInformation
 		catch
 		{
 		}
+
 		return false;
 	}
 }

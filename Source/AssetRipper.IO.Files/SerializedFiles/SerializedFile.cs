@@ -9,20 +9,36 @@ using System.Runtime.CompilerServices;
 namespace AssetRipper.IO.Files.SerializedFiles;
 
 /// <summary>
-/// Serialized files contain binary serialized objects and optional run-time type information.
-/// They have file name extensions like .asset, .assets, .sharedAssets but may also have no extension at all
+/// 序列化文件包含二进制序列化的对象以及可选的运行时类型信息。  
+/// 它们的文件扩展名通常为 .asset、.assets、.sharedAssets，但也可能完全不带扩展名。
 /// </summary>
 public sealed class SerializedFile : FileBase
 {
+	/// <summary> 依赖项是此文件所必需的外部资源。 </summary>
 	private FileIdentifier[]? m_dependencies;
+
+	/// <summary> 文件中的对象信息。 </summary>
 	private ObjectInfo[]? m_objects;
+
+	/// <summary> 文件中定义的类型信息。 </summary>
 	private SerializedType[]? m_types;
+
+	/// <summary> 脚本类型标识符。 </summary>
 	private LocalSerializedObjectIdentifier[]? m_scriptTypes;
+
+	/// <summary> 类型引用信息。 </summary>
 	private SerializedTypeReference[]? m_refTypes;
 
+	/// <summary> 文件的格式版本。 </summary>
 	public FormatVersion Generation { get; private set; }
+
+	/// <summary> 文件的 Unity 版本。 </summary>
 	public UnityVersion Version { get; private set; }
+
+	/// <summary> 文件的目标平台。 </summary>
 	public BuildTarget Platform { get; private set; }
+
+	/// <summary> 文件的传输指令标志。 </summary>
 	public TransferInstructionFlags Flags
 	{
 		get
@@ -48,13 +64,16 @@ public sealed class SerializedFile : FileBase
 			{
 				flags |= TransferInstructionFlags.IsBuiltinResourcesFile;
 			}
+
 			if (EndianType is EndianType.BigEndian)
 			{
 				flags |= TransferInstructionFlags.SwapEndianess;
 			}
+
 			return flags;
 		}
 	}
+
 	public EndianType EndianType { get; private set; }
 	public ReadOnlySpan<FileIdentifier> Dependencies => m_dependencies;
 	public ReadOnlySpan<ObjectInfo> Objects => m_objects;
@@ -87,6 +106,7 @@ public sealed class SerializedFile : FileBase
 		return NameFixed;
 	}
 
+	/// <summary> 从指定流中读取文件。 </summary>
 	public override void Read(SmartStream stream)
 	{
 		SerializedFileHeader header = new();
@@ -95,6 +115,7 @@ public sealed class SerializedFile : FileBase
 		{
 			stream.Position = header.FileSize - header.MetadataSize;
 		}
+
 		SerializedFileMetadata metadata = new();
 		metadata.Read(stream, header);
 
@@ -119,11 +140,7 @@ public sealed class SerializedFile : FileBase
 	public override void Write(Stream stream)
 	{
 		long initialPosition = stream.Position;
-		SerializedFileHeader header = new()
-		{
-			Version = Generation,
-			Endianess = EndianType == EndianType.BigEndian,
-		};
+		SerializedFileHeader header = new() { Version = Generation, Endianess = EndianType == EndianType.BigEndian, };
 		header.Write(stream);
 
 		using SerializedWriter writer = new(stream, EndianType, Generation, Version);
@@ -179,6 +196,7 @@ public sealed class SerializedFile : FileBase
 				{
 					writer.Write(objectInfo.ObjectData);
 				}
+
 				AlignStream(writer, 8); // each object data must be aligned to 8 bytes
 			}
 		}

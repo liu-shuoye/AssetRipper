@@ -36,6 +36,7 @@ internal sealed class SerializedReader : EndianReader
 		return array;
 	}
 
+	/// <summary> 读取一个序列化类型数组</summary>
 	public T[] ReadSerializedTypeArray<T>(bool hasTypeTree) where T : SerializedTypeBase, new()
 	{
 		int count = ReadInt32();

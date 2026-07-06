@@ -4,22 +4,22 @@ using AssetRipper.IO.Files.ResourceFiles;
 namespace AssetRipper.Assets.Bundles;
 
 /// <summary>
-/// A <see cref="Bundle"/> encompassing an entire game.
+/// 一个包含整个游戏的 <see cref="Bundle"/>。
 /// </summary>
 public sealed partial class GameBundle : Bundle
 {
 	/// <summary>
-	/// The <see cref="IResourceProvider"/> being used for this bundle.
+	/// 用于此捆绑包的 <see cref="IResourceProvider"/>。
 	/// </summary>
 	public IResourceProvider? ResourceProvider { get; set; }
 
 	/// <summary>
-	/// The name of this bundle which is 'GameBundle'.
+	/// 此捆绑包的名称，为 'GameBundle'。
 	/// </summary>
 	public override string Name => nameof(GameBundle);
 
 	/// <summary>
-	/// Returns true if the given bundle is compatible with this bundle.
+	/// 如果给定的捆绑包与此捆绑包兼容，则返回 true。
 	/// </summary>
 	/// <param name="bundle">The bundle to check compatibility with.</param>
 	protected override bool IsCompatibleBundle(Bundle bundle)
@@ -28,7 +28,7 @@ public sealed partial class GameBundle : Bundle
 	}
 
 	/// <summary>
-	/// Resolves an external ResourceFile, or returns null if it cannot be found.
+	/// 解析外部资源文件，如果无法找到则返回 null。
 	/// </summary>
 	/// <param name="originalName">The original name of the ResourceFile.</param>
 	protected override ResourceFile? ResolveExternalResource(string originalName)
@@ -48,15 +48,16 @@ public sealed partial class GameBundle : Bundle
 		}
 	}
 
-	[Obsolete($"{nameof(GameBundle)} has no {nameof(Parent)}. Use {nameof(FetchAssets)} instead.", true)]
+	[Obsolete($"{nameof(GameBundle)} 没有 {nameof(Parent)}。使用 {nameof(FetchAssets)} 代替。", true)]
 	public new IEnumerable<IUnityObjectBase> FetchAssetsInHierarchy() => base.FetchAssetsInHierarchy();
 
 	/// <summary>
-	/// Initializes all dependency lists.
+	/// 初始化所有依赖列表。
 	/// </summary>
 	public new void InitializeAllDependencyLists(IDependencyProvider? dependencyProvider = null) => base.InitializeAllDependencyLists(dependencyProvider);
 
-	/// Returns true if this bundle has any asset collections.
+	/// <summary>
+	/// 此捆绑包是否有任何资产集合。
 	/// </summary>
 	public bool HasAnyAssetCollections()
 	{
@@ -64,7 +65,7 @@ public sealed partial class GameBundle : Bundle
 	}
 
 	/// <summary>
-	/// Adds a new processed asset collection to this bundle.
+	/// 为此捆绑包添加一个新的处理资产集合。
 	/// </summary>
 	/// <param name="name">The name of the new asset collection.</param>
 	/// <param name="version">The Unity version of the new asset collection.</param>
@@ -76,6 +77,9 @@ public sealed partial class GameBundle : Bundle
 		return processedCollection;
 	}
 
+	/// <summary>
+	/// 为此捆绑包添加一个新的处理捆绑包。
+	/// </summary>
 	public ProcessedBundle AddNewProcessedBundle(string? name = null)
 	{
 		ProcessedBundle processedBundle = new ProcessedBundle(name);
@@ -84,7 +88,7 @@ public sealed partial class GameBundle : Bundle
 	}
 
 	/// <summary>
-	/// Returns the maximum Unity version of all asset collections in this bundle.
+	/// 获取此捆绑包中所有资产集合的最大 Unity 版本。
 	/// </summary>
 	public UnityVersion GetMaxUnityVersion()
 	{
