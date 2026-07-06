@@ -51,6 +51,33 @@ public sealed partial class SmartStream : Stream
 	}
 
 	/// <summary>
+	/// Creates a <see cref="SmartStream"/> backed by either memory or a temporary file,
+	/// depending on whether <paramref name="size"/> exceeds <paramref name="threshold"/>.
+	/// </summary>
+	/// <remarks>
+	/// When <paramref name="size"/> is less than or equal to <paramref name="threshold"/>, a
+	/// memory-backed <see cref="SmartStream"/> is returned (equivalent to <see cref="CreateMemory"/>).
+	/// Otherwise a temporary-file-backed <see cref="SmartStream"/> is returned (equivalent to
+	/// <see cref="CreateTemp"/>), whose underlying file is deleted when the stream is disposed.
+	/// A <paramref name="size"/> of <c>0</c> always selects the memory path.
+	/// </remarks>
+	/// <param name="size">The expected size, in bytes, of the content that will be written to the stream.</param>
+	/// <param name="threshold">The size, in bytes, above which a temporary file is used instead of memory.</param>
+	/// <returns>
+	/// A memory-backed <see cref="SmartStream"/> when <paramref name="size"/> &lt;= <paramref name="threshold"/>;
+	/// otherwise a temporary-file-backed <see cref="SmartStream"/>.
+	/// </returns>
+	/// <exception cref="ArgumentOutOfRangeException"><paramref name="size"/> is negative.</exception>
+	public static SmartStream CreateBySize(int size, int threshold)
+	{
+		if (size < 0)
+		{
+			throw new ArgumentOutOfRangeException(nameof(size), size, "Size cannot be negative.");
+		}
+		return size <= threshold ? CreateMemory() : CreateTemp();
+	}
+
+	/// <summary>
 	/// Create a <see cref="SmartStream"/> with no backing stream.
 	/// </summary>
 	/// <returns>A new <see cref="SmartStream"/> for which <see cref="IsNull"/> is true.</returns>

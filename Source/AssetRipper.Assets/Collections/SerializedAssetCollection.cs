@@ -78,6 +78,10 @@ public sealed class SerializedAssetCollection : AssetCollection
 			int classID = objectInfo.TypeID < 0 ? 114 : objectInfo.TypeID;
 			AssetInfo assetInfo = new AssetInfo(collection, objectInfo.FileID, classID);
 			IUnityObjectBase? asset = factory.ReadAsset(assetInfo, objectInfo.ObjectData, objectInfo.Type);
+			// Release the cached object data now that it has been deserialized, so the
+			// byte[] can be garbage collected before the next object is read. The data
+			// can still be re-read from the owning stream if it is accessed again.
+			objectInfo.ReleaseObjectData();
 			if (asset is not null)
 			{
 				collection.AddAsset(asset);

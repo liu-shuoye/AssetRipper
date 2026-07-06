@@ -23,7 +23,7 @@ public sealed class GameStructure : IDisposable
 	{
 		Logger.SendStatusChange("loading_step_detect_platform");
 		FileSystem = fileSystem;
-		PlatformChecker.CheckPlatform(paths, fileSystem, out PlatformGameStructure? platformStructure, out MixedGameStructure? mixedStructure);
+		PlatformChecker.CheckPlatform(paths, fileSystem, configuration.ImportSettings, out PlatformGameStructure? platformStructure, out MixedGameStructure? mixedStructure);
 		PlatformStructure = platformStructure;
 		PlatformStructure?.CollectFiles(configuration.ImportSettings.IgnoreStreamingAssets);
 		MixedStructure = mixedStructure;
@@ -37,11 +37,15 @@ public sealed class GameStructure : IDisposable
 
 		Logger.SendStatusChange("loading_step_begin_scheme_processing");
 
-		InitializeGameCollection(configuration.ImportSettings.DefaultVersion, configuration.ImportSettings.TargetVersion);
+		InitializeGameCollection(
+			configuration.ImportSettings.DefaultVersion,
+			configuration.ImportSettings.TargetVersion,
+			configuration.ImportSettings.MaxInMemoryBundleBlockSize,
+			configuration.ImportSettings.FileBatchSize);
 
 		if (!FileCollection.HasAnyAssetCollections())
 		{
-			Logger.Log(LogType.Warning, LogCategory.Import, "The game structure processor could not find any valid assets.");
+			Logger.Log(LogType.Warning, LogCategory.Import, "游戏结构处理器无法找到任何有效的资源。");
 		}
 	}
 
@@ -61,7 +65,7 @@ public sealed class GameStructure : IDisposable
 	}
 
 	[MemberNotNull(nameof(FileCollection))]
-	private void InitializeGameCollection(UnityVersion defaultVersion, UnityVersion targetVersion)
+	private void InitializeGameCollection(UnityVersion defaultVersion, UnityVersion targetVersion, int maxInMemoryBundleBlockSize, int fileBatchSize)
 	{
 		Logger.SendStatusChange("loading_step_create_file_collection");
 
@@ -81,14 +85,16 @@ public sealed class GameStructure : IDisposable
 			filePaths,
 			assetFactory,
 			FileSystem,
-			new GameInitializer(PlatformStructure, MixedStructure, FileSystem, defaultVersion, targetVersion));
+			new GameInitializer(PlatformStructure, MixedStructure, FileSystem, defaultVersion, targetVersion),
+			maxInMemoryBundleBlockSize,
+			fileBatchSize);
 	}
 
 	[MemberNotNull(nameof(AssemblyManager))]
 	private void InitializeAssemblyManager(CoreConfiguration configuration)
 	{
 		ScriptingBackend scriptBackend = GetScriptingBackend(configuration.DisableScriptImport);
-		Logger.Info(LogCategory.Import, $"Files use the '{scriptBackend}' scripting backend.");
+		Logger.Info(LogCategory.Import, $"文件使用 '{scriptBackend}' 脚本后端。");
 
 		AssemblyManager = scriptBackend switch
 		{

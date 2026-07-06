@@ -43,9 +43,20 @@ public static class GameFileLoader
 	{
 		if (GameData is not null)
 		{
+			// Dispose the GameBundle so any tracked temporary streams (e.g., spilled
+			// ResourceFile payloads created during batch loading) are released and their
+			// backing temp files are deleted. GameData.GameBundle holds the reference.
+			try
+			{
+				GameData.GameBundle.Dispose();
+			}
+			catch (Exception ex)
+			{
+				Logger.Error(LogCategory.General, $"Disposing GameBundle failed during reset: {ex}");
+			}
 			GameData = null;
 			GC.Collect();
-			Logger.Info(LogCategory.General, "Data was reset.");
+			Logger.Info(LogCategory.General, "数据已重置。");
 		}
 	}
 
