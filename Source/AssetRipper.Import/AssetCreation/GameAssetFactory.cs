@@ -2,7 +2,9 @@
 using AssetRipper.Assets.Generics;
 using AssetRipper.Assets.IO;
 using AssetRipper.Assets.Metadata;
+using AssetRipper.Import.AssetCreation.Nikki4;
 using AssetRipper.Import.Logging;
+using AssetRipper.Import.Structure;
 using AssetRipper.Import.Structure.Assembly.Managers;
 using AssetRipper.Import.Structure.Assembly.Serializable;
 using AssetRipper.Import.Structure.Assembly.TypeTrees;
@@ -45,6 +47,7 @@ namespace AssetRipper.Import.AssetCreation;
 public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFactoryBase
 {
 	private IAssemblyManager AssemblyManager { get; } = assemblyManager ?? throw new ArgumentNullException(nameof(assemblyManager));
+
 
 	public override IUnityObjectBase? ReadAsset(AssetInfo assetInfo, ReadOnlyArraySegment<byte> assetData, SerializedType? assetType)
 	{
@@ -98,6 +101,7 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 		{
 			LogMonoBehaviorReadException(monoBehaviour, ex);
 		}
+
 		return monoBehaviour;
 	}
 
@@ -119,6 +123,7 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 			{
 				Logger.Warning(LogCategory.Import, error);
 			}
+
 			return asset;
 		}
 
@@ -147,6 +152,7 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 			error = null;
 			return new UnknownObject(assetInfo, assetData.ToArray());
 		}
+
 		EndianSpanReader reader = new EndianSpanReader(assetData, asset.Collection.EndianType);
 		try
 		{
@@ -178,6 +184,26 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 		{
 			error = MakeError_ReadException(asset, ex);
 		}
+
+		if (error is not null)
+		{
+			reader.Position = 0;
+			Utf8String name = reader.ReadUtf8String();
+			// 保存失败数据
+			FileStream fileStream = File.Create($"D:/UserData/errorData/{name}.{asset.GetType().Name}.bytes");
+			fileStream.Write(assetData);
+			fileStream.Flush();
+			fileStream.Close();
+			try
+			{
+				asset.Read(ref reader);
+			}
+			catch (Exception e)
+			{
+				// ignored
+			}
+		}
+
 		return asset;
 
 		static bool IsAllZero(ReadOnlySpan<byte> span)
@@ -189,12 +215,21 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 					return false;
 				}
 			}
+
 			return true;
 		}
 	}
 
 	private static IUnityObjectBase? CreateAsset(AssetInfo assetInfo, UnityVersion version)
 	{
+		switch (assetInfo.ClassID)
+		{
+			case (int)ClassIDType.AnimationClip:
+				return new AnimationClip_Nikki4(assetInfo);
+			case (int)ClassIDType.Material:
+				return new Material_Nikki4(assetInfo);
+		}
+
 		IUnityObjectBase? asset = AssetFactory.CreateSerialized(assetInfo, version);
 		if (asset is null && TypeTreeNodeStruct.TryMakeFromTpk((ClassIDType)assetInfo.ClassID, version, out TypeTreeNodeStruct releaseRoot, out TypeTreeNodeStruct editorRoot))
 		{
@@ -226,7 +261,7 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 		//unsigned int data[3] // ByteSize{4}, Index{2c}, Version{1}, IsArray{0}, MetaFlag{10}
 		texture.OriginalWidth_C28 = reader.ReadInt32();
 		texture.OriginalHeight_C28 = reader.ReadInt32();
-		texture.OriginalAssetGuid_C28.ReadRelease(ref reader);//Release and Editor are the same for GUID.
+		texture.OriginalAssetGuid_C28.ReadRelease(ref reader); //Release and Editor are the same for GUID.
 		Logger.Warning(LogCategory.Import, $"Texture {texture.Name} had an extra 24 bytes, which were assumed to be non-standard Chinese fields.");
 	}
 
