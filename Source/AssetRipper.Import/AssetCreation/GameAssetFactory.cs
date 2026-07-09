@@ -233,6 +233,8 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 				return new SkinnedMeshRenderer_Nikki4(assetInfo);
 			case (int)ClassIDType.Mesh:
 				return new Mesh_Nikki4(assetInfo);
+			case (int)ClassIDType.AnimatorController:
+				return new AnimatorController_Nikki4(assetInfo);
 		}
 
 		IUnityObjectBase? asset = AssetFactory.CreateSerialized(assetInfo, version);
@@ -248,7 +250,7 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 
 	private static string MakeError_IncorrectNumberOfBytesRead(IUnityObjectBase asset, ref EndianSpanReader reader)
 	{
-		return $"读取了 {reader.Position}，但期望值为 {reader.Length}，资产类型为 {(ClassIDType)asset.ClassID}. 版本: {asset.Collection.Version} 平台: {asset.Collection.Platform} 名称: {asset.GetBestName()} 集合名称: {asset.Collection.Name}";
+		return $"读取了 {reader.Position}，但期望值为 {reader.Length}，资产类型为 {(ClassIDType)asset.ClassID}. 版本: {asset.Collection.Version} 平台: {asset.Collection.Platform} 名称: {asset.GetBestName()} 路径: {asset.Collection.FilePath}";
 	}
 
 	/// <summary>
@@ -277,7 +279,7 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 
 	private static string MakeError_ReadException(IUnityObjectBase asset, Exception ex)
 	{
-		return $"读取资源类型时发生错误 {(ClassIDType)asset.ClassID}. 版本: {asset.Collection.Version} 平台: {asset.Collection.Platform} 名称: {asset.GetBestName()} 集合名称: {asset.Collection.Name} \n{ex}";
+		return $"读取资源类型时发生错误 {(ClassIDType)asset.ClassID}. 版本: {asset.Collection.Version} 平台: {asset.Collection.Platform} 名称: {asset.GetBestName()} 路径: {asset.Collection.FilePath} \n{ex}";
 	}
 
 	public static IUnityAssetBase CreateEngineAsset(string name, UnityVersion version)
