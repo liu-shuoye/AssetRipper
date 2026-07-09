@@ -10,10 +10,12 @@ using AssetRipper.SourceGenerated.Subclasses.Hash128;
 using AssetRipper.SourceGenerated.Subclasses.PPtr_AnimatorState;
 using AssetRipper.SourceGenerated.Subclasses.PPtr_AnimatorStateMachine;
 using AssetRipper.SourceGenerated.Subclasses.PPtr_AnimatorStateTransition;
+using AssetRipper.SourceGenerated.Subclasses.PPtr_Material;
 using AssetRipper.SourceGenerated.Subclasses.PPtr_Object;
 using AssetRipper.SourceGenerated.Subclasses.PPtr_Shader;
 using AssetRipper.SourceGenerated.Subclasses.PPtr_Texture;
 using AssetRipper.SourceGenerated.Subclasses.PPtr_Texture2D;
+using AssetRipper.SourceGenerated.Subclasses.PPtr_Transform;
 using AssetRipper.SourceGenerated.Subclasses.PPtrCurve;
 using AssetRipper.SourceGenerated.Subclasses.QuaternionCurve;
 using AssetRipper.SourceGenerated.Subclasses.RenderPassInfo;
@@ -21,14 +23,21 @@ using AssetRipper.SourceGenerated.Subclasses.SampleSettings;
 using AssetRipper.SourceGenerated.Subclasses.SecondaryTextureSettings;
 using AssetRipper.SourceGenerated.Subclasses.SpriteAtlasData;
 using AssetRipper.SourceGenerated.Subclasses.SpriteRenderData;
+using AssetRipper.SourceGenerated.Subclasses.SubMesh;
 using AssetRipper.SourceGenerated.Subclasses.UnityTexEnv;
 using AssetRipper.SourceGenerated.Subclasses.Vector3Curve;
+using AssetRipper.SourceGenerated.Subclasses.VertexData;
 
 namespace AssetRipper.Import.AssetCreation.Nikki4;
 
 static class ReadReleaseMethods
 {
 	public static void ReadRelease_AssetAlign<T>(this T value, ref EndianSpanReader reader) where T : UnityAssetBase
+	{
+		value.ReadRelease(ref reader);
+		reader.Align();
+	}
+	public static void ReadRelease_AssetAlign<T>(this IVertexData value, ref EndianSpanReader reader) where T : UnityAssetBase
 	{
 		value.ReadRelease(ref reader);
 		reader.Align();
@@ -68,6 +77,7 @@ static class ReadReleaseMethods
 		value.Capacity = num1;
 		reader.Align();
 	}
+
 	public static void ReadRelease_ArrayAlign_Asset<T>(
 		this AccessListBase<IQuaternionCurve> value,
 		ref EndianSpanReader reader)
@@ -86,6 +96,42 @@ static class ReadReleaseMethods
 		reader.Align();
 	}
 	public static void ReadRelease_ArrayAlign_Asset<T>(
+		this AccessListBase<IPPtr_Transform> value,
+		ref EndianSpanReader reader)
+		where T : UnityAssetBase, new()
+	{
+		value.Clear();
+		int num1 = reader.ReadInt32();
+		int num2 = 0;
+		while (num2 < num1)
+		{
+			value.AddNew().ReadRelease(ref reader);
+			checked { ++num2; }
+		}
+
+		value.Capacity = num1;
+		reader.Align();
+	}
+
+	public static void ReadRelease_ArrayAlign_Asset<T>(
+		this AccessListBase<IPPtr_Shader> value,
+		ref EndianSpanReader reader)
+		where T : UnityAssetBase, new()
+	{
+		value.Clear();
+		int num1 = reader.ReadInt32();
+		int num2 = 0;
+		while (num2 < num1)
+		{
+			value.AddNew().ReadRelease(ref reader);
+			checked { ++num2; }
+		}
+
+		value.Capacity = num1;
+		reader.Align();
+	}
+
+	public static void ReadRelease_ArrayAlign_Asset<T>(
 		this AccessListBase<IVector3Curve> value,
 		ref EndianSpanReader reader)
 		where T : UnityAssetBase, new()
@@ -102,6 +148,7 @@ static class ReadReleaseMethods
 		value.Capacity = num1;
 		reader.Align();
 	}
+
 	public static void ReadRelease_ArrayAlign_Asset<T>(
 		this AccessListBase<IFloatCurve> value,
 		ref EndianSpanReader reader)
@@ -119,6 +166,7 @@ static class ReadReleaseMethods
 		value.Capacity = num1;
 		reader.Align();
 	}
+
 	public static void ReadRelease_ArrayAlign_Asset<T>(
 		this AccessListBase<IPPtrCurve>? value,
 		ref EndianSpanReader reader)
@@ -136,6 +184,59 @@ static class ReadReleaseMethods
 		value.Capacity = num1;
 		reader.Align();
 	}
+
+	public static void ReadRelease_ArrayAlign_Asset<T>(
+		this AccessListBase<PPtr_Material_5>? value,
+		ref EndianSpanReader reader)
+		where T : UnityAssetBase, new()
+	{
+		value.Clear();
+		int num1 = reader.ReadInt32();
+		int num2 = 0;
+		while (num2 < num1)
+		{
+			value.AddNew().ReadRelease(ref reader);
+			checked { ++num2; }
+		}
+
+		value.Capacity = num1;
+		reader.Align();
+	}
+	public static void ReadRelease_ArrayAlign_Asset<T>(
+		this AccessListBase<ISubMesh>? value,
+		ref EndianSpanReader reader)
+		where T : UnityAssetBase, new()
+	{
+		value.Clear();
+		int num1 = reader.ReadInt32();
+		int num2 = 0;
+		while (num2 < num1)
+		{
+			value.AddNew().ReadRelease(ref reader);
+			checked { ++num2; }
+		}
+
+		value.Capacity = num1;
+		reader.Align();
+	}
+	public static void ReadRelease_ArrayAlign_Asset<T>(
+		this AccessListBase<IPPtr_Material>? value,
+		ref EndianSpanReader reader)
+		where T : UnityAssetBase, new()
+	{
+		value.Clear();
+		int num1 = reader.ReadInt32();
+		int num2 = 0;
+		while (num2 < num1)
+		{
+			value.AddNew().ReadRelease(ref reader);
+			checked { ++num2; }
+		}
+
+		value.Capacity = num1;
+		reader.Align();
+	}
+
 	public static void ReadRelease_ArrayAlign_Asset<T>(
 		this AccessListBase<IAnimationEvent>? value,
 		ref EndianSpanReader reader)

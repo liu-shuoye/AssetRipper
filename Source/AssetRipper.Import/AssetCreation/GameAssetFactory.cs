@@ -194,6 +194,7 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 			fileStream.Close();
 			try
 			{
+				reader.Position = 0;
 				asset.Read(ref reader);
 			}
 			catch (Exception e)
@@ -226,6 +227,12 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 				return new AnimationClip_Nikki4(assetInfo);
 			case (int)ClassIDType.Material:
 				return new Material_Nikki4(assetInfo);
+			case (int)ClassIDType.Shader:
+				return new Shader_Nikki4(assetInfo);
+			case (int)ClassIDType.SkinnedMeshRenderer:
+				return new SkinnedMeshRenderer_Nikki4(assetInfo);
+			case (int)ClassIDType.Mesh:
+				return new Mesh_Nikki4(assetInfo);
 		}
 
 		IUnityObjectBase? asset = AssetFactory.CreateSerialized(assetInfo, version);
