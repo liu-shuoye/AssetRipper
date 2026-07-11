@@ -7,6 +7,7 @@ using AssetRipper.SourceGenerated.Subclasses.ComputeShaderKernel;
 using AssetRipper.SourceGenerated.Subclasses.DefaultPreset;
 using AssetRipper.SourceGenerated.Subclasses.FloatCurve;
 using AssetRipper.SourceGenerated.Subclasses.Hash128;
+using AssetRipper.SourceGenerated.Subclasses.MinMaxCurve;
 using AssetRipper.SourceGenerated.Subclasses.OffsetPtr_LayerConstant;
 using AssetRipper.SourceGenerated.Subclasses.OffsetPtr_StateMachineConstant;
 using AssetRipper.SourceGenerated.Subclasses.PPtr_AnimationClip;
@@ -36,6 +37,11 @@ namespace AssetRipper.Import.AssetCreation.Nikki4;
 static class ReadReleaseMethods
 {
 	public static void ReadRelease_AssetAlign<T>(this T value, ref EndianSpanReader reader) where T : UnityAssetBase
+	{
+		value.ReadRelease(ref reader);
+		reader.Align();
+	}
+	public static void ReadRelease_AssetAlign<T>(this IMinMaxCurve value, ref EndianSpanReader reader) where T : UnityAssetBase
 	{
 		value.ReadRelease(ref reader);
 		reader.Align();
