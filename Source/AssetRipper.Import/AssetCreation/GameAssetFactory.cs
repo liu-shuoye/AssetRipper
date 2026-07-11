@@ -238,6 +238,8 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 				return new AnimatorController_Nikki4(assetInfo);
 			case (int)ClassIDType.ParticleSystem:
 				return new ParticleSystem_Nikki4(assetInfo);
+			case (int)ClassIDType.ParticleSystemRenderer:
+				return new ParticleSystemRenderer_Nikki4(assetInfo);
 		}
 
 		IUnityObjectBase? asset = AssetFactory.CreateSerialized(assetInfo, version);
