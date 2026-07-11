@@ -142,6 +142,7 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 		return unreadable;
 	}
 
+
 	private static IUnityObjectBase TryReadNormalObject(AssetInfo assetInfo, ReadOnlySpan<byte> assetData, UnityVersion version, out string? error)
 	{
 		IUnityObjectBase? asset = CreateAsset(assetInfo, version);
@@ -235,6 +236,8 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 				return new Mesh_Nikki4(assetInfo);
 			case (int)ClassIDType.AnimatorController:
 				return new AnimatorController_Nikki4(assetInfo);
+			case (int)ClassIDType.ParticleSystem:
+				return new ParticleSystem_Nikki4(assetInfo);
 		}
 
 		IUnityObjectBase? asset = AssetFactory.CreateSerialized(assetInfo, version);
