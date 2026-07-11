@@ -240,6 +240,8 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 				return new ParticleSystem_Nikki4(assetInfo);
 			case (int)ClassIDType.ParticleSystemRenderer:
 				return new ParticleSystemRenderer_Nikki4(assetInfo);
+			case (int)ClassIDType.TrailRenderer:
+				return new TrailRenderer_Nikki4(assetInfo);
 		}
 
 		IUnityObjectBase? asset = AssetFactory.CreateSerialized(assetInfo, version);
