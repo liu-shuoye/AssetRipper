@@ -3,10 +3,13 @@ using AssetRipper.Assets.Generics;
 using AssetRipper.IO.Endian;
 using AssetRipper.SourceGenerated.Subclasses.AnimationEvent;
 using AssetRipper.SourceGenerated.Subclasses.AssetInfo;
+using AssetRipper.SourceGenerated.Subclasses.BufferBindingParameter;
 using AssetRipper.SourceGenerated.Subclasses.ComputeShaderKernel;
+using AssetRipper.SourceGenerated.Subclasses.ConstantBuffer;
 using AssetRipper.SourceGenerated.Subclasses.DefaultPreset;
 using AssetRipper.SourceGenerated.Subclasses.FloatCurve;
 using AssetRipper.SourceGenerated.Subclasses.Hash128;
+using AssetRipper.SourceGenerated.Subclasses.MatrixParameter;
 using AssetRipper.SourceGenerated.Subclasses.MinMaxCurve;
 using AssetRipper.SourceGenerated.Subclasses.OffsetPtr_LayerConstant;
 using AssetRipper.SourceGenerated.Subclasses.OffsetPtr_StateMachineConstant;
@@ -23,13 +26,23 @@ using AssetRipper.SourceGenerated.Subclasses.PPtr_Transform;
 using AssetRipper.SourceGenerated.Subclasses.PPtrCurve;
 using AssetRipper.SourceGenerated.Subclasses.QuaternionCurve;
 using AssetRipper.SourceGenerated.Subclasses.RenderPassInfo;
+using AssetRipper.SourceGenerated.Subclasses.SamplerParameter;
 using AssetRipper.SourceGenerated.Subclasses.SampleSettings;
 using AssetRipper.SourceGenerated.Subclasses.SecondaryTextureSettings;
+using AssetRipper.SourceGenerated.Subclasses.SerializedPass;
+using AssetRipper.SourceGenerated.Subclasses.SerializedProgram;
+using AssetRipper.SourceGenerated.Subclasses.SerializedProperty;
+using AssetRipper.SourceGenerated.Subclasses.SerializedShaderState;
+using AssetRipper.SourceGenerated.Subclasses.SerializedSubProgram;
+using AssetRipper.SourceGenerated.Subclasses.SerializedSubShader;
 using AssetRipper.SourceGenerated.Subclasses.SpriteAtlasData;
 using AssetRipper.SourceGenerated.Subclasses.SpriteRenderData;
 using AssetRipper.SourceGenerated.Subclasses.SubMesh;
+using AssetRipper.SourceGenerated.Subclasses.TextureParameter;
+using AssetRipper.SourceGenerated.Subclasses.UAVParameter;
 using AssetRipper.SourceGenerated.Subclasses.UnityTexEnv;
 using AssetRipper.SourceGenerated.Subclasses.Vector3Curve;
+using AssetRipper.SourceGenerated.Subclasses.VectorParameter;
 using AssetRipper.SourceGenerated.Subclasses.VertexData;
 
 namespace AssetRipper.Import.AssetCreation.Nikki4;
@@ -41,6 +54,7 @@ static class ReadReleaseMethods
 		value.ReadRelease(ref reader);
 		reader.Align();
 	}
+
 	public static void ReadRelease_AssetAlign<T>(this IMinMaxCurve value, ref EndianSpanReader reader) where T : UnityAssetBase
 	{
 		value.ReadRelease(ref reader);
@@ -153,7 +167,197 @@ static class ReadReleaseMethods
 	}
 
 	public static void ReadRelease_ArrayAlign_Asset<T>(
+		this AccessListBase<IBufferBindingParameter> value,
+		ref EndianSpanReader reader)
+		where T : UnityAssetBase, new()
+	{
+		value.Clear();
+		int num1 = reader.ReadInt32();
+		int num2 = 0;
+		while (num2 < num1)
+		{
+			value.AddNew().ReadRelease(ref reader);
+			checked { ++num2; }
+		}
+
+		value.Capacity = num1;
+		reader.Align();
+	}
+
+	public static void ReadRelease_ArrayAlign_Asset<T>(
+		this AccessListBase<ISerializedSubShader> value,
+		ref EndianSpanReader reader)
+		where T : UnityAssetBase, new()
+	{
+		value.Clear();
+		int num1 = reader.ReadInt32();
+		int num2 = 0;
+		while (num2 < num1)
+		{
+			ISerializedSubShader addNew = value.AddNew();
+			addNew.ReadReleaseSubShader(ref reader);
+			checked { ++num2; }
+		}
+
+		value.Capacity = num1;
+		reader.Align();
+	}
+
+	public static void ReadReleaseSubShader(this ISerializedSubShader subShader, ref EndianSpanReader reader)
+	{
+		subShader.Passes.ReadRelease_ArrayAlign_Asset<SerializedPass_2019_3_0_a7>(ref reader);
+		subShader.Tags.ReadRelease(ref reader);
+		subShader.LOD = reader.ReadInt32();
+	}
+
+
+	public static void ReadRelease_ArrayAlign_Asset<T>(
+		this AccessListBase<ISerializedPass> value,
+		ref EndianSpanReader reader)
+		where T : UnityAssetBase, new()
+	{
+		value.Clear();
+		int num1 = reader.ReadInt32();
+		int num2 = 0;
+		while (num2 < num1)
+		{
+			SerializedPass_2019_3_0_a7 addNew = (SerializedPass_2019_3_0_a7)value.AddNew();
+			addNew.ReadReleasePass(ref reader);
+			checked { ++num2; }
+		}
+
+		value.Capacity = num1;
+		reader.Align();
+	}
+
+	public static void ReadReleasePass(this SerializedPass_2019_3_0_a7 value, ref EndianSpanReader reader)
+	{
+		value.NameIndices.ReadRelease_Map_Utf8StringAlign_Int32(ref reader);
+		value.Type = reader.ReadInt32();
+		value.State.ReadReleaseState(ref reader);
+		value.ProgramMask = reader.ReadUInt32();
+		
+		// value.ProgVertex.ReadRelease(ref reader);
+		value.ProgVertex.SubPrograms.ReadRelease_ArrayAlign_Asset<SerializedSubProgram_2019>(ref reader);
+		
+		// value.ProgFragment.ReadRelease(ref reader);
+		// value.ProgGeometry.ReadRelease(ref reader);
+		// value.ProgHull.ReadRelease(ref reader);
+		// value.ProgDomain.ReadRelease(ref reader);
+		// value.ProgRayTracing.ReadRelease(ref reader);
+		value.ProgFragment.SubPrograms.ReadRelease_ArrayAlign_Asset<SerializedSubProgram_2019>(ref reader);
+		value.ProgGeometry.SubPrograms.ReadRelease_ArrayAlign_Asset<SerializedSubProgram_2019>(ref reader);
+		value.ProgHull.SubPrograms.ReadRelease_ArrayAlign_Asset<SerializedSubProgram_2019>(ref reader);
+		value.ProgDomain.SubPrograms.ReadRelease_ArrayAlign_Asset<SerializedSubProgram_2019>(ref reader);
+		value.ProgRayTracing.SubPrograms.ReadRelease_ArrayAlign_Asset<SerializedSubProgram_2019>(ref reader);
+		
+		
+		value.HasInstancingVariant = reader.ReadBoolean();
+		value.HasProceduralInstancingVariant = reader.ReadRelease_BooleanAlign();
+		value.UseName = reader.ReadRelease_Utf8StringAlign();
+		value.Name = reader.ReadRelease_Utf8StringAlign();
+		value.TextureName = reader.ReadRelease_Utf8StringAlign();
+		value.Tags.ReadRelease(ref reader);
+	}
+
+	public static void ReadReleaseState(this ISerializedShaderState pass, ref EndianSpanReader reader)
+	{
+		pass.Name = reader.ReadRelease_Utf8StringAlign();
+		pass.RtBlend0.ReadRelease(ref reader);
+		pass.RtBlend1.ReadRelease(ref reader);
+		pass.RtBlend2.ReadRelease(ref reader);
+		pass.RtBlend3.ReadRelease(ref reader);
+		pass.RtBlend4.ReadRelease(ref reader);
+		pass.RtBlend5.ReadRelease(ref reader);
+		pass.RtBlend6.ReadRelease(ref reader);
+		pass.RtBlend7.ReadRelease(ref reader);
+		pass.RtSeparateBlend = reader.ReadRelease_BooleanAlign();
+		pass.ZClip!.ReadRelease(ref reader);
+		pass.ZTest.ReadRelease(ref reader);
+		pass.ZWrite.ReadRelease(ref reader);
+		pass.Culling.ReadRelease(ref reader);
+		pass.OffsetFactor.ReadRelease(ref reader);
+		pass.OffsetUnits.ReadRelease(ref reader);
+		pass.AlphaToMask.ReadRelease(ref reader);
+		pass.StencilOp.ReadRelease(ref reader);
+		pass.StencilOpFront.ReadRelease(ref reader);
+		pass.StencilOpBack.ReadRelease(ref reader);
+		pass.StencilReadMask.ReadRelease(ref reader);
+		pass.StencilWriteMask.ReadRelease(ref reader);
+		pass.StencilRef.ReadRelease(ref reader);
+		pass.FogStart.ReadRelease(ref reader);
+		pass.FogEnd.ReadRelease(ref reader);
+		pass.FogDensity.ReadRelease(ref reader);
+		pass.FogColor.ReadRelease(ref reader);
+		pass.FogMode = reader.ReadInt32();
+		pass.GpuProgramID = reader.ReadInt32();
+		pass.Tags.ReadRelease(ref reader);
+		pass.LOD = reader.ReadInt32();
+		AssetDictionary<Utf8String, int> m_OverrideKeywordAndStage = new();
+		m_OverrideKeywordAndStage.ReadRelease_Map_Utf8StringAlign_Int32(ref reader);
+		pass.Lighting = reader.ReadRelease_BooleanAlign();
+	}
+
+	public static void ReadRelease_ArrayAlign_Asset<T>(
+		this AccessListBase<ISerializedSubProgram> value,
+		ref EndianSpanReader reader)
+		where T : UnityAssetBase, new()
+	{
+		value.Clear();
+		int num1 = reader.ReadInt32();
+		int num2 = 0;
+		while (num2 < num1)
+		{
+			SerializedSubProgram_2019 addNew = (SerializedSubProgram_2019)value.AddNew();
+			addNew.ReadReleaseProgram(ref reader);
+			checked { ++num2; }
+		}
+
+		value.Capacity = num1;
+		reader.Align();
+	}
+
+	public static void ReadReleaseProgram(this SerializedSubProgram_2019 program, ref EndianSpanReader reader)
+	{
+		var m_CodeHash = new Hash128_5();
+		m_CodeHash.ReadRelease(ref reader);
+		program.BlobIndex = reader.ReadUInt32();
+		((UnityAssetBase)program.Channels).ReadRelease(ref reader);
+		program.GlobalKeywordIndices.ReadRelease_ArrayAlign_UInt16(ref reader);
+		program.LocalKeywordIndices.ReadRelease_ArrayAlign_UInt16(ref reader);
+		program.ShaderHardwareTier = reader.ReadSByte();
+		program.GpuProgramType = reader.ReadRelease_SByteAlign();
+		program.VectorParams.ReadRelease_ArrayAlign_Asset<VectorParameter_5_5>(ref reader);
+		program.MatrixParams.ReadRelease_ArrayAlign_Asset<MatrixParameter_5_5>(ref reader);
+		program.TextureParams.ReadRelease_ArrayAlign_Asset<TextureParameter_2017_3>(ref reader);
+		program.BufferParams.ReadRelease_ArrayAlign_Asset<BufferBindingParameter_5_5>(ref reader);
+		program.ConstantBuffers.ReadRelease_ArrayAlign_Asset<ConstantBuffer_2017_3>(ref reader);
+		program.ConstantBufferBindings.ReadRelease_ArrayAlign_Asset<BufferBindingParameter_5_5>(ref reader);
+		program.UAVParams.ReadRelease_ArrayAlign_Asset<UAVParameter_5_5>(ref reader);
+		program.Samplers.ReadRelease_ArrayAlign_Asset<SamplerParameter_2017>(ref reader);
+		program.ShaderRequirements_Int32 = reader.ReadInt32();
+	}
+
+	public static void ReadRelease_ArrayAlign_Asset<T>(
 		this AccessListBase<IPPtr_AnimationClip> value,
+		ref EndianSpanReader reader)
+		where T : UnityAssetBase, new()
+	{
+		value.Clear();
+		int num1 = reader.ReadInt32();
+		int num2 = 0;
+		while (num2 < num1)
+		{
+			value.AddNew().ReadRelease(ref reader);
+			checked { ++num2; }
+		}
+
+		value.Capacity = num1;
+		reader.Align();
+	}
+
+	public static void ReadRelease_ArrayAlign_Asset<T>(
+		this AccessListBase<ISerializedProperty> value,
 		ref EndianSpanReader reader)
 		where T : UnityAssetBase, new()
 	{
@@ -316,6 +520,40 @@ static class ReadReleaseMethods
 
 	public static void ReadRelease_ArrayAlign_Asset<T>(
 		this AccessListBase<IAnimationEvent>? value,
+		ref EndianSpanReader reader)
+		where T : UnityAssetBase, new()
+	{
+		value.Clear();
+		int num1 = reader.ReadInt32();
+		int num2 = 0;
+		while (num2 < num1)
+		{
+			value.AddNew().ReadRelease(ref reader);
+			checked { ++num2; }
+		}
+
+		value.Capacity = num1;
+		reader.Align();
+	}
+	public static void ReadRelease_ArrayAlign_Asset<T>(
+		this AccessListBase<IConstantBuffer>? value,
+		ref EndianSpanReader reader)
+		where T : UnityAssetBase, new()
+	{
+		value.Clear();
+		int num1 = reader.ReadInt32();
+		int num2 = 0;
+		while (num2 < num1)
+		{
+			value.AddNew().ReadRelease(ref reader);
+			checked { ++num2; }
+		}
+
+		value.Capacity = num1;
+		reader.Align();
+	}
+	public static void ReadRelease_ArrayAlign_Asset<T>(
+		this AccessListBase<ITextureParameter>? value,
 		ref EndianSpanReader reader)
 		where T : UnityAssetBase, new()
 	{

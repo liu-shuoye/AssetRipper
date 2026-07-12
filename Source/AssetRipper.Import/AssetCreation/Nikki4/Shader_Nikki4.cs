@@ -16,7 +16,10 @@ using AssetRipper.SourceGenerated.Subclasses.PPtr_Prefab;
 using AssetRipper.SourceGenerated.Subclasses.PPtr_PrefabInstance;
 using AssetRipper.SourceGenerated.Subclasses.PPtr_Shader;
 using AssetRipper.SourceGenerated.Subclasses.PPtr_Texture;
+using AssetRipper.SourceGenerated.Subclasses.SerializedPass;
+using AssetRipper.SourceGenerated.Subclasses.SerializedProperty;
 using AssetRipper.SourceGenerated.Subclasses.SerializedShader;
+using AssetRipper.SourceGenerated.Subclasses.SerializedSubShader;
 using AssetRipper.SourceGenerated.Subclasses.ShaderCompilationInfo;
 using AssetRipper.SourceGenerated.Subclasses.ShaderError;
 
@@ -29,7 +32,7 @@ public class Shader_Nikki4 : NamedObject_2018_3, IShader
 	readonly AssetList<AssetList<uint>> m_CodeCompressedLengths;
 	internal readonly AssetList<AssetList<uint>> m_CodeDecompressedLengths;
 	internal byte[] m_CodeCompressedBlob;
-	public readonly AssetList<PPtr_Shader_5> m_PapeFallbackShader;
+	public readonly PPtr_Shader_5 m_PapeFallbackShader;
 
 	public Shader_Nikki4(AssetInfo info) : base(info)
 	{
@@ -38,13 +41,16 @@ public class Shader_Nikki4 : NamedObject_2018_3, IShader
 		m_CodeCompressedLengths = new AssetList<AssetList<uint>>();
 		m_CodeDecompressedLengths = new AssetList<AssetList<uint>>();
 		m_CodeCompressedBlob = System.Array.Empty<byte>();
-		m_PapeFallbackShader = new AssetList<PPtr_Shader_5>();
+		m_PapeFallbackShader = new PPtr_Shader_5();
 	}
 
 	public override void ReadRelease(ref EndianSpanReader reader)
 	{
 		m_Shader.Name = reader.ReadRelease_Utf8StringAlign();
-		m_Shader.ParsedForm.ReadRelease(ref reader);
+
+		// m_Shader.ParsedForm.ReadRelease(ref reader);
+		ReadReleaseParsedForm(m_Shader.ParsedForm, ref reader);
+
 		m_Shader.Platforms.ReadRelease_ArrayAlign_UInt32(ref reader);
 		m_Shader.Offsets_AssetList_AssetList_UInt32.ReadRelease_ArrayAlign_ArrayAlign_UInt32(ref reader);
 		m_Shader.CompressedLengths_AssetList_AssetList_UInt32.ReadRelease_ArrayAlign_ArrayAlign_UInt32(ref reader);
@@ -60,10 +66,26 @@ public class Shader_Nikki4 : NamedObject_2018_3, IShader
 		m_Shader.NonModifiableTextures.ReadRelease_Map_Utf8StringAlign_PPtr_Texture_5(ref reader);
 		m_Shader.ShaderIsBaked = reader.ReadRelease_BooleanAlign();
 
-		m_PapeFallbackShader.ReadRelease_ArrayAlign_Asset<PPtr_Shader_5>(ref reader);
+		m_PapeFallbackShader.ReadRelease(ref reader);
 
 		m_Shader.Name = m_Shader.ParsedForm.Name;
 	}
+
+	public void ReadReleaseParsedForm(ISerializedShader parsedForm, ref EndianSpanReader reader)
+	{
+		parsedForm.PropInfo.ReadRelease(ref reader);
+		// parsedForm.PropInfo.Props.ReadRelease_ArrayAlign_Asset<SerializedProperty_2017>(ref reader);
+		
+		parsedForm.SubShaders.ReadRelease_ArrayAlign_Asset<SerializedSubShader_2019_3_0_a7>(ref reader);
+		
+		parsedForm.Name = reader.ReadRelease_Utf8StringAlign();
+		parsedForm.CustomEditorName = reader.ReadRelease_Utf8StringAlign();
+		parsedForm.FallbackName = reader.ReadRelease_Utf8StringAlign();
+		var m_PapeFallbackName= reader.ReadRelease_Utf8StringAlign();
+		parsedForm.Dependencies.ReadRelease_ArrayAlign_Asset<AssetRipper.SourceGenerated.Subclasses.SerializedShaderDependency.SerializedShaderDependency>(ref reader);
+		parsedForm.DisableNoSubshadersMessage = reader.ReadRelease_BooleanAlign();
+	}
+	
 
 	public bool Has_AssetGUID() => m_Shader.Has_AssetGUID();
 
