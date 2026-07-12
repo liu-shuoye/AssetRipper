@@ -244,6 +244,8 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 				return new TrailRenderer_Nikki4(assetInfo);
 			case (int)ClassIDType.SpriteRenderer:
 				return new SpriteRenderer_Nikki4(assetInfo);
+			case (int)ClassIDType.VisualEffect:
+				return new VisualEffect_Nikk4(assetInfo);
 		}
 
 		IUnityObjectBase? asset = AssetFactory.CreateSerialized(assetInfo, version);
