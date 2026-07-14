@@ -3,17 +3,22 @@
 public enum BundledAssetsExportMode
 {
 	/// <summary>
-	/// Bundled assets are treated the same as assets from other files.
+	/// 捆绑的资源与其他文件中的资源处理方式相同。
 	/// </summary>
 	GroupByAssetType,
 	/// <summary>
-	/// Bundled assets are grouped by their asset bundle name.<br/>
-	/// For example: Assets/Asset_Bundles/NameOfAssetBundle/InternalPath1/.../InternalPathN/assetName.extension
+	/// 捆绑的资源按其资源包名称分组。<br/>
+	/// 例如：Assets/Asset_Bundles/资源包名称/InternalPath1/.../InternalPathN/资产名.扩展名
 	/// </summary>
 	GroupByBundleName,
 	/// <summary>
-	/// Bundled assets are exported without grouping.<br/>
-	/// For example: Assets/InternalPath1/.../InternalPathN/bundledAssetName.extension
+	/// 捆绑的资源按其资源包名称分组导出。<br/>
+	/// 例如：Assets/InternalPath1/.../InternalPathN/资产名.扩展名
 	/// </summary>
 	DirectExport,
+	
+	/// <summary>
+	/// 捆绑的资源按容器导出
+	/// </summary>
+	ContainerExport,
 }

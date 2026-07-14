@@ -31,6 +31,7 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 	public void Process(GameData gameData)
 	{
 		Dictionary<AssetCollection, (string BundleName, IAssetBundle BundleAsset)> dictionary = [];
+		Dictionary<AssetCollection, string?> originalDirectories = [];
 		foreach (IUnityObjectBase asset in gameData.GameBundle.FetchAssets())
 		{
 			switch (asset)
@@ -39,18 +40,29 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 					SetOriginalPaths(resourceManager);
 					break;
 				case IAssetBundle assetBundle:
-					SetOriginalPaths(assetBundle, bundledAssetsExportMode);
-					if (bundledAssetsExportMode is BundledAssetsExportMode.GroupByBundleName)
+					string originalPath = SetOriginalPaths(assetBundle, bundledAssetsExportMode);
+					switch (bundledAssetsExportMode)
 					{
-						string assetBundleName = EnsureDoesNotEndWithBundleExtension(assetBundle.GetAssetBundleName());
-						if (asset.Collection.Bundle is not GameBundle)
-						{
-							foreach (AssetCollection collection in asset.Collection.Bundle.Collections)
+						case BundledAssetsExportMode.GroupByBundleName:
 							{
-								dictionary[collection] = (assetBundleName, assetBundle);
+								string assetBundleName = EnsureDoesNotEndWithBundleExtension(assetBundle.GetAssetBundleName());
+								if (asset.Collection.Bundle is not GameBundle)
+								{
+									foreach (AssetCollection collection in asset.Collection.Bundle.Collections)
+									{
+										dictionary[collection] = (assetBundleName, assetBundle);
+									}
+								}
+
+								break;
 							}
-						}
+						case BundledAssetsExportMode.ContainerExport:
+							// 获取资源文件夹
+							string? originalDirectory = Path.GetDirectoryName(originalPath);
+							originalDirectories[asset.Collection] = originalDirectory;
+							break;
 					}
+
 					break;
 			}
 		}
@@ -60,6 +72,23 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 			foreach (IUnityObjectBase asset in collection)
 			{
 				asset.OriginalDirectory ??= Path.Join(AssetBundleFullPath, BundleName, asset.ClassName);
+			}
+		}
+
+
+		if (bundledAssetsExportMode == BundledAssetsExportMode.ContainerExport)
+		{
+			foreach (var (collection, originalDirectory) in originalDirectories)
+			{
+				foreach (IUnityObjectBase asset in collection)
+				{
+					if (asset is IShader)
+					{
+						continue;
+					}
+
+					asset.OriginalDirectory ??= originalDirectory;
+				}
 			}
 		}
 	}
@@ -102,11 +131,12 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 	/// </remarks>
 	/// <param name="bundle"></param>
 	/// <exception cref="Exception"></exception>
-	private static void SetOriginalPaths(IAssetBundle bundle, BundledAssetsExportMode bundledAssetsExportMode)
+	private static string SetOriginalPaths(IAssetBundle bundle, BundledAssetsExportMode bundledAssetsExportMode)
 	{
 		string bundleName = EnsureDoesNotEndWithBundleExtension(bundle.GetAssetBundleName());
 		string bundleDirectory = bundleName + DirectorySeparator;
 		string directory = Path.Join(AssetBundleFullPath, bundleName);
+		string? outAssetPath = string.Empty;
 		foreach (AccessPairBase<Utf8String, IAssetInfo> kvp in bundle.Container)
 		{
 			// skip shared bundle assets, because we need to export them in their bundle directory
@@ -131,6 +161,7 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 
 			switch (bundledAssetsExportMode)
 			{
+				case BundledAssetsExportMode.ContainerExport:
 				case BundledAssetsExportMode.DirectExport:
 					asset.OriginalPath = OriginalPathHelper.EnsureStartsWithAssets(assetPath);
 					break;
@@ -139,16 +170,22 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 					{
 						assetPath = assetPath.Substring(AssetsDirectory.Length);
 					}
+
 					if (assetPath.StartsWith(bundleDirectory, StringComparison.OrdinalIgnoreCase))
 					{
 						assetPath = assetPath.Substring(bundleDirectory.Length);
 					}
+
 					asset.OriginalPath = Path.Join(directory, assetPath);
 					break;
 			}
+
 			UndoPathLowercasing(asset);
 			SetOverridePathIfShader(asset);
+			outAssetPath = asset.OriginalPath;
 		}
+
+		return outAssetPath ?? string.Empty;
 	}
 
 	private static string EnsureDoesNotEndWithBundleExtension(string path)
@@ -163,6 +200,7 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 		{
 			return path[..^BundleExtension.Length];
 		}
+
 		return path;
 	}
 
@@ -175,9 +213,9 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 		string? assetName = (asset as INamed)?.Name;
 		string? originalName = asset.OriginalName;
 		if (assetName is not null
-			&& originalName is not null
-			&& assetName.Length == originalName.Length
-			&& originalName.Equals(assetName, StringComparison.OrdinalIgnoreCase))
+		    && originalName is not null
+		    && assetName.Length == originalName.Length
+		    && originalName.Equals(assetName, StringComparison.OrdinalIgnoreCase))
 		{
 			asset.OriginalName = assetName;
 		}

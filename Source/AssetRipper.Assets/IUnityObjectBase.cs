@@ -8,99 +8,99 @@ namespace AssetRipper.Assets;
 public interface IUnityObjectBase : IUnityAssetBase
 {
 	/// <summary>
-	/// The key information about the location of this asset.
+	/// 该资产位置的关键信息。
 	/// </summary>
 	AssetInfo AssetInfo { get; }
 	/// <summary>
-	/// The native class ID number of this object.
+	/// 此对象的本地类ID编号。
 	/// </summary>
 	int ClassID { get; }
 	/// <summary>
-	/// The native class name of this object.
+	/// 此对象的本地类名。
 	/// </summary>
 	string ClassName { get; }
 	/// <summary>
-	/// The <see cref="AssetCollection"/> this object belongs to.
+	/// 此对象所属的<see cref="AssetCollection"/>。
 	/// </summary>
 	AssetCollection Collection { get; }
 	/// <summary>
-	/// The <see cref="AssetInfo.PathID"/> of this object within <see cref="Collection"/>.
+	/// 此对象在<see cref="Collection"/>中的<see cref="AssetInfo.PathID"/>。
 	/// </summary>
 	long PathID { get; }
 	/// <summary>
-	/// The original path of this object, if known.
+	/// 此对象的原始路径，如果已知。
 	/// </summary>
 	/// <remarks>
-	/// The path is relative to the project root and may use forward or back slashes.
+	/// 路径是相对于项目根目录的，并可能使用正斜杠或反斜杠。
 	/// This will never be the empty string.
 	/// </remarks>
 	string? OriginalPath { get; set; }
 	/// <summary>
-	/// The original directory of this object, if known.
+	/// 此对象的原始目录，如果已知。
 	/// </summary>
 	/// <remarks>
-	/// The path is relative to the project root and may use forward or back slashes.
+	/// 路径是相对于项目根目录的，并可能使用正斜杠或反斜杠。
 	/// This will never be the empty string.
 	/// </remarks>
 	string? OriginalDirectory { get; set; }
 	/// <summary>
-	/// The original file name of this object, if known.
+	/// 此对象的原始文件名，如果已知。
 	/// </summary>
 	/// <remarks>
 	/// This will never be the empty string.
 	/// </remarks>
 	string? OriginalName { get; set; }
 	/// <summary>
-	/// The original file extension of this object, if known.
+	/// 此对象的原始文件扩展名，如果已知。
 	/// </summary>
 	/// <remarks>
 	/// This will never be the empty string.
 	/// </remarks>
 	string? OriginalExtension { get; set; }
 	/// <summary>
-	/// The path of this object, if chosen.
+	/// 此对象的覆盖路径，如果已知。
 	/// </summary>
 	/// <remarks>
-	/// The path is relative to the project root and may use forward or back slashes.
+	/// 路径是相对于项目根目录的，并可能使用正斜杠或反斜杠。
 	/// This will never be the empty string.
 	/// </remarks>
 	string? OverridePath { get; set; }
 	/// <summary>
-	/// The directory of this object, if chosen.
+	/// 此对象的覆盖目录，如果已知。
 	/// </summary>
 	/// <remarks>
-	/// The path is relative to the project root and may use forward or back slashes.
+	/// 路径是相对于项目根目录的，并可能使用正斜杠或反斜杠。
 	/// This will never be the empty string.
 	/// </remarks>
 	string? OverrideDirectory { get; set; }
 	/// <summary>
-	/// The file name of this object, if chosen.
+	/// 此对象的覆盖文件名，如果已知。
 	/// </summary>
 	/// <remarks>
 	/// This will never be the empty string.
 	/// </remarks>
 	string? OverrideName { get; set; }
 	/// <summary>
-	/// The file extension of this object, if chosen.
+	/// 此对象的覆盖文件扩展名，如果已知。
 	/// </summary>
 	/// <remarks>
 	/// This will never be the empty string.
 	/// </remarks>
 	string? OverrideExtension { get; set; }
 	/// <summary>
-	/// The name of the asset bundle this object belongs to, if known.
+	/// 此对象所属的资源包名称，如果已知。
 	/// </summary>
 	/// <remarks>
 	/// This will never be the empty string.
 	/// </remarks>
 	string? AssetBundleName { get; set; }
 	/// <summary>
-	/// The primary asset that this object is associated with, if any.
+	/// 此对象关联的主要资产，如果有的话。
 	/// </summary>
 	IUnityObjectBase? MainAsset { get; set; }
 
 	/// <summary>
-	/// Get the best directory for this object, relative to the project root.
+	/// 获取此对象的最佳目录，相对项目根目录。
 	/// </summary>
 	/// <remarks>
 	/// In order of preference:<br/>
@@ -126,7 +126,7 @@ public interface IUnityObjectBase : IUnityAssetBase
 	}
 
 	/// <summary>
-	/// Get the best name for this object.
+	/// 获取此对象的最佳名称。
 	/// </summary>
 	/// <remarks>
 	/// In order of preference:<br/>
@@ -159,7 +159,7 @@ public interface IUnityObjectBase : IUnityAssetBase
 	}
 
 	/// <summary>
-	/// Get the best extension for this object, if one exists.
+	/// 获取此对象的最佳扩展名，如果存在的话。
 	/// </summary>
 	/// <remarks>
 	/// In order of preference:<br/>
