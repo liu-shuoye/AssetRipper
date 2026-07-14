@@ -104,13 +104,13 @@ public abstract class DirectBitmap
 			case ImageExportFormat.Jpeg:
 				SaveAsJpeg(stream);
 				break;
+			case ImageExportFormat.Original:
 			case ImageExportFormat.Png:
 				SaveAsPng(stream);
 				break;
 			case ImageExportFormat.Tga:
 				SaveAsTga(stream);
 				break;
-			case ImageExportFormat.Original:
 			default:
 				throw new ArgumentOutOfRangeException(nameof(format));
 		}

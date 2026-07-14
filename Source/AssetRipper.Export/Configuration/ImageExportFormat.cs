@@ -90,7 +90,7 @@ public static class ImageExportFormatExtensions
 			".jpg" => ImageExportFormat.Jpeg,
 			".png" => ImageExportFormat.Png,
 			".tga" => ImageExportFormat.Tga,
-			_ => (ImageExportFormat)(-1),
+			_ => ImageExportFormat.Png,
 		};
 		return format;
 	}
