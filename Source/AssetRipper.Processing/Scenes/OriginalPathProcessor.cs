@@ -3,8 +3,11 @@ using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Generics;
 using AssetRipper.Processing.Configuration;
+using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Classes.ClassID_142;
 using AssetRipper.SourceGenerated.Classes.ClassID_147;
+using AssetRipper.SourceGenerated.Classes.ClassID_27;
+using AssetRipper.SourceGenerated.Classes.ClassID_4;
 using AssetRipper.SourceGenerated.Classes.ClassID_48;
 using AssetRipper.SourceGenerated.Extensions;
 using AssetRipper.SourceGenerated.Subclasses.AssetInfo;
@@ -58,8 +61,7 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 							}
 						case BundledAssetsExportMode.ContainerExport:
 							// 获取资源文件夹
-							string? originalDirectory = Path.GetDirectoryName(originalPath);
-							originalDirectories[asset.Collection] = originalDirectory;
+							originalDirectories[asset.Collection] = originalPath;
 							break;
 					}
 
@@ -78,8 +80,21 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 
 		if (bundledAssetsExportMode == BundledAssetsExportMode.ContainerExport)
 		{
-			foreach (var (collection, originalDirectory) in originalDirectories)
+			foreach ((AssetCollection collection, string? originalPath) in originalDirectories)
 			{
+				if (originalPath == null)
+				{
+					return;
+				}
+
+				string? originalDirectory = Path.GetDirectoryName(originalPath);
+				int count = collection.Count(asset => asset.GetBestName() != asset.ClassName);
+				if (count > 30)
+				{
+					// 移除扩展名
+					originalDirectory = originalPath[..originalPath.LastIndexOf('.')];
+				}
+
 				foreach (IUnityObjectBase asset in collection)
 				{
 					if (asset is IShader)

@@ -1,0 +1,15 @@
+- [x] `EnableAssetDeduplication` 为 `false`（默认）时，导出行为与现有逻辑逐字节一致（不比较、不跳过、不输出日志）
+- [x] `EnableAssetDeduplication` 为 `true` 时，内容相同的主资产只导出一份文件
+- [x] 去重比较以 `IExportCollection` 的主资产为单位，不破坏 collection 内部子资产结构
+- [x] `AssetEqualityComparer` 被复用，未重新实现内容比较逻辑
+- [x] 分桶使用 `(Type, GetBestName())`，避免依赖 `AssetEqualityComparer.GetHashCode` 的弱哈希
+- [x] `SceneExportCollection` 与 `Exportable == false` 的 collection 不参与内容去重
+- [x] 被跳过的重复资产的所有外部 PPtr 引用在导出时重定向到保留资产（fileID 与 guid 正确）
+- [x] `ProjectAssetContainer.GetExportID` / `CreateExportPointer` 对被跳过资产返回保留资产的 id/pointer
+- [x] DEBUG 模式下 `CheckIfAlreadyAdded` 不会因重定向映射误报
+- [x] 导出日志在去重启用时输出：参与比较数量、保留数量、跳过数量、按类型分组的跳过统计
+- [x] 去重禁用时无任何去重相关日志输出
+- [x] UI 设置页 `EnableAssetDeduplication` 复选框状态被正确读取并传递到 `ProjectExporter`
+- [x] 新增单元测试覆盖：内容相同去重、PPtr 重定向、开关关闭不变、场景豁免
+- [x] 未修改 `ProcessingSettings`、`SettingsPage.g.cs` 的现有结构（复用而非新增配置项）
+- [x] `SettingsPage.cs` 第 98 行已移除 `!GameFileLoader.Premium` 参数，`EnableAssetDeduplication` 复选框对所有用户可勾选

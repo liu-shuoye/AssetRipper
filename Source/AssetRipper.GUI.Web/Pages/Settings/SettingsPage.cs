@@ -1,4 +1,4 @@
-﻿using AssetRipper.Export.Configuration;
+using AssetRipper.Export.Configuration;
 using AssetRipper.GUI.Web.Pages.Settings.DropDown;
 using AssetRipper.GUI.Web.Paths;
 using AssetRipper.Primitives;
@@ -95,7 +95,7 @@ public sealed partial class SettingsPage : DefaultPage
 								}
 								using (new Div(writer).WithClass("col").End())
 								{
-									WriteCheckBoxForEnableAssetDeduplication(writer, Localization.EnableAssetDeduplication, !GameFileLoader.Premium);
+									WriteCheckBoxForEnableAssetDeduplication(writer, Localization.EnableAssetDeduplication);
 								}
 							}
 

@@ -12,9 +12,12 @@ namespace AssetRipper.Export.UnityProjects;
 public class ProjectAssetContainer : IExportContainer
 {
 	public ProjectAssetContainer(ProjectExporter exporter, CoreConfiguration options, IEnumerable<IUnityObjectBase> assets,
-		IReadOnlyList<IExportCollection> collections)
+		IReadOnlyList<IExportCollection> collections, HashSet<IExportCollection> skippedCollections,
+		Dictionary<IUnityObjectBase, IUnityObjectBase> redirectMap)
 	{
 		m_exporter = exporter ?? throw new ArgumentNullException(nameof(exporter));
+		m_skippedCollections = skippedCollections ?? throw new ArgumentNullException(nameof(skippedCollections));
+		m_redirectMap = redirectMap ?? throw new ArgumentNullException(nameof(redirectMap));
 		CurrentCollection = null!;
 
 		ExportVersion = options.Version;
@@ -24,6 +27,17 @@ public class ProjectAssetContainer : IExportContainer
 		List<SceneExportCollection> scenes = new();
 		foreach (IExportCollection collection in collections)
 		{
+			// Skipped collections are not added to m_assetCollections. Their assets
+			// will be redirected at query time via m_redirectMap (Task 3).
+			if (m_skippedCollections.Contains(collection))
+			{
+				if (collection is SceneExportCollection skippedScene)
+				{
+					scenes.Add(skippedScene);
+				}
+				continue;
+			}
+
 			foreach (IUnityObjectBase asset in collection.Assets)
 			{
 				CheckIfAlreadyAdded(this, asset, collection);
@@ -48,6 +62,11 @@ public class ProjectAssetContainer : IExportContainer
 
 	public long GetExportID(IUnityObjectBase asset)
 	{
+		if (m_redirectMap.TryGetValue(asset, out IUnityObjectBase? target))
+		{
+			return GetExportID(target);
+		}
+
 		if (m_assetCollections.TryGetValue(asset, out IExportCollection? collection))
 		{
 			return collection.GetExportID(this, asset);
@@ -63,6 +82,11 @@ public class ProjectAssetContainer : IExportContainer
 
 	public MetaPtr CreateExportPointer(IUnityObjectBase asset)
 	{
+		if (m_redirectMap.TryGetValue(asset, out IUnityObjectBase? target))
+		{
+			return CreateExportPointer(target);
+		}
+
 		if (m_assetCollections.TryGetValue(asset, out IExportCollection? collection))
 		{
 			return collection.CreateExportPointer(this, asset, collection == CurrentCollection);
@@ -91,6 +115,8 @@ public class ProjectAssetContainer : IExportContainer
 
 	private readonly ProjectExporter m_exporter;
 	private readonly Dictionary<IUnityObjectBase, IExportCollection> m_assetCollections = new();
+	private readonly HashSet<IExportCollection> m_skippedCollections;
+	private readonly Dictionary<IUnityObjectBase, IUnityObjectBase> m_redirectMap;
 
 	private readonly IBuildSettings? m_buildSettings;
 	private readonly SceneExportCollection[] m_scenes;
