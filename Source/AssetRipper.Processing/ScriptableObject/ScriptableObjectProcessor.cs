@@ -1,4 +1,6 @@
-﻿using AssetRipper.Assets.Collections;
+using AssetRipper.Assets;
+using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Metadata;
 using AssetRipper.Import.Logging;
 using AssetRipper.Import.Structure.Assembly;
@@ -24,7 +26,8 @@ public class ScriptableObjectProcessor : IAssetProcessor
 		List<IMonoBehaviour> timelineAssets = new();
 		List<IMonoBehaviour> postProcessProfiles = new();
 
-		foreach (IMonoBehaviour monoBehaviour in gameData.GameBundle.FetchAssets().OfType<IMonoBehaviour>())
+		// 用元数据枚举找到所有 IMonoBehaviour (ClassID 114)，避免 FetchAssets 触发全量反序列化
+		foreach (IMonoBehaviour monoBehaviour in EnumerateAssetsByClassID<IMonoBehaviour>(gameData.GameBundle, 114))
 		{
 			if (monoBehaviour.MainAsset is not null)
 			{
@@ -70,6 +73,29 @@ public class ScriptableObjectProcessor : IAssetProcessor
 			ScriptableObjectGroup group = CreateGroup(collection, postProcessProfile);
 			group.Children.AddRange(FindPostProcessProfileChildren(postProcessProfile).Where(uniqueAssets.Contains));
 			group.SetMainAsset();
+		}
+	}
+
+	/// <summary>
+	/// 用元数据枚举遍历 bundle 中所有 AssetCollection，仅对指定 ClassID 的对象做单对象反序列化。
+	/// 用于替代 FetchAssets().OfType&lt;T&gt;() 模式，避免触发全量反序列化。
+	/// </summary>
+	private static IEnumerable<T> EnumerateAssetsByClassID<T>(GameBundle bundle, int classID) where T : IUnityObjectBase
+	{
+		foreach (AssetCollection collection in bundle.FetchAssetCollections())
+		{
+			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
+			{
+				if (meta.ClassID != classID)
+				{
+					continue;
+				}
+				T? asset = collection.TryGetAssetOnly<T>(meta.PathID);
+				if (asset is not null)
+				{
+					yield return asset;
+				}
+			}
 		}
 	}
 

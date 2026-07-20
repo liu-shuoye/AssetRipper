@@ -22,6 +22,20 @@ public abstract class AssetCollection : IReadOnlyCollection<IUnityObjectBase>, I
 	public Bundle Bundle { get; }
 	public string Name { get; protected set; } = string.Empty;
 	public string FilePath { get; set; } = string.Empty;
+
+	/// <summary>
+	/// 仅暴露 PathID 与 ClassID 的轻量元数据视图，用于在不触发反序列化的前提下识别资产类型。
+	/// </summary>
+	/// <remarks>
+	/// 调用方通过 <see cref="EnumerateAssetMetadata"/> 获取此结构序列，可凭 ClassID 决定是否需要
+	/// 通过 <see cref="TryGetAssetOnly"/> 进一步反序列化对象本体。
+	/// </remarks>
+	public readonly struct AssetMetadata
+	{
+		public required long PathID { get; init; }
+		public required int ClassID { get; init; }
+	}
+
 	/// <summary>
 	/// The list of dependencies for this collection.
 	/// </summary>
@@ -32,7 +46,15 @@ public abstract class AssetCollection : IReadOnlyCollection<IUnityObjectBase>, I
 	public IReadOnlyList<AssetCollection?> Dependencies => dependencies;
 	private readonly List<AssetCollection?> dependencies = new();
 	public IReadOnlyDictionary<long, IUnityObjectBase> Assets => assets;
-	private readonly Dictionary<long, IUnityObjectBase> assets = new();
+	// 改为 protected 以便子类（如 SerializedAssetCollection.TryGetAssetOnly）直接查字典判断是否已反序列化
+	protected readonly Dictionary<long, IUnityObjectBase> assets = new();
+
+	/// <summary>
+	/// collection 级别的 OriginalDirectory 持久化映射，用于在不反序列化 asset 实例的情况下设置路径。
+	/// 让 <see cref="OriginalPathProcessor"/> GroupByBundleName 模式能用元数据枚举设置 OriginalDirectory。
+	/// </summary>
+	private Dictionary<long, string>? _originalDirectoryOverrides;
+
 	public UnityVersion OriginalVersion { get; protected set; }
 	public UnityVersion Version { get; protected set; }
 	public BuildTarget Platform { get; protected set; }
@@ -169,6 +191,76 @@ public abstract class AssetCollection : IReadOnlyCollection<IUnityObjectBase>, I
 	}
 
 	#region GetAsset Methods
+	/// <summary>
+	/// 首次访问资产前触发懒加载。默认实现为空，子类（如 SerializedAssetCollection）
+	/// 重写此方法以在首次访问时按需反序列化对象，避免加载阶段一次性占用全部内存。
+	/// </summary>
+	protected virtual void EnsureAssetsLoaded() { }
+
+	/// <summary>
+	/// 枚举集合内所有资产的元数据，默认实现触发 EnsureAssetsLoaded 后枚举 assets 字典（兼容老代码）。
+	/// 子类（如 <see cref="SerializedAssetCollection"/>）应重写为直接遍历底层数据源，不触发反序列化。
+	/// </summary>
+	/// <returns>返回每个资产的 (PathID, ClassID) 元数据序列。</returns>
+	public virtual IEnumerable<AssetMetadata> EnumerateAssetMetadata()
+	{
+		EnsureAssetsLoaded();
+		foreach (IUnityObjectBase asset in assets.Values)
+		{
+			yield return new AssetMetadata { PathID = asset.PathID, ClassID = asset.ClassID };
+		}
+	}
+
+	/// <summary>
+	/// 仅反序列化指定 PathID 对应的单个对象，不触发全量 EnsureAssetsLoaded。
+	/// 默认实现回退到 <see cref="TryGetAsset(long)"/>（触发全量加载），兼容老代码。
+	/// 子类应重写为按需单对象反序列化。
+	/// </summary>
+	public virtual IUnityObjectBase? TryGetAssetOnly(long pathID)
+	{
+		return TryGetAsset(pathID);
+	}
+
+	/// <summary>
+	/// 仅反序列化指定 PathID 对应的单个对象并转换为指定类型。
+	/// </summary>
+	public T? TryGetAssetOnly<T>(long pathID) where T : IUnityObjectBase
+	{
+		IUnityObjectBase? asset = TryGetAssetOnly(pathID);
+		return asset is T t ? t : default;
+	}
+
+	/// <summary>
+	/// 在 collection 级别持久化 OriginalDirectory，避免反序列化 asset 实例即可设置路径。
+	/// </summary>
+	public void SetOriginalDirectory(long pathID, string directory)
+	{
+		_originalDirectoryOverrides ??= new();
+		_originalDirectoryOverrides[pathID] = directory;
+	}
+
+	/// <summary>
+	/// 从 collection 级别映射读取 OriginalDirectory。
+	/// </summary>
+	/// <remarks>
+	/// 设为 public 以便 <see cref="AssetRipper.Processing.Scenes.OriginalPathProcessor"/> 等跨程序集 processor
+	/// 能在不反序列化 asset 实例的前提下检查 OriginalDirectory 是否已设置（保持原 ??= 语义）。
+	/// </remarks>
+	public string? TryGetOriginalDirectory(long pathID)
+	{
+		return _originalDirectoryOverrides?.TryGetValue(pathID, out string? dir) == true ? dir : null;
+	}
+
+	/// <summary>
+	/// 清空已反序列化的资产对象，但保留重新加载所需的数据源引用。
+	/// 调用后再次访问资产会触发 <see cref="EnsureAssetsLoaded"/> 重新反序列化。
+	/// 默认实现清空 assets 字典；子类可重写以重置懒加载标志。
+	/// </summary>
+	public virtual void UnloadAssets()
+	{
+		assets.Clear();
+	}
+
 	public IUnityObjectBase? TryGetAsset(long pathID)
 	{
 		TryGetAsset(pathID, out IUnityObjectBase? asset);
@@ -188,6 +280,8 @@ public abstract class AssetCollection : IReadOnlyCollection<IUnityObjectBase>, I
 
 	public bool TryGetAsset<T>(long pathID, [NotNullWhen(true)] out T? asset) where T : IUnityObjectBase
 	{
+		// 触发懒加载：确保 assets 字典已填充
+		EnsureAssetsLoaded();
 		if (assets.TryGetValue(pathID, out IUnityObjectBase? @object))
 		{
 			if (typeof(T).IsAssignableTo(typeof(NullObject)))
@@ -294,9 +388,22 @@ public abstract class AssetCollection : IReadOnlyCollection<IUnityObjectBase>, I
 	#endregion
 
 	#region IReadOnlyCollection
-	public IEnumerator<IUnityObjectBase> GetEnumerator() => assets.Values.GetEnumerator();
+	public IEnumerator<IUnityObjectBase> GetEnumerator()
+	{
+		// 触发懒加载：确保 assets 字典已填充
+		EnsureAssetsLoaded();
+		return assets.Values.GetEnumerator();
+	}
 	IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-	public int Count => assets.Count;
+	public int Count
+	{
+		get
+		{
+			// 触发懒加载：确保 assets 字典已填充
+			EnsureAssetsLoaded();
+			return assets.Count;
+		}
+	}
 	#endregion
 
 	#region IDisposable Support
@@ -310,6 +417,8 @@ public abstract class AssetCollection : IReadOnlyCollection<IUnityObjectBase>, I
 			{
 				// 清空资产字典以断开对象图引用，让 GC 能尽早回收反序列化的资产
 				assets.Clear();
+				_originalDirectoryOverrides?.Clear();
+				_originalDirectoryOverrides = null;
 				dependencies.Clear();
 				Scene = null;
 			}

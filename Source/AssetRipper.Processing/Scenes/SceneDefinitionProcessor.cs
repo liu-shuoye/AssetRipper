@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Generics;
@@ -28,25 +28,37 @@ public sealed class SceneDefinitionProcessor : IAssetProcessor
 		List<IAssetBundle> sceneAssetBundles = new();
 
 		//Find the relevant assets in this single pass over all the assets.
+		// 用元数据枚举避免触发 EnsureAssetsLoaded 全量反序列化（30 万对象）。
+		// 仅对真正需要访问字段的 IOcclusionCullingSettings / IBuildSettings / IAssetBundle 调用 TryGetAssetOnly。
 		foreach (AssetCollection collection in gameData.GameBundle.FetchAssetCollections())
 		{
-			foreach (IUnityObjectBase asset in collection)
+			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
 			{
-				if (asset is ILevelGameManager)
+				// ILevelGameManager 对应 ClassID 29 / 104 / 157 / 196（参见 ClassIDTypeExtention.IsSceneSettings）
+				if (meta.ClassID is 29 or 104 or 157 or 196)
 				{
 					sceneCollections.Add(collection);
-					if (asset is IOcclusionCullingSettings sceneSettings && sceneSettings.Has_SceneGUID())
+					// 仅 OcclusionCullingSettings (29) 需要 SceneGUID 字段
+					if (meta.ClassID == 29)
 					{
-						sceneGuids[collection] = sceneSettings.SceneGUID;
+						IOcclusionCullingSettings? sceneSettings = collection.TryGetAssetOnly<IOcclusionCullingSettings>(meta.PathID);
+						if (sceneSettings is not null && sceneSettings.Has_SceneGUID())
+						{
+							sceneGuids[collection] = sceneSettings.SceneGUID;
+						}
 					}
 				}
-				else if (asset is IBuildSettings buildSettings1)
+				else if (meta.ClassID == 141) // IBuildSettings
 				{
-					buildSettings = buildSettings1;
+					buildSettings = collection.TryGetAssetOnly<IBuildSettings>(meta.PathID);
 				}
-				else if (asset is IAssetBundle assetBundle && assetBundle.IsStreamedSceneAssetBundle)
+				else if (meta.ClassID == 142) // IAssetBundle
 				{
-					sceneAssetBundles.Add(assetBundle);
+					IAssetBundle? assetBundle = collection.TryGetAssetOnly<IAssetBundle>(meta.PathID);
+					if (assetBundle is not null && assetBundle.IsStreamedSceneAssetBundle)
+					{
+						sceneAssetBundles.Add(assetBundle);
+					}
 				}
 			}
 		}

@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets.Bundles;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects.PathIdMapping;
 using AssetRipper.Export.UnityProjects.Project;
@@ -47,11 +47,30 @@ public class ExportHandler
 	public void Process(GameData gameData)
 	{
 		Logger.Info(LogCategory.Processing, "Processing loaded assets...");
+		LogMemoryDiagnostics("Process开始");
 		foreach (IAssetProcessor processor in GetProcessors())
 		{
+			string processorName = processor.GetType().Name;
+			LogMemoryDiagnostics($"Process前 - {processorName}");
 			processor.Process(gameData);
+			LogMemoryDiagnostics($"Process后 - {processorName}");
 		}
 		Logger.Info(LogCategory.Processing, "Finished processing assets");
+	}
+
+	/// <summary>
+	/// 输出当前内存状态，用于定位哪个阶段内存上涨最多。
+	/// </summary>
+	private static void LogMemoryDiagnostics(string stage)
+	{
+		// 强制 GC 后再统计，排除已可回收但未回收的对象干扰
+		GC.Collect();
+		GC.WaitForPendingFinalizers();
+		GC.Collect();
+
+		long managedMemory = GC.GetTotalMemory(false);
+		long workingSet = Environment.WorkingSet;
+		Logger.Info(LogCategory.Processing, $"[内存诊断] {stage}: 托管: {managedMemory / 1024.0 / 1024.0:F1} MB | 工作集: {workingSet / 1024.0 / 1024.0:F1} MB");
 	}
 
 	protected virtual IEnumerable<IAssetProcessor> GetProcessors()
@@ -102,16 +121,22 @@ public class ExportHandler
 		Settings.ExportRootPath = outputPath;
 		Settings.SetProjectSettings(gameData.ProjectVersion);
 
+		LogMemoryDiagnostics("Export前 - 创建ProjectExporter");
 		ProjectExporter projectExporter = new(Settings, gameData.AssemblyManager);
 		BeforeExport(projectExporter);
 		projectExporter.DoFinalOverrides(Settings);
+		LogMemoryDiagnostics("Export前 - DoFinalOverrides完成");
 		projectExporter.Export(gameData.GameBundle, Settings, fileSystem);
+		LogMemoryDiagnostics("Export后 - 主导出完成");
 
 		Logger.Info(LogCategory.Export, "Finished exporting assets");
 
 		foreach (IPostExporter postExporter in GetPostExporters())
 		{
+			string postExporterName = postExporter.GetType().Name;
+			LogMemoryDiagnostics($"PostExport前 - {postExporterName}");
 			postExporter.DoPostExport(gameData, Settings, fileSystem);
+			LogMemoryDiagnostics($"PostExport后 - {postExporterName}");
 		}
 		Logger.Info(LogCategory.Export, "Finished post-export");
 

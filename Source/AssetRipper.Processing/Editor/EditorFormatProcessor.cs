@@ -70,7 +70,27 @@ public class EditorFormatProcessor : IAssetProcessor
 	public void Process(GameData gameData)
 	{
 		Logger.Info(LogCategory.Processing, "Editor Format Conversion");
-		tagManager = gameData.GameBundle.FetchAssets().OfType<ITagManager>().FirstOrDefault();
+		// 用元数据枚举找到第一个 ITagManager (ClassID 78)，避免 FetchAssets 触发全量反序列化
+		tagManager = null;
+		foreach (AssetCollection collection in gameData.GameBundle.FetchAssetCollections())
+		{
+			if (tagManager is not null)
+			{
+				break;
+			}
+			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
+			{
+				if (meta.ClassID != 78)
+				{
+					continue;
+				}
+				tagManager = collection.TryGetAssetOnly<ITagManager>(meta.PathID);
+				if (tagManager is not null)
+				{
+					break;
+				}
+			}
+		}
 		assemblyManager = gameData.AssemblyManager;
 		checksumCache = new PathChecksumCache(gameData);
 

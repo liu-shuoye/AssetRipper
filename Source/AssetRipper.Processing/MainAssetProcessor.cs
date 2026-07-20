@@ -1,4 +1,5 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
+using AssetRipper.Assets.Collections;
 using AssetRipper.Import.Logging;
 using AssetRipper.SourceGenerated.Classes.ClassID_128;
 using AssetRipper.SourceGenerated.Classes.ClassID_156;
@@ -14,34 +15,44 @@ public class MainAssetProcessor : IAssetProcessor
 	public void Process(GameData gameData)
 	{
 		Logger.Info(LogCategory.Processing, "Main Asset Pairing");
-		foreach (IUnityObjectBase asset in gameData.GameBundle.FetchAssets())
+		// 用元数据枚举避免 FetchAssets() 触发全量反序列化。
+		// 仅对 IFont (128) 与 ITerrainData (156) 调用 TryGetAssetOnly 做单对象反序列化。
+		foreach (AssetCollection collection in gameData.GameBundle.FetchAssetCollections())
 		{
-			switch (asset)
+			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
 			{
-				case IFont font:
+				if (meta.ClassID == 128) // IFont
+				{
+					IFont? font = collection.TryGetAssetOnly<IFont>(meta.PathID);
+					if (font is null)
 					{
-						font.MainAsset = font;
-						if (font.TryGetFontMaterial(out IMaterial? fontMaterial))
-						{
-							fontMaterial.MainAsset = font;
-						}
-						if (font.TryGetFontTexture(out ITexture? fontTexture))
-						{
-							fontTexture.MainAsset = font;
-						}
+						continue;
 					}
-					break;
-				case ITerrainData terrainData:
+					font.MainAsset = font;
+					if (font.TryGetFontMaterial(out IMaterial? fontMaterial))
 					{
-						terrainData.MainAsset = terrainData;
-						foreach (ITexture2D alphaTexture in terrainData.GetSplatAlphaTextures())
-						{
-							//Sometimes TerrainData can be duplicated, but retain the same alpha textures.
-							//https://github.com/AssetRipper/AssetRipper/issues/1356
-							alphaTexture.MainAsset ??= terrainData;
-						}
+						fontMaterial.MainAsset = font;
 					}
-					break;
+					if (font.TryGetFontTexture(out ITexture? fontTexture))
+					{
+						fontTexture.MainAsset = font;
+					}
+				}
+				else if (meta.ClassID == 156) // ITerrainData
+				{
+					ITerrainData? terrainData = collection.TryGetAssetOnly<ITerrainData>(meta.PathID);
+					if (terrainData is null)
+					{
+						continue;
+					}
+					terrainData.MainAsset = terrainData;
+					foreach (ITexture2D alphaTexture in terrainData.GetSplatAlphaTextures())
+					{
+						//Sometimes TerrainData can be duplicated, but retain the same alpha textures.
+						//https://github.com/AssetRipper/AssetRipper/issues/1356
+						alphaTexture.MainAsset ??= terrainData;
+					}
+				}
 			}
 		}
 	}

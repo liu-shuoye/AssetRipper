@@ -1,4 +1,6 @@
-﻿using AssetRipper.Assets.Collections;
+using AssetRipper.Assets;
+using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Generics;
 using AssetRipper.Checksum;
 using AssetRipper.Import.Logging;
@@ -36,7 +38,8 @@ public sealed class AudioMixerProcessor : IAssetProcessor
 		ProcessedAssetCollection processedCollection = gameData.AddNewProcessedCollection("Generated Audio Mixer Effects");
 
 		Dictionary<IAudioMixer, Dictionary<UnityGuid, IAudioMixerGroup>> groupGuidMixerMap = new();
-		foreach (IAudioMixerGroup group in gameData.GameBundle.FetchAssets().OfType<IAudioMixerGroup>())
+		// 用元数据枚举找到所有 IAudioMixerGroup (ClassID 273)，避免 FetchAssets 触发全量反序列化
+		foreach (IAudioMixerGroup group in EnumerateAssetsByClassID<IAudioMixerGroup>(gameData.GameBundle, 273))
 		{
 			IAudioMixer? mixer = group.AudioMixer_C273P;
 			if (mixer is not null)
@@ -46,10 +49,34 @@ public sealed class AudioMixerProcessor : IAssetProcessor
 			}
 		}
 
-		foreach (IAudioMixer mixer in gameData.GameBundle.FetchAssets().OfType<IAudioMixer>())
+		// 用元数据枚举找到所有 IAudioMixer (ClassID 240)，避免 FetchAssets 触发全量反序列化
+		foreach (IAudioMixer mixer in EnumerateAssetsByClassID<IAudioMixer>(gameData.GameBundle, 240))
 		{
 			mixer.MainAsset = mixer;
 			ProcessAssets(mixer, processedCollection, groupGuidMixerMap.GetOrAdd(mixer));
+		}
+	}
+
+	/// <summary>
+	/// 用元数据枚举遍历 bundle 中所有 AssetCollection，仅对指定 ClassID 的对象做单对象反序列化。
+	/// 用于替代 FetchAssets().OfType&lt;T&gt;() 模式，避免触发全量反序列化。
+	/// </summary>
+	private static IEnumerable<T> EnumerateAssetsByClassID<T>(GameBundle bundle, int classID) where T : IUnityObjectBase
+	{
+		foreach (AssetCollection collection in bundle.FetchAssetCollections())
+		{
+			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
+			{
+				if (meta.ClassID != classID)
+				{
+					continue;
+				}
+				T? asset = collection.TryGetAssetOnly<T>(meta.PathID);
+				if (asset is not null)
+				{
+					yield return asset;
+				}
+			}
 		}
 	}
 

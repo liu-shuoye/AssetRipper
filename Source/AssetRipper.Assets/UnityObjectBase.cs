@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Collections;
+using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Debugging;
 using AssetRipper.Assets.Metadata;
 using System.Diagnostics;
@@ -50,7 +50,9 @@ public abstract partial class UnityObjectBase : UnityAssetBase, IUnityObjectBase
 	/// <inheritdoc/>
 	public string? OriginalDirectory
 	{
-		get => originalPathDetails?.Directory;
+		// 优先用 asset 实例级别的 OriginalDirectory（向后兼容），未设置时回退到 collection 级别映射，
+		// 让 processor 能在不反序列化 asset 实例的情况下设置路径。
+		get => originalPathDetails?.Directory ?? Collection.TryGetOriginalDirectory(PathID);
 		set
 		{
 			if (originalPathDetails is not null)
