@@ -364,7 +364,10 @@ public abstract partial class PlatformGameStructure
 
 	protected UnityVersion GetUnityVersionFromSerializedFile(string filePath)
 	{
-		return SerializedFile.FromFile(filePath, FileSystem).Version;
+		// 使用 using 确保 SerializedFile 持有的 SmartStream 引用被释放，
+		// 避免仅为读取 Version 而长期占用底层文件流。
+		using SerializedFile file = SerializedFile.FromFile(filePath, FileSystem);
+		return file.Version;
 	}
 
 	protected UnityVersion GetUnityVersionFromBundleFile(string filePath)
