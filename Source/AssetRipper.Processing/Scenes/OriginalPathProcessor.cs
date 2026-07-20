@@ -99,8 +99,8 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 		}
 
 
-		// 已知限制：ContainerExport 模式需要访问 asset.GetBestName() 字段，无法用元数据驱动，
-		// 仍触发全量反序列化。后续 spec 可考虑用 ClassID 推导 Name 字段位置以优化此分支。
+		// ContainerExport 模式：用元数据枚举 + 按需 TryGetAssetOnly 实现懒解析，
+		// 仅在需要 GetBestName 比较时反序列化目标对象，避免 collection.Count / foreach 触发全量反序列化。
 		if (bundledAssetsExportMode == BundledAssetsExportMode.ContainerExport)
 		{
 			foreach ((AssetCollection collection, string? originalPath) in originalDirectories)
@@ -111,21 +111,42 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 				}
 
 				string? originalDirectory = Path.GetDirectoryName(originalPath);
-				int count = collection.Count(asset => asset.GetBestName() != asset.ClassName);
+				// 用元数据枚举 + 按需 TryGetAssetOnly 检查 GetBestName，避免 collection.Count 触发全量反序列化
+				// 短路：count > 30 时立即退出，等价于原 Count(predicate) > 30 判断
+				int count = 0;
+				foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
+				{
+					IUnityObjectBase? asset = collection.TryGetAssetOnly(meta.PathID);
+					if (asset is not null && asset.GetBestName() != asset.ClassName)
+					{
+						count++;
+						if (count > 30)
+						{
+							break;
+						}
+					}
+				}
 				if (count > 30)
 				{
 					// 移除扩展名
 					originalDirectory = originalPath[..originalPath.LastIndexOf('.')];
 				}
 
-				foreach (IUnityObjectBase asset in collection)
+				// 用元数据枚举 + SetOriginalDirectory，避免 foreach 触发全量反序列化
+				// ClassID 48 = IShader，跳过保持原 if (asset is IShader) continue; 语义
+				// ??= 语义：通过 TryGetOriginalDirectory 检查是否已设置，已设置则跳过
+				// originalDirectory 此处一定不为 null：外层 if (originalPath == null) return; 已早返回
+				foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
 				{
-					if (asset is IShader)
+					if (meta.ClassID == 48) // IShader
 					{
 						continue;
 					}
-
-					asset.OriginalDirectory ??= originalDirectory;
+					if (collection.TryGetOriginalDirectory(meta.PathID) is not null)
+					{
+						continue;
+					}
+					collection.SetOriginalDirectory(meta.PathID, originalDirectory!);
 				}
 			}
 		}
@@ -135,7 +156,8 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 	{
 		foreach (AccessPairBase<Utf8String, IPPtr_Object> kvp in manager.Container)
 		{
-			IUnityObjectBase? asset = kvp.Value.TryGetAsset(manager.Collection);
+			// 使用懒解析：TryGetAssetOnly 仅反序列化目标对象，避免触发跨 collection 全量反序列化
+			IUnityObjectBase? asset = kvp.Value.TryGetAssetOnly(manager.Collection);
 			if (asset is null)
 			{
 				continue;
@@ -183,7 +205,8 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 				continue;
 			}
 
-			IUnityObjectBase? asset = kvp.Value.Asset.TryGetAsset(bundle.Collection);
+			// 使用懒解析：TryGetAssetOnly 仅反序列化目标对象，避免触发跨 collection 全量反序列化
+			IUnityObjectBase? asset = kvp.Value.Asset.TryGetAssetOnly(bundle.Collection);
 			if (asset is null)
 			{
 				continue;

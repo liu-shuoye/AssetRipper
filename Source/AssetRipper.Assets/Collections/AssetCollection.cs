@@ -231,6 +231,131 @@ public abstract class AssetCollection : IReadOnlyCollection<IUnityObjectBase>, I
 	}
 
 	/// <summary>
+	/// 跨 collection 单对象反序列化：通过 fileIndex 定位依赖 collection 后调用其 <see cref="TryGetAssetOnly(long)"/>。
+	/// </summary>
+	/// <remarks>
+	/// 解决 OriginalPathProcessor.SetOriginalPaths 跨 collection 解引用 PPtr 时调用 <see cref="TryGetAsset(int, long)"/>
+	/// 触发目标 collection 全量 <see cref="EnsureAssetsLoaded"/> 导致 3.6GB 内存峰值的问题。子类无需重写——
+	/// 多态分派到 <see cref="SerializedAssetCollection.TryGetAssetOnly(long)"/> 即可保持懒加载；当子类未重写
+	/// <see cref="TryGetAssetOnly(long)"/> 时回退到全量加载，兼容老代码。
+	/// </remarks>
+	public virtual IUnityObjectBase? TryGetAssetOnly(int fileIndex, long pathID)
+	{
+		AssetCollection? file = TryGetDependency(fileIndex);
+		if (file is not null)
+		{
+			file.TryGetAssetOnly(pathID, out IUnityObjectBase? asset);
+			return asset;
+		}
+		else
+		{
+			return null;
+		}
+	}
+
+	/// <summary>
+	/// 跨 collection 单对象反序列化的泛型版本，对称于 <see cref="TryGetAsset{T}(int, long)"/>。
+	/// </summary>
+	public T? TryGetAssetOnly<T>(int fileIndex, long pathID) where T : IUnityObjectBase
+	{
+		AssetCollection? file = TryGetDependency(fileIndex);
+		if (file is not null)
+		{
+			file.TryGetAssetOnly(pathID, out T? asset);
+			return asset;
+		}
+		else
+		{
+			return default;
+		}
+	}
+
+	/// <summary>
+	/// 跨 collection 单对象反序列化的泛型 out 版本，对称于 <see cref="TryGetAsset{T}(int, long, out T?)"/>。
+	/// </summary>
+	/// <remarks>
+	/// 供 <see cref="Extensions.PPtrExtensions.TryGetAssetOnly{T}"/> 等扩展方法使用，
+	/// 保持与 <see cref="TryGetAsset{T}(int, long, out T?)"/> 一致的调用模式。
+	/// </remarks>
+	public bool TryGetAssetOnly<T>(int fileIndex, long pathID, [NotNullWhen(true)] out T? asset) where T : IUnityObjectBase
+	{
+		AssetCollection? file = TryGetDependency(fileIndex);
+		if (file is not null)
+		{
+			return file.TryGetAssetOnly(pathID, out asset);
+		}
+		else
+		{
+			asset = default;
+			return false;
+		}
+	}
+
+	/// <summary>
+	/// 通过 <see cref="PPtr"/> 跨 collection 解引用，避免触发目标 collection 全量反序列化。
+	/// </summary>
+	public IUnityObjectBase? TryGetAssetOnly(PPtr pptr) => TryGetAssetOnly(pptr.FileID, pptr.PathID);
+
+	/// <summary>
+	/// 通过 <see cref="PPtr{T}"/> 跨 collection 解引用并做类型转换，对称于 <see cref="TryGetAsset{T}(PPtr{T})"/>。
+	/// </summary>
+	public T? TryGetAssetOnly<T>(PPtr<T> pptr) where T : IUnityObjectBase
+	{
+		return TryGetAssetOnly<T>(pptr.FileID, pptr.PathID);
+	}
+
+	/// <summary>
+	/// 单对象反序列化的 out 版本，避免触发全量 <see cref="EnsureAssetsLoaded"/>。
+	/// </summary>
+	public bool TryGetAssetOnly(long pathID, [NotNullWhen(true)] out IUnityObjectBase? asset)
+	{
+		return TryGetAssetOnly<IUnityObjectBase>(pathID, out asset);
+	}
+
+	/// <summary>
+	/// 单对象反序列化的泛型 out 版本，类型判断逻辑与 <see cref="TryGetAsset{T}(long, out T?)"/> 一致（含 NullObject 处理）。
+	/// </summary>
+	public bool TryGetAssetOnly<T>(long pathID, [NotNullWhen(true)] out T? asset) where T : IUnityObjectBase
+	{
+		IUnityObjectBase? @object = TryGetAssetOnly(pathID);
+		if (@object is null)
+		{
+			asset = default;
+			return false;
+		}
+
+		if (typeof(T).IsAssignableTo(typeof(NullObject)))
+		{
+			// T 继承自 NullObject 时允许返回 NullObject 实例，与 TryGetAsset<T> 保持一致
+			switch (@object)
+			{
+				case T t:
+					asset = t;
+					return true;
+				default:
+					asset = default;
+					return false;
+			}
+		}
+		else
+		{
+			switch (@object)
+			{
+				case NullObject:
+					// 调用方期望真实对象，显式排除 NullObject 占位符
+					asset = default;
+					return false;
+				case T t:
+					asset = t;
+					return true;
+				default:
+					asset = default;
+					return false;
+			}
+		}
+	}
+
+	/// <summary>
 	/// 在 collection 级别持久化 OriginalDirectory，避免反序列化 asset 实例即可设置路径。
 	/// </summary>
 	public void SetOriginalDirectory(long pathID, string directory)
