@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Collections;
+using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.IO;
 using AssetRipper.IO.Files;
 using AssetRipper.IO.Files.ResourceFiles;
@@ -434,14 +434,26 @@ public abstract class Bundle : IDisposable
 		{
 			if (disposing)
 			{
+				// 先释放 AssetCollection：清空资产字典以断开对象图引用，让 GC 能尽早回收反序列化的资产
+				foreach (AssetCollection collection in collections)
+				{
+					collection.Dispose();
+				}
+
 				foreach (ResourceFile resourceFile in resources)
 				{
 					resourceFile.Dispose();
 				}
+
 				foreach (Bundle bundle in bundles)
 				{
 					bundle.Dispose();
 				}
+
+				// 清空三个列表，让持有的引用立即可回收
+				collections.Clear();
+				resources.Clear();
+				bundles.Clear();
 			}
 
 			disposedValue = true;

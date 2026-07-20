@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Metadata;
 using AssetRipper.IO.Endian;
 using AssetRipper.IO.Files;
@@ -10,7 +10,7 @@ namespace AssetRipper.Assets.Collections;
 /// <summary>
 /// A collection of <see cref="IUnityObjectBase"/> assets.
 /// </summary>
-public abstract class AssetCollection : IReadOnlyCollection<IUnityObjectBase>
+public abstract class AssetCollection : IReadOnlyCollection<IUnityObjectBase>, IDisposable
 {
 	protected AssetCollection(Bundle bundle)
 	{
@@ -297,5 +297,30 @@ public abstract class AssetCollection : IReadOnlyCollection<IUnityObjectBase>
 	public IEnumerator<IUnityObjectBase> GetEnumerator() => assets.Values.GetEnumerator();
 	IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 	public int Count => assets.Count;
+	#endregion
+
+	#region IDisposable Support
+	private bool disposedValue;
+
+	protected virtual void Dispose(bool disposing)
+	{
+		if (!disposedValue)
+		{
+			if (disposing)
+			{
+				// 清空资产字典以断开对象图引用，让 GC 能尽早回收反序列化的资产
+				assets.Clear();
+				dependencies.Clear();
+				Scene = null;
+			}
+			disposedValue = true;
+		}
+	}
+
+	public void Dispose()
+	{
+		Dispose(disposing: true);
+		GC.SuppressFinalize(this);
+	}
 	#endregion
 }
