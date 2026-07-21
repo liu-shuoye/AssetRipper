@@ -7,7 +7,7 @@ using AssetRipper.IO.Files.SerializedFiles;
 namespace AssetRipper.Assets.Bundles;
 
 /// <summary>
-/// A <see cref="Bundle"/> created from serialized assets.
+/// 由序列化资源创建的 <see cref="Bundle"/>。
 /// </summary>
 public sealed class SerializedBundle : Bundle
 {

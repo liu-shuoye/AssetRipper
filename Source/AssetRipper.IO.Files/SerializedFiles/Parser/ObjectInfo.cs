@@ -3,7 +3,7 @@ using AssetRipper.IO.Files.SerializedFiles.IO;
 namespace AssetRipper.IO.Files.SerializedFiles.Parser;
 
 /// <summary>
-/// Contains information for a block of raw serialized object data.
+/// 包含一组原始序列化对象数据的信息。
 /// </summary>
 public struct ObjectInfo
 {

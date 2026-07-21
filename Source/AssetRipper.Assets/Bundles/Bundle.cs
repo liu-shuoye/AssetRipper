@@ -293,9 +293,9 @@ public abstract class Bundle : IDisposable
 	}
 
 	/// <summary>
-	/// Adds a child Bundle to this Bundle.
+	/// 向此 Bundle 添加一个子 Bundle 。
 	/// </summary>
-	/// <param name="bundle">The Bundle to add.</param>
+	/// <param name="bundle">要添加的 Bundle </param>
 	public void AddBundle(Bundle bundle)
 	{
 		if (bundle.Parent is null)
@@ -332,14 +332,14 @@ public abstract class Bundle : IDisposable
 	protected virtual bool IsCompatibleCollection(AssetCollection collection) => true;
 
 	/// <summary>
-	/// Indicates if the specified Bundle is compatible with this Bundle.
+	/// 表示指定的 Bundle 是否与当前 Bundle 兼容。
 	/// </summary>
 	/// <param name="bundle">The Bundle to check.</param>
 	/// <returns>True if the Bundle is compatible, else false.</returns>
 	protected virtual bool IsCompatibleBundle(Bundle bundle) => bundle is not GameBundle;
 
 	/// <summary>
-	/// Gets the root Bundle of this Bundle.
+	/// 获取此 Bundle 的根 Bundle 。
 	/// </summary>
 	/// <returns>The root Bundle of this Bundle.</returns>
 	public Bundle GetRoot()
@@ -353,9 +353,9 @@ public abstract class Bundle : IDisposable
 	}
 
 	/// <summary>
-	/// Fetches all <see cref="IUnityObjectBase"/>s in the hierarchy of this Bundle.
+	/// 获取此 Bundle 层次结构中所有 IUnityObjectBase 的 IEnumerable。
 	/// </summary>
-	/// <returns>An IEnumerable of all <see cref="IUnityObjectBase"/>s in the hierarchy.</returns>
+	/// <returns>此 Bundle 层次结构中所有 IUnityObjectBase 的 IEnumerable。</returns>
 	public IEnumerable<IUnityObjectBase> FetchAssetsInHierarchy()
 	{
 		return GetRoot().FetchAssets();
@@ -364,7 +364,7 @@ public abstract class Bundle : IDisposable
 	/// <summary>
 	/// 获取此 Bundle 中所有的 <see cref="IUnityObjectBase"/>。
 	/// </summary>
-	/// <returns>此捆绑包中所有 <see cref="IUnityObjectBase"/> 的 IEnumerable。</returns>
+	/// <returns>此 Bundle 中所有 <see cref="IUnityObjectBase"/> 的 IEnumerable。</returns>
 	public IEnumerable<IUnityObjectBase> FetchAssets()
 	{
 		foreach (AssetCollection collection in collections)
@@ -384,7 +384,7 @@ public abstract class Bundle : IDisposable
 	}
 
 	/// <summary>
-	/// 获取此捆绑包中所有 AssetCollections 的 IEnumerable。
+	/// 获取此 Bundle 中所有 AssetCollections 的 IEnumerable。
 	/// </summary>
 	/// <returns>An IEnumerable of all AssetCollections in the hierarchy.</returns>
 	public IEnumerable<AssetCollection> FetchAssetCollections()
