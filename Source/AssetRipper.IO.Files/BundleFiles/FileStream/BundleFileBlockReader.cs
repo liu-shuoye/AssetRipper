@@ -8,26 +8,11 @@ namespace AssetRipper.IO.Files.BundleFiles.FileStream;
 
 internal sealed class BundleFileBlockReader : IDisposable
 {
-	/// <summary>
-	/// Global threshold controlling the maximum decompressed block size (in bytes) that is
-	/// kept in memory before spilling to a temporary file. This value is captured by each
-	/// <see cref="BundleFileBlockReader"/> instance at construction time so that concurrent
-	/// readers created with different thresholds do not interfere with each other.
-	/// </summary>
-	/// <remarks>
-	/// AssetRipper's import pipeline is single-threaded, so concurrent mutation is not a
-	/// concern in practice. If that changes, this should be replaced with an async-local or
-	/// context-based mechanism.
-	/// </remarks>
-	public static int CurrentMaxInMemoryBundleBlockSize { get; set; } = 50 * 1024 * 1024;
-
 	public BundleFileBlockReader(SmartStream stream, BlocksInfo blocksInfo)
 	{
 		m_stream = stream;
 		m_blocksInfo = blocksInfo;
 		m_dataOffset = stream.Position;
-		maxMemoryStreamLength = CurrentMaxInMemoryBundleBlockSize;
-		maxPreAllocatedMemoryStreamLength = CurrentMaxInMemoryBundleBlockSize * 6 / 10;
 	}
 
 	~BundleFileBlockReader()
@@ -182,57 +167,46 @@ internal sealed class BundleFileBlockReader : IDisposable
 		m_cachedBlockStream.FreeReference();
 	}
 
-	private SmartStream CreateStream(long decompressedSize)
+	private static SmartStream CreateStream(long decompressedSize)
 	{
-		// Pre-allocate the memory buffer for small sizes to avoid later resizing.
-		if (decompressedSize <= maxPreAllocatedMemoryStreamLength)
+		return decompressedSize switch
 		{
-			return SmartStream.CreateMemory(new byte[decompressedSize]);
-		}
-
-		// For larger sizes, delegate the memory-vs-temp-file decision to SmartStream.CreateBySize.
-		// CreateBySize takes a 32-bit size; cap at int.MaxValue so that long values larger than
-		// maxMemoryStreamLength still resolve to the temp-file path instead of overflowing.
-		int size = decompressedSize > int.MaxValue ? int.MaxValue : (int)decompressedSize;
-		return SmartStream.CreateBySize(size, maxMemoryStreamLength);
+			> MaxMemoryStreamLength => SmartStream.CreateTemp(),
+			> MaxPreAllocatedMemoryStreamLength => SmartStream.CreateMemory(),
+			_ => SmartStream.CreateMemory(new byte[decompressedSize]),
+		};
 	}
 
-	private SmartStream CreateTemporaryStream(long decompressedSize, out byte[]? rentedArray)
+	private static SmartStream CreateTemporaryStream(long decompressedSize, out byte[]? rentedArray)
 	{
-		// CreateBySize takes a 32-bit size; cap at int.MaxValue so that long values larger than
-		// maxMemoryStreamLength still resolve to the temp-file path instead of overflowing.
-		int size = decompressedSize > int.MaxValue ? int.MaxValue : (int)decompressedSize;
-		SmartStream stream = SmartStream.CreateBySize(size, maxMemoryStreamLength);
-		if (stream.StreamType == SmartStreamType.File)
+		if (decompressedSize > MaxMemoryStreamLength)
 		{
 			rentedArray = null;
-			return stream;
+			return SmartStream.CreateTemp();
 		}
-
-		// Memory path: replace the default MemoryStream with an ArrayPool-backed buffer
-		// to avoid the allocation overhead of a separately owned buffer.
-		stream.FreeReference();
-		rentedArray = ArrayPool<byte>.Shared.Rent(size);
-		return SmartStream.CreateMemory(rentedArray, 0, size);
+		else
+		{
+			rentedArray = ArrayPool<byte>.Shared.Rent((int)decompressedSize);
+			return SmartStream.CreateMemory(rentedArray, 0, (int)decompressedSize);
+		}
 	}
 
 	/// <summary>
-	/// The maximum size of a decompressed stream to be stored in RAM.
+	/// The arbitrary maximum size of a decompressed stream to be stored in RAM. 50 MB
 	/// </summary>
 	/// <remarks>
-	/// Captured from <see cref="CurrentMaxInMemoryBundleBlockSize"/> at construction time.
-	/// Previously a <c>const</c> hard-coded to 50 MB; can now be tuned via
-	/// <c>ImportSettings.MaxInMemoryBundleBlockSize</c>.
+	/// This number can be set to any integer value, including <see cref="int.MaxValue"/>.
+	/// Previously, this was actually set to <see cref="int.MaxValue"/>, but that can cause
+	/// <see href="https://github.com/AssetRipper/AssetRipper/issues/1953">highly compressed games to use too much RAM</see>.
 	/// </remarks>
-	private readonly int maxMemoryStreamLength;
+	private const int MaxMemoryStreamLength = 50 * 1024 * 1024;
 	/// <summary>
-	/// The maximum size of a decompressed stream to be pre-allocated.
+	/// The arbitrary maximum size of a decompressed stream to be pre-allocated. 30 MB
 	/// </summary>
 	/// <remarks>
-	/// Derived as <c>maxMemoryStreamLength * 6 / 10</c> (i.e. 60% of
-	/// <see cref="maxMemoryStreamLength"/>), preserving the original 30 MB / 50 MB ratio.
+	/// This number can be set to any integer value less than <see cref="MaxMemoryStreamLength"/>.
 	/// </remarks>
-	private readonly int maxPreAllocatedMemoryStreamLength;
+	private const int MaxPreAllocatedMemoryStreamLength = 30 * 1024 * 1024;
 	private readonly SmartStream m_stream;
 	private readonly BlocksInfo m_blocksInfo = new();
 	private readonly long m_dataOffset;

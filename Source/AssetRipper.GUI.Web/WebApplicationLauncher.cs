@@ -119,16 +119,6 @@ public static class WebApplicationLauncher
 
 		builder.Logging.ConfigureLoggingLevel();
 
-		// Conditionally register the memory monitor hosted service. The service samples
-		// GC.GetTotalMemory, Process.WorkingSet64, and GameBundle.Collections.Count every
-		// 10 seconds and writes them via Logger.Info. Enabled only when the
-		// ASSETRIPPER_MEMORY_MONITOR environment variable is set to "1" (or "true"/"yes"),
-		// so it has no effect on the default launch path.
-		if (MemoryMonitorHostedService.IsEnabled())
-		{
-			builder.Services.AddHostedService<MemoryMonitorHostedService>();
-		}
-
 		WebApplication app = builder.Build();
 
 		// Configure the HTTP request pipeline.

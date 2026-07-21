@@ -13,7 +13,7 @@ internal sealed class WindowsGameStructure : PlatformGameStructure
 		Debug.Assert(RootPath is not null);
 		if (rootPath != RootPath)
 		{
-			Logger.Info(LogCategory.Import, "找到了可执行文件或数据目录，因此将使用其父目录。");
+			Logger.Info(LogCategory.Import, "An executable file or data directory was found, so the parent directory is being used instead.");
 		}
 
 		if (!GetDataDirectory(RootPath, fileSystem, out string? dataPath, out string? name))

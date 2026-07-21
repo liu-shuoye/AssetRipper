@@ -9,8 +9,4 @@
 		<ProjectReference Include="..\AssetRipper.IO.Files\AssetRipper.IO.Files.csproj" />
 	</ItemGroup>
 
-	<ItemGroup>
-		<InternalsVisibleTo Include="AssetRipper.Assets.Tests" />
-	</ItemGroup>
-
 </Project>

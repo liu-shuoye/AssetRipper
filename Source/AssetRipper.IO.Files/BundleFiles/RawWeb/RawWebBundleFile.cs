@@ -1,5 +1,4 @@
 using AssetRipper.IO.Endian;
-using AssetRipper.IO.Files.BundleFiles.FileStream;
 using AssetRipper.IO.Files.BundleFiles.RawWeb.Raw;
 using AssetRipper.IO.Files.BundleFiles.RawWeb.Web;
 using AssetRipper.IO.Files.ResourceFiles;
@@ -78,39 +77,13 @@ public abstract class RawWebBundleFile<THeader> : FileContainer where THeader : 
 
 	private void ReadRawWebData(Stream stream, long metadataOffset)
 	{
-		int threshold = BundleFileBlockReader.CurrentMaxInMemoryBundleBlockSize;
 		foreach (RawWebNode entry in DirectoryInfo.Nodes)
 		{
-			// CreateBySize takes a 32-bit size; cap at int.MaxValue so that long values larger
-			// than int.MaxValue still resolve to the temp-file path instead of overflowing.
-			int entrySize = entry.Size > int.MaxValue ? int.MaxValue : (int)entry.Size;
-			using SmartStream destStream = SmartStream.CreateBySize(entrySize, threshold);
+			byte[] buffer = new byte[entry.Size];
 			stream.Position = metadataOffset + entry.Offset;
-			CopyExact(stream, destStream, entrySize);
-			destStream.Position = 0;
-			ResourceFile file = new ResourceFile(destStream, FilePath, entry.Path);
+			stream.ReadExactly(buffer);
+			ResourceFile file = new ResourceFile(buffer, FilePath, entry.Path);
 			AddResourceFile(file);
-		}
-	}
-
-	/// <summary>
-	/// Copies exactly <paramref name="size"/> bytes from <paramref name="source"/> to
-	/// <paramref name="destination"/> using a small intermediate buffer, so that the destination
-	/// can be either a memory-backed or temp-file-backed <see cref="SmartStream"/> without
-	/// allocating a full <c>byte[<paramref name="size"/>]</c> array up-front.
-	/// </summary>
-	private static void CopyExact(Stream source, Stream destination, int size)
-	{
-		// 80 KiB matches Stream.CopyTo's default buffer size and keeps large entry reads off
-		// the large object heap while still being efficient.
-		byte[] buffer = new byte[Math.Min(size, 81920)];
-		int remaining = size;
-		while (remaining > 0)
-		{
-			int toRead = Math.Min(remaining, buffer.Length);
-			source.ReadExactly(buffer, 0, toRead);
-			destination.Write(buffer, 0, toRead);
-			remaining -= toRead;
 		}
 	}
 }

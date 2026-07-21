@@ -1,4 +1,4 @@
-using AssetRipper.Assets.IO;
+﻿using AssetRipper.Assets.IO;
 
 namespace AssetRipper.Assets.Bundles;
 

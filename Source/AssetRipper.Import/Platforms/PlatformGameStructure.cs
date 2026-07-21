@@ -1,4 +1,3 @@
-using AssetRipper.Import.Configuration;
 using AssetRipper.Import.Logging;
 using AssetRipper.Import.Platforms;
 using AssetRipper.Import.Structure.Assembly;
@@ -34,18 +33,6 @@ public abstract partial class PlatformGameStructure
 	/// <summary>AssemblyName : AssemblyPath</summary>
 	public Dictionary<string, string> Assemblies { get; } = [];
 
-	/// <summary>
-	/// The maximum depth used when recursively scanning directories. Mirrors
-	/// <see cref="ImportSettings.MaxRecursiveDirectoryDepth"/>. Defaults to <c>32</c>.
-	/// </summary>
-	protected int MaxRecursiveDirectoryDepth { get; set; } = 32;
-
-	/// <summary>
-	/// The maximum number of files that may be collected during a recursive scan.
-	/// Mirrors <see cref="ImportSettings.MaxCollectedFiles"/>. Defaults to <c>100_000</c>.
-	/// </summary>
-	protected int MaxCollectedFiles { get; set; } = 100_000;
-
 	protected const string DataFolderName = "Data";
 	protected const string ManagedName = "Managed";
 	protected const string LibName = "lib";
@@ -70,22 +57,13 @@ public abstract partial class PlatformGameStructure
 	protected const string AlternateBundleExtension = ".bundle";
 	protected const string Lz4BundleName = DataName + AssetBundleExtension;
 
-	public PlatformGameStructure(FileSystem fileSystem) : this(fileSystem, null)
-	{
-	}
-
-	public PlatformGameStructure(FileSystem fileSystem, ImportSettings? importSettings)
+	public PlatformGameStructure(FileSystem fileSystem)
 	{
 		ArgumentNullException.ThrowIfNull(fileSystem);
 		FileSystem = fileSystem;
-		ApplyRecursionLimits(importSettings);
 	}
 
-	public PlatformGameStructure(string rootPath, FileSystem fileSystem) : this(rootPath, fileSystem, null)
-	{
-	}
-
-	public PlatformGameStructure(string rootPath, FileSystem fileSystem, ImportSettings? importSettings) : this(fileSystem, importSettings)
+	public PlatformGameStructure(string rootPath, FileSystem fileSystem) : this(fileSystem)
 	{
 		ArgumentException.ThrowIfNullOrEmpty(rootPath);
 		if (!FileSystem.Directory.Exists(rootPath))
@@ -93,21 +71,6 @@ public abstract partial class PlatformGameStructure
 			throw new DirectoryNotFoundException($"Root directory '{rootPath}' doesn't exist");
 		}
 		RootPath = rootPath;
-	}
-
-	/// <summary>
-	/// Copies the recursion-related limits from <paramref name="importSettings"/> to this
-	/// structure. When <paramref name="importSettings"/> is <see langword="null"/> the
-	/// default values are kept. This must be called before any recursive directory scan.
-	/// </summary>
-	internal void ApplyRecursionLimits(ImportSettings? importSettings)
-	{
-		if (importSettings is null)
-		{
-			return;
-		}
-		MaxRecursiveDirectoryDepth = importSettings.MaxRecursiveDirectoryDepth;
-		MaxCollectedFiles = importSettings.MaxCollectedFiles;
 	}
 
 	public static bool IsPrimaryEngineFile(string fileName)
@@ -314,23 +277,12 @@ public abstract partial class PlatformGameStructure
 	/// <summary>
 	/// Collect asset bundles from this directory and all subdirectories
 	/// </summary>
-	protected void CollectAssetBundlesRecursively(string root, List<KeyValuePair<string, string>> files, int currentDepth = 0)
+	protected void CollectAssetBundlesRecursively(string root, List<KeyValuePair<string, string>> files)
 	{
-		if (currentDepth >= MaxRecursiveDirectoryDepth)
-		{
-			Logger.Warning(LogCategory.Import, $"Reached the configured maximum directory recursion depth of {MaxRecursiveDirectoryDepth} at '{root}'. Skipping further asset bundle scanning.");
-			return;
-		}
-		if (files.Count >= MaxCollectedFiles)
-		{
-			Logger.Warning(LogCategory.Import, $"Reached the configured maximum collected files limit of {MaxCollectedFiles} ({files.Count} already collected). Stopping asset bundle scan at '{root}'.");
-			return;
-		}
-
 		CollectAssetBundles(root, files);
 		foreach (string directory in FileSystem.Directory.EnumerateDirectories(root))
 		{
-			CollectAssetBundlesRecursively(directory, files, currentDepth + 1);
+			CollectAssetBundlesRecursively(directory, files);
 		}
 	}
 

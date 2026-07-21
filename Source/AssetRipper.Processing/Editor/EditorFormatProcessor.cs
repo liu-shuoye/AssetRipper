@@ -61,12 +61,10 @@ public class EditorFormatProcessor : IAssetProcessor
 	private readonly BundledAssetsExportMode bundledAssetsExportMode;
 	private IAssemblyManager? assemblyManager;
 	private PathChecksumCache? checksumCache;
-	private readonly ProcessingSettings? settings;
 
-	public EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMode, ProcessingSettings? settings = null)
+	public EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMode)
 	{
 		this.bundledAssetsExportMode = bundledAssetsExportMode;
-		this.settings = settings;
 	}
 
 	public void Process(GameData gameData)
@@ -83,9 +81,7 @@ public class EditorFormatProcessor : IAssetProcessor
 		}
 
 		//Parallel processing
-		int maxImportParallelism = settings?.MaxImportParallelism ?? Environment.ProcessorCount;
-		ParallelOptions options = new() { MaxDegreeOfParallelism = maxImportParallelism };
-		Parallel.ForEach(GetReleaseAssets(gameData), options, ConvertAsync);
+		Parallel.ForEach(GetReleaseAssets(gameData), ConvertAsync);
 
 		checksumCache = null;
 		assemblyManager = null;
@@ -157,16 +153,7 @@ public class EditorFormatProcessor : IAssetProcessor
 		}
 	}
 
-	/// <summary>
-	/// Converts a single asset to editor format in a parallelizable manner.
-	/// </summary>
-	/// <remarks>
-	/// This method is <see langword="protected virtual"/> to allow unit tests to verify
-	/// the parallel execution behavior (for example, that
-	/// <see cref="ParallelOptions.MaxDegreeOfParallelism"/> is respected).
-	/// </remarks>
-	/// <param name="asset">The asset to convert.</param>
-	protected virtual void ConvertAsync(IUnityObjectBase asset)
+	private static void ConvertAsync(IUnityObjectBase asset)
 	{
 		switch (asset)
 		{

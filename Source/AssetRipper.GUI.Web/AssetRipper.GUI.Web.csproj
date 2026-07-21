@@ -18,10 +18,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<InternalsVisibleTo Include="AssetRipper.GUI.Web.Tests" />
-	</ItemGroup>
-
-	<ItemGroup>
 		<EmbeddedResource Include="StaticContent/css/site.css" />
 		<EmbeddedResource Include="StaticContent/favicon.ico" />
 		<EmbeddedResource Include="StaticContent/js/site.js" />

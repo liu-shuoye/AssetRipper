@@ -31,27 +31,27 @@ public class ExportHandler
 	{
 		if (paths.Count == 1)
 		{
-			Logger.Info(LogCategory.Import, $"尝试从 {paths[0]} 读取文件");
+			Logger.Info(LogCategory.Import, $"Attempting to read files from {paths[0]}");
 		}
 		else
 		{
-			Logger.Info(LogCategory.Import, $"尝试从 {paths.Count} 个路径读取文件...");
+			Logger.Info(LogCategory.Import, $"Attempting to read files from {paths.Count} paths...");
 		}
 
 		GameStructure gameStructure = GameStructure.Load(paths, fileSystem, Settings);
 		GameData gameData = GameData.FromGameStructure(gameStructure);
-		Logger.Info(LogCategory.Import, "已读完文件");
+		Logger.Info(LogCategory.Import, "Finished reading files");
 		return gameData;
 	}
 
 	public void Process(GameData gameData)
 	{
-		Logger.Info(LogCategory.Processing, "已处理加载的资产");
+		Logger.Info(LogCategory.Processing, "Processing loaded assets...");
 		foreach (IAssetProcessor processor in GetProcessors())
 		{
 			processor.Process(gameData);
 		}
-		Logger.Info(LogCategory.Processing, "已处理完资产");
+		Logger.Info(LogCategory.Processing, "Finished processing assets");
 	}
 
 	protected virtual IEnumerable<IAssetProcessor> GetProcessors()
@@ -84,7 +84,7 @@ public class ExportHandler
 		yield return new MainAssetProcessor();
 		yield return new AnimatorControllerProcessor();
 		yield return new AudioMixerProcessor();
-		yield return new EditorFormatProcessor(Settings.ProcessingSettings.BundledAssetsExportMode, Settings.ProcessingSettings);
+		yield return new EditorFormatProcessor(Settings.ProcessingSettings.BundledAssetsExportMode);
 		//Static mesh separation goes here
 		yield return new LightingDataProcessor();//Needs to be after static mesh separation
 		yield return new PrefabProcessor();
@@ -94,10 +94,10 @@ public class ExportHandler
 
 	public void Export(GameData gameData, string outputPath, FileSystem fileSystem)
 	{
-		Logger.Info(LogCategory.Export, "开始导出");
-		Logger.Info(LogCategory.Export, $"尝试将资产导出到 {outputPath}...");
+		Logger.Info(LogCategory.Export, "Starting export");
+		Logger.Info(LogCategory.Export, $"Attempting to export assets to {outputPath}...");
 		Logger.Info(LogCategory.Export, $"Game files have these Unity versions: {GetListOfVersions(gameData.GameBundle)}");
-		Logger.Info(LogCategory.Export, $"导出到 Unity 版本 {gameData.ProjectVersion}");
+		Logger.Info(LogCategory.Export, $"Exporting to Unity version {gameData.ProjectVersion}");
 
 		Settings.ExportRootPath = outputPath;
 		Settings.SetProjectSettings(gameData.ProjectVersion);
@@ -107,13 +107,13 @@ public class ExportHandler
 		projectExporter.DoFinalOverrides(Settings);
 		projectExporter.Export(gameData.GameBundle, Settings, fileSystem);
 
-		Logger.Info(LogCategory.Export, "已导出资产");
+		Logger.Info(LogCategory.Export, "Finished exporting assets");
 
 		foreach (IPostExporter postExporter in GetPostExporters())
 		{
 			postExporter.DoPostExport(gameData, Settings, fileSystem);
 		}
-		Logger.Info(LogCategory.Export, "已执行完后导出");
+		Logger.Info(LogCategory.Export, "Finished post-export");
 
 		static string GetListOfVersions(GameBundle gameBundle)
 		{

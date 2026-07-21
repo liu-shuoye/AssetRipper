@@ -1,5 +1,4 @@
-﻿using AssetRipper.Import.Configuration;
-using AssetRipper.Import.Logging;
+﻿using AssetRipper.Import.Logging;
 using AssetRipper.Import.Structure.Assembly;
 using AssetRipper.Import.Structure.Assembly.Managers;
 using AssetRipper.Import.Structure.Platforms;
@@ -10,11 +9,7 @@ namespace AssetRipper.Import.Platforms;
 
 public sealed class MixedGameStructure : PlatformGameStructure
 {
-	public MixedGameStructure(IEnumerable<string> paths, FileSystem fileSystem) : this(paths, fileSystem, null)
-	{
-	}
-
-	public MixedGameStructure(IEnumerable<string> paths, FileSystem fileSystem, ImportSettings? importSettings) : base(fileSystem, importSettings)
+	public MixedGameStructure(IEnumerable<string> paths, FileSystem fileSystem) : base(fileSystem)
 	{
 		HashSet<string> dataPaths = [];
 		foreach (string path in SelectUniquePaths(paths))
@@ -52,19 +47,8 @@ public sealed class MixedGameStructure : PlatformGameStructure
 		return paths.Select(t => MultiFileStream.GetFilePath(t)).Distinct();
 	}
 
-	private void CollectFromDirectory(string root, List<KeyValuePair<string, string>> files, ISet<string> dataPaths, int currentDepth = 0)
+	private void CollectFromDirectory(string root, List<KeyValuePair<string, string>> files, ISet<string> dataPaths)
 	{
-		if (currentDepth >= MaxRecursiveDirectoryDepth)
-		{
-			Logger.Warning(LogCategory.Import, $"Reached the configured maximum directory recursion depth of {MaxRecursiveDirectoryDepth} at '{root}'. Skipping further directory scanning.");
-			return;
-		}
-		if (files.Count >= MaxCollectedFiles)
-		{
-			Logger.Warning(LogCategory.Import, $"Reached the configured maximum collected files limit of {MaxCollectedFiles} ({files.Count} already collected). Stopping directory scan at '{root}'.");
-			return;
-		}
-
 		int count = files.Count;
 		CollectAllSerializedFiles(root, files);
 		CollectWebFiles(root, files);
@@ -77,7 +61,7 @@ public sealed class MixedGameStructure : PlatformGameStructure
 
 		foreach (string subDirectory in FileSystem.Directory.EnumerateDirectories(root))
 		{
-			CollectFromDirectory(subDirectory, files, dataPaths, currentDepth + 1);
+			CollectFromDirectory(subDirectory, files, dataPaths);
 		}
 	}
 

@@ -1,5 +1,4 @@
-﻿using AssetRipper.Import.Configuration;
-using AssetRipper.Import.Logging;
+﻿using AssetRipper.Import.Logging;
 using AssetRipper.Import.Structure.Platforms;
 using AssetRipper.IO.Files;
 
@@ -7,9 +6,7 @@ namespace AssetRipper.Import.Platforms;
 
 public static class PlatformChecker
 {
-	public static bool CheckPlatform(List<string> paths, FileSystem fileSystem, [NotNullWhen(true)] out PlatformGameStructure? platformStructure, [NotNullWhen(true)] out MixedGameStructure? mixedStructure) => CheckPlatform(paths, fileSystem, null, out platformStructure, out mixedStructure);
-
-	public static bool CheckPlatform(List<string> paths, FileSystem fileSystem, ImportSettings? importSettings, [NotNullWhen(true)] out PlatformGameStructure? platformStructure, [NotNullWhen(true)] out MixedGameStructure? mixedStructure)
+	public static bool CheckPlatform(List<string> paths, FileSystem fileSystem, [NotNullWhen(true)] out PlatformGameStructure? platformStructure, [NotNullWhen(true)] out MixedGameStructure? mixedStructure)
 	{
 		platformStructure = null;
 		mixedStructure = null;
@@ -59,15 +56,10 @@ public static class PlatformChecker
 			platformStructure = windowsPhoneGameStructure;
 		}
 
-		// MixedGameStructure scans directories during construction, so the limits must be
-		// supplied via its constructor. The other platform structures scan later through
-		// CollectFiles, so ApplyRecursionLimits is sufficient for them.
-		if (CheckMixed(paths, fileSystem, importSettings, out MixedGameStructure? mixedGameStructure))
+		if (CheckMixed(paths, fileSystem, out MixedGameStructure? mixedGameStructure))
 		{
 			mixedStructure = mixedGameStructure;
 		}
-
-		platformStructure?.ApplyRecursionLimits(importSettings);
 
 		return platformStructure != null || mixedStructure != null;
 	}
@@ -81,7 +73,7 @@ public static class PlatformChecker
 			{
 				gameStructure = new WindowsGameStructure(path, fileSystem);
 				paths.Remove(path);
-				Logger.Info(LogCategory.Import, $"在 '{path}' 找到了 Windows 游戏结构");
+				Logger.Info(LogCategory.Import, $"Windows game structure has been found at '{path}'");
 				return true;
 			}
 		}
@@ -135,7 +127,7 @@ public static class PlatformChecker
 				}
 				else
 				{
-					throw new Exception("已找到2个安卓游戏结构");
+					throw new Exception("2 Android game stuctures has been found");
 				}
 			}
 			else if (AndroidGameStructure.IsAndroidObbStructure(path, fileSystem))
@@ -155,11 +147,11 @@ public static class PlatformChecker
 		{
 			gameStructure = new AndroidGameStructure(androidStructure, obbStructure, fileSystem);
 			paths.Remove(androidStructure);
-			Logger.Info(LogCategory.Import, $"在 '{androidStructure}' 中已找到 Android 游戏结构");
+			Logger.Info(LogCategory.Import, $"Android game structure has been found at '{androidStructure}'");
 			if (obbStructure != null)
 			{
 				paths.Remove(obbStructure);
-				Logger.Info(LogCategory.Import, $"在 '{obbStructure}' 中已找到 Android OBB 游戏结构");
+				Logger.Info(LogCategory.Import, $"Android obb game structure has been found at '{obbStructure}'");
 			}
 			return true;
 		}
@@ -280,11 +272,11 @@ public static class PlatformChecker
 		return false;
 	}
 
-	private static bool CheckMixed(List<string> paths, FileSystem fileSystem, ImportSettings? importSettings, [NotNullWhen(true)] out MixedGameStructure? gameStructure)
+	private static bool CheckMixed(List<string> paths, FileSystem fileSystem, [NotNullWhen(true)] out MixedGameStructure? gameStructure)
 	{
 		if (paths.Count > 0)
 		{
-			gameStructure = new MixedGameStructure(paths, fileSystem, importSettings);
+			gameStructure = new MixedGameStructure(paths, fileSystem);
 			if (paths.Count == 1)
 			{
 				Logger.Info(LogCategory.Import, $"Mixed game structure has been found at {paths[0]}");
