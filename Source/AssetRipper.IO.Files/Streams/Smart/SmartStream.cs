@@ -178,7 +178,7 @@ public sealed partial class SmartStream : Stream
 	}
 
 	/// <summary>
-	/// Free the reference to the backing stream and become null.
+	/// 释放对底层流的引用并置为 null。
 	/// </summary>
 	public void FreeReference()
 	{
@@ -282,7 +282,7 @@ public sealed partial class SmartStream : Stream
 	public int RefCount => RefCounter.RefCount;
 
 	/// <summary>
-	/// The shared reference counter for the backing stream.
+	/// 用于底层流的共享引用计数器。
 	/// </summary>
 	private SmartRefCount RefCounter { get; set; }
 

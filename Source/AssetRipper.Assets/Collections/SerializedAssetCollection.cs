@@ -7,7 +7,7 @@ using AssetRipper.IO.Files.SerializedFiles.Parser;
 namespace AssetRipper.Assets.Collections;
 
 /// <summary>
-/// A collection of assets read from a <see cref="SerializedFile"/>.
+/// 从 <see cref="SerializedFile"/> 读取的一组资产。
 /// </summary>
 public sealed class SerializedAssetCollection : AssetCollection
 {
@@ -21,7 +21,7 @@ public sealed class SerializedAssetCollection : AssetCollection
 	{
 		if (Dependencies.Count > 1)
 		{
-			throw new Exception("Dependency list has already been initialized.");
+			throw new Exception("依赖列表已初始化。");
 		}
 		if (DependencyIdentifiers is not null)
 		{
@@ -40,10 +40,10 @@ public sealed class SerializedAssetCollection : AssetCollection
 	}
 
 	/// <summary>
-	/// Creates a <see cref="SerializedAssetCollection"/> from a <see cref="SerializedFile"/>.
+	/// 从 <see cref="SerializedFile"/> 创建一个 <see cref="SerializedAssetCollection"/>。
 	/// </summary>
 	/// <remarks>
-	/// The new <see cref="SerializedAssetCollection"/> is automatically added to the <paramref name="bundle"/>.
+	/// 新的 <see cref="SerializedAssetCollection"/> 会自动添加到 <paramref name="bundle"/> 中。
 	/// </remarks>
 	/// <param name="bundle">The <see cref="Bundle"/> to add this collection to.</param>
 	/// <param name="file">The <see cref="SerializedFile"/> from which to make this collection.</param>

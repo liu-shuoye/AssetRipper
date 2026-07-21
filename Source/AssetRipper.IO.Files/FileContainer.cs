@@ -12,6 +12,7 @@ public abstract class FileContainer : FileBase
 		{
 			yield return file;
 		}
+
 		foreach (FileContainer list in FileLists)
 		{
 			foreach (SerializedFile file in list.FetchSerializedFiles())
@@ -57,6 +58,7 @@ public abstract class FileContainer : FileBase
 		{
 			m_serializedFiles.Add(file);
 		}
+
 		OnSerializedFileAdded(file);
 	}
 
@@ -70,6 +72,7 @@ public abstract class FileContainer : FileBase
 		{
 			m_fileLists.Add(container);
 		}
+
 		OnFileContainerAdded(container);
 	}
 
@@ -83,6 +86,7 @@ public abstract class FileContainer : FileBase
 		{
 			m_resourceFiles.Add(resource);
 		}
+
 		OnResourceFileAdded(resource);
 	}
 
@@ -110,9 +114,10 @@ public abstract class FileContainer : FileBase
 		{
 			ResourceFile[] resourceFiles = m_resourceFiles.ToArray();
 			m_resourceFiles.Clear();
-			for (int i = 0; i < resourceFiles.Length; i++)
+			foreach (ResourceFile resourceFile in resourceFiles)
 			{
-				AddFile(SchemeReader.ReadFile(resourceFiles[i]));
+				FileBase fileBase = SchemeReader.ReadFile(resourceFile);
+				AddFile(fileBase);
 			}
 		}
 	}
@@ -139,14 +144,17 @@ public abstract class FileContainer : FileBase
 			{
 				yield return resource;
 			}
+
 			foreach (SerializedFile file in SerializedFiles)
 			{
 				yield return file;
 			}
+
 			foreach (FileContainer container in FileLists)
 			{
 				yield return container;
 			}
+
 			foreach (FailedFile file in FailedFiles)
 			{
 				yield return file;

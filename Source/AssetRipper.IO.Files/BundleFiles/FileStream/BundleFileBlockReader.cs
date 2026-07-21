@@ -30,7 +30,7 @@ internal sealed class BundleFileBlockReader : IDisposable
 	{
 		ObjectDisposedException.ThrowIf(m_isDisposed, typeof(BundleFileBlockReader));
 
-		// Avoid storing entire non-compresed entries in memory by mapping a stream to the block location.
+		// 通过将流映射到块位置，避免将整个未压缩的条目存储在内存中。
 		if (m_blocksInfo.StorageBlocks.Length == 1 && m_blocksInfo.StorageBlocks[0].CompressionType == CompressionType.None)
 		{
 			if (m_dataOffset + entry.Offset + entry.Size > m_stream.Length)
@@ -40,7 +40,7 @@ internal sealed class BundleFileBlockReader : IDisposable
 			return m_stream.CreatePartial(m_dataOffset + entry.Offset, entry.Size);
 		}
 
-		// find block offsets
+		// 查找块偏移量
 		int blockIndex;
 		long blockCompressedOffset = 0;
 		long blockDecompressedOffset = 0;
@@ -55,7 +55,7 @@ internal sealed class BundleFileBlockReader : IDisposable
 		long left = entry.Size;
 		m_stream.Position = m_dataOffset + blockCompressedOffset;
 
-		// copy data of all blocks used by current entry to new stream
+		// 将所有当前条目使用的块数据复制到新流中
 		while (left > 0)
 		{
 			byte[]? rentedArray;
@@ -65,8 +65,8 @@ internal sealed class BundleFileBlockReader : IDisposable
 			StorageBlock block = m_blocksInfo.StorageBlocks[blockIndex];
 			if (m_cachedBlockIndex == blockIndex)
 			{
-				// data of the previous entry is in the same block as this one
-				// so we don't need to unpack it once again. Instead we can use cached stream
+				// 上一条记录的数据与当前条目在同一块中，因此我们无需再次解压。
+				// 相反，可以使用缓存的流
 				blockStreamOffset = 0;
 				blockStream = m_cachedBlockStream;
 				rentedArray = null;

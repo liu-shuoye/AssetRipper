@@ -4,8 +4,13 @@ using AssetRipper.IO.Files.Streams.Smart;
 
 namespace AssetRipper.IO.Files.SerializedFiles.Parser;
 
+/// <summary>
+/// 序列化文件元数据
+/// </summary>
 public sealed class SerializedFileMetadata
 {
+	private SmartStream _stream;
+
 	/// <summary>
 	/// Less than 3.5.0
 	/// </summary>
@@ -16,7 +21,7 @@ public sealed class SerializedFileMetadata
 	public static bool IsMetadataAtTheEnd(FormatVersion generation) => generation < FormatVersion.Unknown_9;
 
 	/// <summary>
-	/// 3.0.0b and greater
+	/// 3.0.0b 及更高版本
 	/// </summary>
 	public static bool HasSignature(FormatVersion generation) => generation >= FormatVersion.Unknown_7;
 	/// <summary>
@@ -52,6 +57,9 @@ public sealed class SerializedFileMetadata
 		Read(reader, header.DataOffset);
 	}
 
+	/// <summary>
+	/// 读取交换端序
+	/// </summary>
 	private bool ReadSwapEndianess(SmartStream stream, SerializedFileHeader header)
 	{
 		if (HasEndian(header.Version))
@@ -79,7 +87,7 @@ public sealed class SerializedFileMetadata
 			string signature = reader.ReadStringZeroTerm();
 			if (!UnityVersion.TryParse(signature, out UnityVersion version, out _))
 			{
-				// Assume version is stripped if it can't be parsed.
+				// 如果无法解析，则假设版本为已剥离。
 				version = default;
 			}
 			UnityVersion = version;
@@ -173,16 +181,20 @@ public sealed class SerializedFileMetadata
 		}
 	}
 
+	/// <summary> Unity 版本 </summary>
 	public UnityVersion UnityVersion { get; set; }
+	/// <summary> 目标平台 </summary>
 	public BuildTarget TargetPlatform { get; set; }
+	/// <summary> 是否启用类型树 </summary>
 	public bool EnableTypeTree { get; set; }
 	public SerializedType[] Types { get; set; } = [];
 	/// <summary>
-	/// Indicate that <see cref="ObjectInfo.FileID"/> is 8 bytes size<br/>
-	/// Serialized files with this field enabled supposedly don't exist
+	/// 表示 <see cref="ObjectInfo.FileID"/> 为 8 字节大小<br/>
+	/// 启用此字段的序列化文件理论上不存在
 	/// </summary>
 	public uint LongFileID { get; set; }
 	public bool SwapEndianess { get; set; }
+	/// <summary> 对象信息 </summary>
 	public ObjectInfo[] Object { get; set; } = [];
 	public LocalSerializedObjectIdentifier[] ScriptTypes { get; set; } = [];
 	public FileIdentifier[] Externals { get; set; } = [];

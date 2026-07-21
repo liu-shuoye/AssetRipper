@@ -3,7 +3,7 @@ using AssetRipper.IO.Files.Streams.Smart;
 namespace AssetRipper.IO.Files;
 
 /// <summary>
-/// The base class for files.
+/// 文件的基类。
 /// </summary>
 public abstract class FileBase : IDisposable
 {
