@@ -28,8 +28,8 @@ public sealed class FileStreamBundleFile : FileContainer
 		long basePosition = stream.Position;
 		Header.Read(stream);
 		long headerSize = stream.Position - basePosition;
-		ReadFileStreamMetadata(stream, basePosition);//ReadBlocksInfoAndDirectory
-		ReadFileStreamData(stream, basePosition, headerSize);//ReadBlocks and ReadFiles
+		ReadFileStreamMetadata(stream, basePosition);//阅读块信息与目录
+		ReadFileStreamData(stream, basePosition, headerSize);//读取块和读取文件
 	}
 
 	public override void Write(Stream stream)

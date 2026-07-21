@@ -11,12 +11,22 @@ using AssetRipper.IO.Files.ResourceFiles;
 
 namespace AssetRipper.Import.Structure;
 
+/// <summary> 表示游戏的结构，包含所有文件和资源。 </summary>
 public sealed class GameStructure : IDisposable
 {
+	/// <summary> 所有文件和资源的集合。 </summary>
 	public GameBundle FileCollection { get; private set; }
+
+	/// <summary> 平台游戏结构，如果游戏结构仅包含一个平台，则为非空。 </summary>
 	public PlatformGameStructure? PlatformStructure { get; private set; }
+
+	/// <summary> 混合游戏结构，如果游戏结构包含多个平台，则为非空。 </summary>
 	public PlatformGameStructure? MixedStructure { get; private set; }
+
+	/// <summary> 程序集管理器，用于加载和管理程序集。 </summary>
 	public IAssemblyManager AssemblyManager { get; set; }
+
+	/// <summary> 文件系统，用于访问游戏文件。 </summary>
 	public FileSystem FileSystem { get; }
 
 	private GameStructure(List<string> paths, FileSystem fileSystem, CoreConfiguration configuration)
@@ -41,7 +51,7 @@ public sealed class GameStructure : IDisposable
 
 		if (!FileCollection.HasAnyAssetCollections())
 		{
-			Logger.Log(LogType.Warning, LogCategory.Import, "The game structure processor could not find any valid assets.");
+			Logger.Log(LogType.Warning, LogCategory.Import, "游戏结构处理器无法找到任何有效的资源。");
 		}
 	}
 
@@ -49,6 +59,7 @@ public sealed class GameStructure : IDisposable
 
 	public string? Name => PlatformStructure?.Name ?? MixedStructure?.Name;
 
+	/// <summary> 加载游戏结构。 </summary>
 	public static GameStructure Load(IEnumerable<string> paths, FileSystem fileSystem, CoreConfiguration configuration)
 	{
 		List<string> toProcess = ZipExtractor.Process(paths, fileSystem);
@@ -60,6 +71,7 @@ public sealed class GameStructure : IDisposable
 		return new GameStructure(toProcess, fileSystem, configuration);
 	}
 
+	/// <summary> 初始化游戏文件集合。 </summary>
 	[MemberNotNull(nameof(FileCollection))]
 	private void InitializeGameCollection(UnityVersion defaultVersion, UnityVersion targetVersion)
 	{
@@ -84,11 +96,12 @@ public sealed class GameStructure : IDisposable
 			new GameInitializer(PlatformStructure, MixedStructure, FileSystem, defaultVersion, targetVersion));
 	}
 
+	/// <summary> 初始化程序集管理器。 </summary>
 	[MemberNotNull(nameof(AssemblyManager))]
 	private void InitializeAssemblyManager(CoreConfiguration configuration)
 	{
 		ScriptingBackend scriptBackend = GetScriptingBackend(configuration.DisableScriptImport);
-		Logger.Info(LogCategory.Import, $"Files use the '{scriptBackend}' scripting backend.");
+		Logger.Info(LogCategory.Import, $"文件使用 '{scriptBackend}' 脚本后端。");
 
 		AssemblyManager = scriptBackend switch
 		{
@@ -106,19 +119,21 @@ public sealed class GameStructure : IDisposable
 		}
 		catch (Exception ex)
 		{
-			Logger.Error(LogCategory.Import, "Could not initialize assembly manager. Switching to the 'Unknown' scripting backend.");
+			Logger.Error(LogCategory.Import, "无法初始化程序集管理器。正在切换到“未知”脚本后端。");
 			Logger.Error(ex);
 			AssemblyManager = new BaseManager(OnRequestAssembly);
 		}
 	}
 
+	/// <summary> 获取脚本后端。 </summary>
 	private ScriptingBackend GetScriptingBackend(bool disableScriptImport)
 	{
 		if (disableScriptImport)
 		{
-			Logger.Info(LogCategory.Import, "Script import disabled by settings.");
+			Logger.Info(LogCategory.Import, "由于设置已禁用脚本导入。");
 			return ScriptingBackend.Unknown;
 		}
+
 		if (PlatformStructure != null)
 		{
 			ScriptingBackend backend = PlatformStructure.Backend;
@@ -127,6 +142,7 @@ public sealed class GameStructure : IDisposable
 				return backend;
 			}
 		}
+
 		if (MixedStructure != null)
 		{
 			ScriptingBackend backend = MixedStructure.Backend;
@@ -135,9 +151,11 @@ public sealed class GameStructure : IDisposable
 				return backend;
 			}
 		}
+
 		return ScriptingBackend.Unknown;
 	}
 
+	/// <summary> 当请求程序集时调用。 </summary>
 	private void OnRequestAssembly(string assembly)
 	{
 		string assemblyName = $"{assembly}.dll";
@@ -152,20 +170,24 @@ public sealed class GameStructure : IDisposable
 			string? path = PlatformStructure?.RequestAssembly(assembly) ?? MixedStructure?.RequestAssembly(assembly);
 			if (path is null)
 			{
-				Logger.Log(LogType.Warning, LogCategory.Import, $"Assembly '{assembly}' hasn't been found");
+				Logger.Log(LogType.Warning, LogCategory.Import, $"未找到程序集 '{assembly}'");
 				return;
 			}
+
 			AssemblyManager.Load(path, FileSystem);
 		}
-		Logger.Info(LogCategory.Import, $"Assembly '{assembly}' has been loaded");
+
+		Logger.Info(LogCategory.Import, $"已加载程序集 '{assembly}'");
 	}
 
+	/// <summary> 释放游戏结构。 </summary>
 	public void Dispose()
 	{
 		Dispose(true);
 		GC.SuppressFinalize(this);
 	}
 
+	/// <summary> 释放游戏结构。 </summary>
 	private void Dispose(bool _)
 	{
 		AssemblyManager?.Dispose();

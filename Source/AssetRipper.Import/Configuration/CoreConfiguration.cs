@@ -9,7 +9,7 @@ public class CoreConfiguration
 {
 	#region Import Settings
 	/// <summary>
-	/// Disabling scripts can allow some games to export when they previously did not.
+	/// 禁用脚本后，某些游戏可能会被导出，而之前无法导出。
 	/// </summary>
 	public bool DisableScriptImport => ImportSettings.ScriptContentLevel == ScriptContentLevel.Level0;
 
@@ -23,11 +23,11 @@ public class CoreConfiguration
 
 	#region Export Settings
 	/// <summary>
-	/// The root path to export to
+	/// 导出的根路径
 	/// </summary>
 	public string ExportRootPath { get; set; } = "";
 	/// <summary>
-	/// The path to create a new unity project in
+	/// 创建新unity项目的方法
 	/// </summary>
 	public string ProjectRootPath => Path.Join(ExportRootPath, "ExportedProject");
 	public string AssetsPath => Path.Join(ProjectRootPath, "Assets");

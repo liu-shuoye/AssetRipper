@@ -18,45 +18,45 @@ using AssetRipper.Processing.Textures;
 
 namespace AssetRipper.Export.UnityProjects;
 
-public class ExportHandler
+/// <summary>
+/// 导出处理器
+/// </summary>
+/// <param name="settings"></param>
+public class ExportHandler(FullConfiguration settings)
 {
-	protected FullConfiguration Settings { get; }
-
-	public ExportHandler(FullConfiguration settings)
-	{
-		Settings = settings;
-	}
+	protected FullConfiguration Settings { get; } = settings;
 
 	public GameData Load(IReadOnlyList<string> paths, FileSystem fileSystem)
 	{
 		if (paths.Count == 1)
 		{
-			Logger.Info(LogCategory.Import, $"Attempting to read files from {paths[0]}");
+			Logger.Info(LogCategory.Import, $"尝试从 {paths[0]} 读取文件");
 		}
 		else
 		{
-			Logger.Info(LogCategory.Import, $"Attempting to read files from {paths.Count} paths...");
+			Logger.Info(LogCategory.Import, $"尝试从 {paths.Count} 个路径读取文件……");
 		}
 
 		GameStructure gameStructure = GameStructure.Load(paths, fileSystem, Settings);
 		GameData gameData = GameData.FromGameStructure(gameStructure);
-		Logger.Info(LogCategory.Import, "Finished reading files");
+		Logger.Info(LogCategory.Import, "已读完文件");
 		return gameData;
 	}
 
 	public void Process(GameData gameData)
 	{
-		Logger.Info(LogCategory.Processing, "Processing loaded assets...");
+		Logger.Info(LogCategory.Processing, "正在处理加载的资产...");
 		foreach (IAssetProcessor processor in GetProcessors())
 		{
 			processor.Process(gameData);
 		}
-		Logger.Info(LogCategory.Processing, "Finished processing assets");
+		Logger.Info(LogCategory.Processing, "已处理完资产");
 	}
 
+	/// <summary> 获取处理器 </summary>
 	protected virtual IEnumerable<IAssetProcessor> GetProcessors()
 	{
-		// Assembly processors
+		// 汇编处理器
 		yield return new AttributePolyfillGenerator();
 		yield return new MonoExplicitPropertyRepairProcessor();
 		yield return new ObfuscationRepairProcessor();
@@ -78,26 +78,27 @@ public class ExportHandler
 		yield return new RemoveAssemblyKeyFileAttributeProcessor();
 		yield return new InternalsVisibileToPublicKeyRemover();
 
-		// Asset processors
+		// 资产处理器
 		yield return new SceneDefinitionProcessor();
 		yield return new OriginalPathProcessor(Settings.ProcessingSettings.BundledAssetsExportMode);
 		yield return new MainAssetProcessor();
 		yield return new AnimatorControllerProcessor();
 		yield return new AudioMixerProcessor();
 		yield return new EditorFormatProcessor(Settings.ProcessingSettings.BundledAssetsExportMode);
-		//Static mesh separation goes here
-		yield return new LightingDataProcessor();//Needs to be after static mesh separation
+		// 静态网格分离 在这里
+		yield return new LightingDataProcessor();//需要在静态网格分离之后进行
 		yield return new PrefabProcessor();
 		yield return new SpriteProcessor();
 		yield return new ScriptableObjectProcessor();
 	}
 
+	/// <summary> 导出 </summary>
 	public void Export(GameData gameData, string outputPath, FileSystem fileSystem)
 	{
-		Logger.Info(LogCategory.Export, "Starting export");
-		Logger.Info(LogCategory.Export, $"Attempting to export assets to {outputPath}...");
-		Logger.Info(LogCategory.Export, $"Game files have these Unity versions: {GetListOfVersions(gameData.GameBundle)}");
-		Logger.Info(LogCategory.Export, $"Exporting to Unity version {gameData.ProjectVersion}");
+		Logger.Info(LogCategory.Export, "开始导出");
+		Logger.Info(LogCategory.Export, $"尝试将资产导出到 {outputPath}...");
+		Logger.Info(LogCategory.Export, $"游戏文件包含以下 Unity 版本：{GetListOfVersions(gameData.GameBundle)}");
+		Logger.Info(LogCategory.Export, $"导出到 Unity 版本 {gameData.ProjectVersion}");
 
 		Settings.ExportRootPath = outputPath;
 		Settings.SetProjectSettings(gameData.ProjectVersion);
@@ -107,13 +108,13 @@ public class ExportHandler
 		projectExporter.DoFinalOverrides(Settings);
 		projectExporter.Export(gameData.GameBundle, Settings, fileSystem);
 
-		Logger.Info(LogCategory.Export, "Finished exporting assets");
+		Logger.Info(LogCategory.Export, "资产导出完成");
 
 		foreach (IPostExporter postExporter in GetPostExporters())
 		{
 			postExporter.DoPostExport(gameData, Settings, fileSystem);
 		}
-		Logger.Info(LogCategory.Export, "Finished post-export");
+		Logger.Info(LogCategory.Export, "导出完成之后");
 
 		static string GetListOfVersions(GameBundle gameBundle)
 		{
@@ -125,11 +126,13 @@ public class ExportHandler
 		}
 	}
 
+	/// <summary> 导出之前 </summary>
 	protected virtual void BeforeExport(ProjectExporter projectExporter)
 	{
-		// Needed for the premium edition
+		// 高级版所需
 	}
 
+	/// <summary> 获取导出之后的处理器 </summary>
 	protected virtual IEnumerable<IPostExporter> GetPostExporters()
 	{
 		yield return new ProjectVersionPostExporter();
@@ -139,6 +142,7 @@ public class ExportHandler
 		yield return new PathIdMapExporter();
 	}
 
+	/// <summary> 加载并处理 </summary>
 	public GameData LoadAndProcess(IReadOnlyList<string> paths, FileSystem fileSystem)
 	{
 		GameData gameData = Load(paths, fileSystem);
@@ -149,12 +153,14 @@ public class ExportHandler
 		return gameData;
 	}
 
+	/// <summary> 加载处理并导出 </summary>
 	public void LoadProcessAndExport(IReadOnlyList<string> inputPaths, string outputPath, FileSystem fileSystem)
 	{
 		GameData gameData = LoadAndProcess(inputPaths, fileSystem);
 		Export(gameData, outputPath, fileSystem);
 	}
 
+	/// <summary> 检查设置是否匹配 </summary>
 	public void ThrowIfSettingsDontMatch(FullConfiguration settings)
 	{
 		if (Settings != settings)

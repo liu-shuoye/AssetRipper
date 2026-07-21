@@ -181,16 +181,16 @@ partial class ProjectExporter
 		OverrideExporter<ScriptableObjectGroup>(scriptableObjectGroupExporter);
 	}
 
-	//These need to be absolutely last
+	//这些必须最后才处理。
 	public void DoFinalOverrides(FullConfiguration settings)
 	{
-		//Engine assets
+		//引擎资源
 		OverrideExporter<IUnityObjectBase>(settings.SingletonData.TryGetStoredValue(nameof(EngineResourceData), out EngineResourceData? engineResourceData)
 			&& engineResourceData is not null
 			? EngineAssetsExporter.CreateFromResourceData(engineResourceData.Value)
 			: EngineAssetsExporter.CreateFromEmbeddedData(settings.Version));
 
-		//Deleted assets
+		//删除的资源
 		OverrideExporter<IUnityObjectBase>(new DeletedAssetsExporter());
 	}
 }

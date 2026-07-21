@@ -11,13 +11,10 @@ namespace AssetRipper.Assets.Bundles;
 partial class GameBundle
 {
 	/// <summary>
-	/// Create and initialize a <see cref="GameBundle"/> from a set of paths.
+	/// 从一组路径创建并初始化一个 <see cref="GameBundle"/>。
 	/// </summary>
 	/// <param name="paths">The set of paths to load.</param>
 	/// <param name="assetFactory">The factory for reading assets.</param>
-	/// <param name="dependencyProvider"></param>
-	/// <param name="resourceProvider"></param>
-	/// <param name="defaultVersion">The default version to use if a file does not have a version, ie the version has been stripped.</param>
 	public static GameBundle FromPaths(IEnumerable<string> paths, AssetFactoryBase assetFactory, FileSystem fileSystem, IGameInitializer? initializer = null)
 	{
 		GameBundle gameBundle = new();
@@ -29,11 +26,18 @@ partial class GameBundle
 		return gameBundle;
 	}
 
+	/// <summary>
+	/// 将一组路径加载到 <see cref="GameBundle"/> 中。
+	/// </summary>
+	/// <param name="paths"></param>
+	/// <param name="assetFactory"></param>
+	/// <param name="fileSystem"></param>
+	/// <param name="initializer"></param>
 	private void InitializeFromPaths(IEnumerable<string> paths, AssetFactoryBase assetFactory, FileSystem fileSystem, IGameInitializer? initializer)
 	{
 		ResourceProvider = initializer?.ResourceProvider;
 		List<FileBase> fileStack = LoadFilesAndDependencies(paths, fileSystem, initializer?.DependencyProvider);
-		UnityVersion defaultVersion = initializer is null ? default : initializer.DefaultVersion;
+		UnityVersion defaultVersion = initializer?.DefaultVersion ?? default;
 
 		while (fileStack.Count > 0)
 		{
@@ -64,10 +68,11 @@ partial class GameBundle
 		return file;
 	}
 
+	/// <summary> 加载文件及其依赖项。 </summary>
 	private static List<FileBase> LoadFilesAndDependencies(IEnumerable<string> paths, FileSystem fileSystem, IDependencyProvider? dependencyProvider)
 	{
 		List<FileBase> files = new();
-		HashSet<string> serializedFileNames = new();//Includes missing dependencies
+		HashSet<string> serializedFileNames = new();//包含缺失的依赖项
 		foreach (string path in paths)
 		{
 			FileBase? file;
@@ -108,25 +113,27 @@ partial class GameBundle
 			}
 		}
 
+		// ReSharper disable once ForCanBeConvertedToForeach 循环中会添加，所以不能使用 foreach
 		for (int i = 0; i < files.Count; i++)
 		{
 			FileBase file = files[i];
-			if (file is SerializedFile serializedFile)
+			switch (file)
 			{
-				LoadDependencies(serializedFile, files, serializedFileNames, dependencyProvider);
-			}
-			else if (file is FileContainer container)
-			{
-				foreach (SerializedFile serializedFileInContainer in container.FetchSerializedFiles())
-				{
-					LoadDependencies(serializedFileInContainer, files, serializedFileNames, dependencyProvider);
-				}
+				case SerializedFile serializedFile:
+					LoadDependencies(serializedFile, files, serializedFileNames, dependencyProvider);
+					break;
+				case FileContainer container:
+					foreach (SerializedFile serializedFileInContainer in container.FetchSerializedFiles())
+					{
+						LoadDependencies(serializedFileInContainer, files, serializedFileNames, dependencyProvider);
+					}
+					break;
 			}
 		}
 
 		return files;
 	}
-
+	/// <summary> 加载文件的依赖项。 </summary>
 	private static void LoadDependencies(SerializedFile serializedFile, List<FileBase> files, HashSet<string> serializedFileNames, IDependencyProvider? dependencyProvider)
 	{
 		foreach (FileIdentifier fileIdentifier in serializedFile.Dependencies)

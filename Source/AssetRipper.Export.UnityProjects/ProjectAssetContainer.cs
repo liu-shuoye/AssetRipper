@@ -27,8 +27,8 @@ public class ProjectAssetContainer : IExportContainer
 		List<SceneExportCollection> scenes = new();
 		foreach (IExportCollection collection in collections)
 		{
-			// Skipped collections are not added to m_assetCollections. Their assets
-			// will be redirected at query time via m_redirectMap (Task 3).
+			// 被跳过的集合不会被添加到 m_assetCollections 中。
+			// 它们的资源将在查询时通过 m_redirectMap 进行重定向（任务 3）。
 			if (m_skippedCollections.Contains(collection))
 			{
 				if (collection is SceneExportCollection skippedScene)
@@ -50,6 +50,7 @@ public class ProjectAssetContainer : IExportContainer
 		}
 		m_scenes = scenes.ToArray();
 
+		//检查资源是否已经添加到容器中。
 		[Conditional("DEBUG")]
 		static void CheckIfAlreadyAdded(ProjectAssetContainer container, IUnityObjectBase asset, IExportCollection currentCollection)
 		{

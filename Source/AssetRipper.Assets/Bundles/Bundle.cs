@@ -362,9 +362,9 @@ public abstract class Bundle : IDisposable
 	}
 
 	/// <summary>
-	/// Fetches all <see cref="IUnityObjectBase"/>s in this Bundle.
+	/// 获取此 Bundle 中所有的 <see cref="IUnityObjectBase"/>。
 	/// </summary>
-	/// <returns>An IEnumerable of all <see cref="IUnityObjectBase"/>s in this Bundle.</returns>
+	/// <returns>此捆绑包中所有 <see cref="IUnityObjectBase"/> 的 IEnumerable。</returns>
 	public IEnumerable<IUnityObjectBase> FetchAssets()
 	{
 		foreach (AssetCollection collection in collections)
@@ -384,7 +384,7 @@ public abstract class Bundle : IDisposable
 	}
 
 	/// <summary>
-	/// Fetches all AssetCollections in the hierarchy of this Bundle.
+	/// 获取此捆绑包中所有 AssetCollections 的 IEnumerable。
 	/// </summary>
 	/// <returns>An IEnumerable of all AssetCollections in the hierarchy.</returns>
 	public IEnumerable<AssetCollection> FetchAssetCollections()
