@@ -72,6 +72,20 @@ public readonly partial struct AnimationClipConverter
 			}
 
 			m_clip.MuscleClipInfo_C74.Initialize(m_clip.MuscleClip_C74);
+
+			// 解压完成后，压缩源数据不再需要——编辑器格式导出只写解压后的曲线（PositionCurves 等），
+			// MuscleClip 的 StreamedClip/DenseClip/ConstantClip 是 release 格式字段，WalkEditor 不会写出。
+			// 清空以释放内存，避免压缩数据 + 解压曲线同时驻留导致单个 AnimationClip 内存翻倍。
+			// 对于动画密集型项目，这可节省数百 MB。
+			clip.StreamedClip.Data.Clear();
+			clip.StreamedClip.Data.Capacity = 0;
+			clip.DenseClip.SampleArray.Clear();
+			clip.DenseClip.SampleArray.Capacity = 0;
+			if (clip.Has_ConstantClip())
+			{
+				clip.ConstantClip.Data.Clear();
+				clip.ConstantClip.Data.Capacity = 0;
+			}
 		}
 	}
 
@@ -276,7 +290,7 @@ public readonly partial struct AnimationClipConverter
 
 			default:
 				string attribute = m_customCurveResolver.ToAttributeName((BindingCustomType)binding.CustomType, binding.Attribute, path);
-				CurveData curve = new(path, attribute, binding.GetClassID(), binding.Script.TryGetAsset(m_clip.Collection));
+				CurveData curve = new(path, attribute, binding.GetClassID(), binding.Script.TryGetAssetOnly(m_clip.Collection));
 				if (binding.IsPPtrCurve())
 				{
 					AddPPtrKeyframe(curve, time, (int)value);
@@ -481,7 +495,7 @@ public readonly partial struct AnimationClipConverter
 
 	private void AddScriptCurve(IGenericBinding binding, string path, float time, float value, float inTangent, float outTangent)
 	{
-		if (binding.Script.TryGetAsset(m_clip.Collection) is IMonoScript script)
+		if (binding.Script.TryGetAssetOnly(m_clip.Collection) is IMonoScript script)
 		{
 			m_checksumCache.Add(script);
 		}
@@ -491,7 +505,7 @@ public readonly partial struct AnimationClipConverter
 			propertyName = GetReversedPath(ScriptPropertyPrefix, binding.Attribute);
 		}
 
-		CurveData curve = new(path, propertyName, ClassIDType.MonoBehaviour, binding.Script.TryGetAsset(m_clip.Collection));
+		CurveData curve = new(path, propertyName, ClassIDType.MonoBehaviour, binding.Script.TryGetAssetOnly(m_clip.Collection));
 
 		if (binding.IsPPtrCurve())
 		{

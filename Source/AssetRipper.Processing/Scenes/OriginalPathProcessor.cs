@@ -104,21 +104,23 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 				}
 
 				string? originalDirectory = Path.GetDirectoryName(originalPath);
-				// 用元数据枚举 + 按需 TryGetAssetOnly 检查 GetBestName，避免 collection.Count 触发全量反序列化
-				// 短路：count > 30 时立即退出，等价于原 Count(predicate) > 30 判断
-				int count = 0;
-				foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
+				// 用元数据枚举 + TryGetAssetTransient 检查 GetBestName：
+			// transient 反序列化不进入 assets 字典，循环结束后对象即可被 GC 回收，
+			// 避免此前 TryGetAssetOnly 把 collection 中所有非 Shader 对象永久驻留字典造成的 1.6GB 内存峰值。
+			// 短路：count > 30 时立即退出，等价于原 Count(predicate) > 30 判断
+			int count = 0;
+			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
+			{
+				IUnityObjectBase? asset = collection.TryGetAssetTransient(meta.PathID);
+				if (asset is not null && asset.GetBestName() != asset.ClassName)
 				{
-					IUnityObjectBase? asset = collection.TryGetAssetOnly(meta.PathID);
-					if (asset is not null && asset.GetBestName() != asset.ClassName)
+					count++;
+					if (count > 30)
 					{
-						count++;
-						if (count > 30)
-						{
-							break;
-						}
+						break;
 					}
 				}
+			}
 				if (count > 30)
 				{
 					// 移除扩展名

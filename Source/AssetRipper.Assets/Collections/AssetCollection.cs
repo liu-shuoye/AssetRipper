@@ -231,6 +231,23 @@ public abstract class AssetCollection : IReadOnlyCollection<IUnityObjectBase>, I
 	}
 
 	/// <summary>
+	/// 反序列化指定 PathID 对应的单个对象用于"只读检查"，<b>不</b>加入 <see cref="assets"/> 字典，
+	/// 使其可被 GC 尽早回收。
+	/// </summary>
+	/// <remarks>
+	/// 用于 OriginalPathProcessor.ContainerExport 中"检查 GetBestName 是否非默认名"等只需瞬时访问
+	/// 对象、不设置任何持久属性的场景。避免反序列化大量对象后永久驻留字典导致的内存峰值。
+	/// 调用方必须保证：返回的实例上<b>不</b>设置任何需要持久化的属性（OriginalPath/MainAsset 等），
+	/// 否则属性会随对象被 GC 而丢失。需要持久化时使用 <see cref="TryGetAssetOnly"/>。
+	/// 默认实现回退到 <see cref="TryGetAssetOnly"/>，子类（SerializedAssetCollection）重写为
+	/// 真正的"反序列化但不入字典"。
+	/// </remarks>
+	public virtual IUnityObjectBase? TryGetAssetTransient(long pathID)
+	{
+		return TryGetAssetOnly(pathID);
+	}
+
+	/// <summary>
 	/// 仅反序列化指定 PathID 对应的单个对象并转换为指定类型。
 	/// </summary>
 	public T? TryGetAssetOnly<T>(long pathID) where T : IUnityObjectBase

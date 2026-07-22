@@ -198,6 +198,53 @@ public sealed class SerializedAssetCollection : AssetCollection
 	}
 
 	/// <summary>
+	/// 瞬时反序列化：反序列化单个对象但不加入 <see cref="assets"/> 字典，使其可被 GC 尽早回收。
+	/// </summary>
+	/// <remarks>
+	/// 适用场景：OriginalPathProcessor.ContainerExport 检查 GetBestName 等只读检查——反序列化仅为读取
+	/// 名称字段，不设置任何需要持久化的属性。若已存在字典中（曾被 TryGetAssetOnly 反序列化或已全量加载），
+	/// 直接返回字典中的实例（不删除，避免影响其他引用）。否则从 ObjectInfo 数组按 PathID 反序列化新实例，
+	/// <b>不</b>调用 AddAsset，让调用方使用完后即可被 GC 回收。
+	/// 注意：transient 实例上设置 OriginalPath/MainAsset 等属性会丢失，需要持久化时用 TryGetAssetOnly。
+	/// </remarks>
+	public override IUnityObjectBase? TryGetAssetTransient(long pathID)
+	{
+		// 若已在字典中（曾被持久化反序列化或已全量加载），直接返回字典实例，避免产生两个不同实例
+		if (assets.TryGetValue(pathID, out IUnityObjectBase? existing))
+		{
+			return existing;
+		}
+		if (_assetsLoaded)
+		{
+			return null;
+		}
+
+		SerializedFile? file = _sourceFile;
+		AssetFactoryBase? factory = _factory;
+		if (file is null || factory is null)
+		{
+			return null;
+		}
+
+		ReadOnlySpan<ObjectInfo> objects = file.Objects;
+		for (int i = 0; i < objects.Length; i++)
+		{
+			ObjectInfo info = objects[i];
+			if (info.FileID != pathID)
+			{
+				continue;
+			}
+			int classID = info.TypeID < 0 ? 114 : info.TypeID;
+			// AssetInfo.Collection 设为 this，使 transient 实例的 Collection 属性正确，
+			// 调用方读取 Name 等字段后即可让 GC 回收整个实例
+			AssetInfo assetInfo = new AssetInfo(this, info.FileID, classID);
+			// 关键：不调用 AddAsset，实例不进入 assets 字典
+			return factory.ReadAsset(assetInfo, info.LoadObjectData(), info.Type);
+		}
+		return null;
+	}
+
+	/// <summary>
 	/// 清空已反序列化的资产对象，但保留 <see cref="_sourceFile"/> 与 <see cref="_factory"/> 引用，
 	/// 以便再次访问时通过 <see cref="EnsureAssetsLoaded"/> 重新反序列化。
 	/// </summary>

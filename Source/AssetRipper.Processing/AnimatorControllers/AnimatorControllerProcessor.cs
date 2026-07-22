@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Cloning;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Import.Logging;
@@ -23,11 +23,32 @@ public sealed class AnimatorControllerProcessor : IAssetProcessor
 	{
 		Logger.Info(LogCategory.Processing, "Reconstruct AnimatorController Assets");
 
-		List<IAnimatorController> animatorControllers = gameData.GameBundle
-			.FetchAssetCollections()
-			.Where(c => c.Flags.IsRelease())
-			.SelectMany(c => c.OfType<IAnimatorController>())
-			.ToList();
+		// 用元数据枚举 + TryGetAssetOnly 仅反序列化 ClassID_91 (IAnimatorController) 对象，
+		// 替代原 SelectMany(c => c.OfType<IAnimatorController>())。后者通过 GetEnumerator 触发
+		// EnsureAssetsLoaded，会把每个 release collection 的全部对象反序列化到 assets 字典，
+		// 即便绝大多数对象（Transform/Mesh/Material 等）与本 processor 无关。
+		// 注意：后续 FetchEditorHierarchy 仍会通过 TryGetAsset 解引用 PPtr 触发同 collection 全量加载，
+		// 但至少推迟到真正需要 hierarchy 对象时，避免提前叠加峰值。
+		List<IAnimatorController> animatorControllers = [];
+		foreach (AssetCollection collection in gameData.GameBundle.FetchAssetCollections())
+		{
+			if (!collection.Flags.IsRelease())
+			{
+				continue;
+			}
+			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
+			{
+				if (meta.ClassID != 91) // IAnimatorController
+				{
+					continue;
+				}
+				IAnimatorController? controller = collection.TryGetAssetOnly<IAnimatorController>(meta.PathID);
+				if (controller is not null)
+				{
+					animatorControllers.Add(controller);
+				}
+			}
+		}
 
 		ProcessedAssetCollection processedCollection = gameData.AddNewProcessedCollection("Generated AnimatorController Dependencies");
 		foreach (IAnimatorController controller in animatorControllers)
