@@ -20,7 +20,7 @@ public static class StreamedResourceExtensions
 
 		if (size == 0)
 		{
-			// Data might be read by its type for this verison, so we can't even export raw data.
+			// 此版本的数据可能按其类型被读取，因此我们甚至无法导出原始数据。
 			return false;
 		}
 

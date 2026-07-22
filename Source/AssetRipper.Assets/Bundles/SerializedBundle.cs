@@ -15,6 +15,13 @@ public sealed class SerializedBundle : Bundle
 
 	public override string Name => name;
 
+	/// <summary>
+	/// 从 <see cref="FileContainer"/> 创建 <see cref="SerializedBundle"/>。
+	/// </summary>
+	/// <param name="container"></param>
+	/// <param name="factory"></param>
+	/// <param name="defaultVersion"></param>
+	/// <returns></returns>
 	public static SerializedBundle FromFileContainer(FileContainer container, AssetFactoryBase factory, UnityVersion defaultVersion = default)
 	{
 		SerializedBundle bundle = new();

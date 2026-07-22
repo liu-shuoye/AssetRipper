@@ -8,35 +8,35 @@ using AssetRipper.IO.Files.SerializedFiles.Parser;
 namespace AssetRipper.Assets.Bundles;
 
 /// <summary>
-/// A container for <see cref="AssetCollection"/>s, <see cref="ResourceFile"/>s, and other <see cref="Bundle"/>s.
+/// 用于存储 <see cref="AssetCollection"/>、<see cref="ResourceFile"/> 及其他 <see cref="Bundle"/> 的容器。
 /// </summary>
 public abstract class Bundle : IDisposable
 {
 	/// <summary>
-	/// The parent <see cref="Bundle"/> of this Bundle.
+	/// 此 Bundle 的父级 <see cref="Bundle"/>。
 	/// </summary>
 	public Bundle? Parent { get; private set; }
 
 	/// <summary>
-	/// The list of <see cref="ResourceFile"/>s in this Bundle.
+	/// 此 Bundle 中的 <see cref="ResourceFile"/> 列表。
 	/// </summary>
 	public IReadOnlyList<ResourceFile> Resources => resources;
 	private readonly List<ResourceFile> resources = [];
 
 	/// <summary>
-	/// The list of <see cref="AssetCollection"/>s in this Bundle.
+	/// 此 Bundle 中的 <see cref="AssetCollection"/> 列表。
 	/// </summary>
 	public IReadOnlyList<AssetCollection> Collections => collections;
 	private readonly List<AssetCollection> collections = [];
 
 	/// <summary>
-	/// The list of child <see cref="Bundle"/>s in this Bundle.
+	/// 此 Bundle 中的子 <see cref="Bundle"/> 列表。
 	/// </summary>
 	public IReadOnlyList<Bundle> Bundles => bundles;
 	private readonly List<Bundle> bundles = [];
 
 	/// <summary>
-	/// The list of <see cref="FailedFile"/>s in this Bundle.
+	/// 此 Bundle 中的失败文件列表。
 	/// </summary>
 	public IReadOnlyList<FailedFile> FailedFiles => failedFiles;
 	private readonly List<FailedFile> failedFiles = [];
@@ -187,7 +187,7 @@ public abstract class Bundle : IDisposable
 	}
 
 	/// <summary>
-	/// Resolves a ResourceFile with the specified name in this Bundle and its ascendants.
+	/// 在本 Bundle 及其祖先中查找指定名称的 ResourceFile。
 	/// </summary>
 	/// <param name="name">The name of the ResourceFile.</param>
 	/// <returns>The resolved ResourceFile if it exists, else null.</returns>
@@ -264,7 +264,7 @@ public abstract class Bundle : IDisposable
 	protected virtual ResourceFile? ResolveExternalResource(string originalName) => null;
 
 	/// <summary>
-	/// Adds a ResourceFile to this Bundle.
+	/// 向此 Bundle 添加一个 ResourceFile。
 	/// </summary>
 	/// <param name="resource">The ResourceFile to add.</param>
 	public void AddResource(ResourceFile resource)
@@ -422,6 +422,13 @@ public abstract class Bundle : IDisposable
 		return Name;
 	}
 
+	/// <summary>
+	/// 将由序列化文件创建的资源集合添加到此捆绑包中。
+	/// </summary>
+	/// <param name="file"></param>
+	/// <param name="factory"></param>
+	/// <param name="defaultVersion"></param>
+	/// <returns></returns>
 	public SerializedAssetCollection AddCollectionFromSerializedFile(SerializedFile file, AssetFactoryBase factory, UnityVersion defaultVersion = default)
 	{
 		return SerializedAssetCollection.FromSerializedFile(this, file, factory, defaultVersion);

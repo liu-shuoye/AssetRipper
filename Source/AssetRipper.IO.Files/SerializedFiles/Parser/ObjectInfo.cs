@@ -1,4 +1,5 @@
 using AssetRipper.IO.Files.SerializedFiles.IO;
+using AssetRipper.IO.Files.Streams.Smart;
 
 namespace AssetRipper.IO.Files.SerializedFiles.Parser;
 
@@ -7,6 +8,10 @@ namespace AssetRipper.IO.Files.SerializedFiles.Parser;
 /// </summary>
 public struct ObjectInfo
 {
+	private long _dataPosition;
+	private int _byteSize;
+	private SmartStream _smartStream;
+
 	/// <summary>
 	/// 5.0.0unk and greater / Format Version at least 14
 	/// </summary>
@@ -62,15 +67,17 @@ public struct ObjectInfo
 			byteStart = reader.ReadUInt32();
 		}
 
-		// Size of the object data.
-		int byteSize = reader.ReadInt32();
+		// 对象数据的大小。
+		_byteSize = reader.ReadInt32();
 
-		// Read object data
+		// 读取对象数据
 		{
 			long currentPosition = reader.BaseStream.Position;
-			long dataPosition = dataOffset + byteStart;
-			reader.BaseStream.Position = dataPosition;
-			ObjectData = reader.ReadBytes(byteSize);
+			_dataPosition = dataOffset + byteStart;
+			reader.BaseStream.Position = _dataPosition;
+			byte[] objectData = reader.ReadBytes(_byteSize);
+			_smartStream = CreateStream(_byteSize);
+			_smartStream.Write(objectData);
 			reader.BaseStream.Position = currentPosition;
 		}
 
@@ -124,7 +131,22 @@ public struct ObjectInfo
 			}
 		}
 	}
+	public byte[] ReadObjectData()
+	{
+		// _reader.BaseStream.Position = _dataPosition;
+		// return _reader.ReadBytes(_byteSize);
+		return _smartStream.ToArray();
+	}
 
+	private static SmartStream CreateStream(long size)
+	{
+		return size switch
+		{
+			> 1024 * 100 => SmartStream.CreateTemp(),
+			// > MaxPreAllocatedMemoryStreamLength => SmartStream.CreateMemory(),
+			_ => SmartStream.CreateMemory(new byte[size]),
+		};
+	}
 	internal readonly void Write(SerializedWriter writer, long byteStart)
 	{
 		if (IsLongID(writer.Generation))
