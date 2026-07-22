@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Metadata;
 using System.Collections;
@@ -30,7 +30,11 @@ public readonly struct PPtrAccessList<TPPtr, TTarget> : IReadOnlyList<TTarget?>
 	{
 		get
 		{
-			list[index].TryGetAsset(file, out TTarget? result);
+			// 使用 TryGetAssetOnly 替代 TryGetAsset，避免 PPtr 解引用触发目标 collection 的
+			// EnsureAssetsLoaded 全量反序列化。两者行为一致（先查字典，再按需反序列化单个对象），
+			// 区别仅在于 TryGetAsset 会预先加载整个 collection。此改动使 AnimatorController hierarchy
+			// 遍历、EditorFormat PPtr 解引用等场景不再连带反序列化无关对象。
+			file.TryGetAssetOnly(list[index].FileID, list[index].PathID, out TTarget? result);
 			return result;
 		}
 		set

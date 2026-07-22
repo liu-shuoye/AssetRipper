@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Generics;
 using AssetRipper.SourceGenerated.Classes.ClassID_1101;
 using AssetRipper.SourceGenerated.Classes.ClassID_1102;
@@ -82,7 +82,7 @@ public static class AnimatorControllerExtensions
 			{
 				foreach (IStateBehavioursPair pair in layer.Behaviours)
 				{
-					IAnimatorState? state = pair.State.TryGetAsset(animatorController.Collection);
+					IAnimatorState? state = pair.State.TryGetAssetOnly(animatorController.Collection);
 					if (state is not null)
 					{
 						foreach (IUnityObjectBase? reference in state.FetchHierarchy())
@@ -92,12 +92,12 @@ public static class AnimatorControllerExtensions
 					}
 					foreach (PPtr_MonoBehaviour_5 stateMachineBehaviour in pair.StateMachineBehaviours)
 					{
-						yield return stateMachineBehaviour.TryGetAsset(animatorController.Collection);
+						yield return stateMachineBehaviour.TryGetAssetOnly(animatorController.Collection);
 					}
 				}
 				foreach (IStateMotionPair pair in layer.Motions)
 				{
-					IAnimatorState? state = pair.State.TryGetAsset(animatorController.Collection);
+					IAnimatorState? state = pair.State.TryGetAssetOnly(animatorController.Collection);
 					if (state is not null)
 					{
 						foreach (IUnityObjectBase? reference in state.FetchHierarchy())
@@ -107,7 +107,7 @@ public static class AnimatorControllerExtensions
 					}
 
 					//AnimationClip also inherits from Motion, but we don't want to include that.
-					IBlendTree? blendTree = pair.Motion.TryGetAsset(animatorController.Collection) as IBlendTree;
+					IBlendTree? blendTree = pair.Motion.TryGetAssetOnly(animatorController.Collection) as IBlendTree;
 					if (blendTree is not null)
 					{
 						foreach (IUnityObjectBase? reference in blendTree.FetchHierarchy())
@@ -117,7 +117,7 @@ public static class AnimatorControllerExtensions
 					}
 				}
 			}
-			IAnimatorStateMachine? stateMachine = layer.StateMachine.TryGetAsset(animatorController.Collection);
+			IAnimatorStateMachine? stateMachine = layer.StateMachine.TryGetAssetOnly(animatorController.Collection);
 			if (stateMachine is not null)
 			{
 				foreach (IUnityObjectBase? reference in stateMachine.FetchEditorHierarchy())
@@ -141,7 +141,7 @@ public static class AnimatorControllerExtensions
 			}
 			foreach (ChildAnimatorStateMachine childAnimatorStateMachine in stateMachine.ChildStateMachines)
 			{
-				IAnimatorStateMachine? childStateMachine = childAnimatorStateMachine.StateMachine.TryGetAsset(stateMachine.Collection);
+				IAnimatorStateMachine? childStateMachine = childAnimatorStateMachine.StateMachine.TryGetAssetOnly(stateMachine.Collection);
 				if (childStateMachine is not null)
 				{
 					foreach (IUnityObjectBase? reference in childStateMachine.FetchEditorHierarchy())
@@ -152,7 +152,7 @@ public static class AnimatorControllerExtensions
 			}
 			foreach (ChildAnimatorState childState in stateMachine.ChildStates)
 			{
-				IAnimatorState? state = childState.State.TryGetAsset(stateMachine.Collection);
+				IAnimatorState? state = childState.State.TryGetAssetOnly(stateMachine.Collection);
 				if (state is not null)
 				{
 					foreach (IUnityObjectBase? reference in state.FetchHierarchy())
@@ -174,7 +174,7 @@ public static class AnimatorControllerExtensions
 				//Skipping keys because they're IAnimatorStateMachine
 				foreach (PPtr_AnimatorTransition transition in list)
 				{
-					yield return transition.TryGetAsset(stateMachine.Collection);
+					yield return transition.TryGetAssetOnly(stateMachine.Collection);
 				}
 			}
 		}
@@ -194,7 +194,7 @@ public static class AnimatorControllerExtensions
 			{
 				foreach ((PPtr_AnimatorState_4 statePPtr, AssetList<PPtr_AnimatorStateTransition_4> list) in stateMachine.LocalTransitions)
 				{
-					IAnimatorState? state = statePPtr.TryGetAsset(stateMachine.Collection);
+					IAnimatorState? state = statePPtr.TryGetAssetOnly(stateMachine.Collection);
 					if (state is not null)
 					{
 						foreach (IUnityObjectBase? reference in state.FetchHierarchy())
@@ -204,13 +204,13 @@ public static class AnimatorControllerExtensions
 					}
 					foreach (PPtr_AnimatorStateTransition_4 transition in list)
 					{
-						yield return transition.TryGetAsset(stateMachine.Collection);
+						yield return transition.TryGetAssetOnly(stateMachine.Collection);
 					}
 				}
 			}
 			foreach ((PPtr_AnimatorState_4 statePPtr, AssetList<PPtr_AnimatorStateTransition_4> list) in stateMachine.OrderedTransitions)
 			{
-				IAnimatorState? state = statePPtr.TryGetAsset(stateMachine.Collection);
+				IAnimatorState? state = statePPtr.TryGetAssetOnly(stateMachine.Collection);
 				if (state is not null)
 				{
 					foreach (IUnityObjectBase? reference in state.FetchHierarchy())
@@ -220,7 +220,7 @@ public static class AnimatorControllerExtensions
 				}
 				foreach (PPtr_AnimatorStateTransition_4 transition in list)
 				{
-					yield return transition.TryGetAsset(stateMachine.Collection);
+					yield return transition.TryGetAssetOnly(stateMachine.Collection);
 				}
 			}
 			foreach (IAnimatorState? state in stateMachine.StatesP)
@@ -243,7 +243,7 @@ public static class AnimatorControllerExtensions
 		foreach (IChildMotion childMotion in blendTree.Childs)
 		{
 			//AnimationClips are excluded from the hierarchy
-			IBlendTree? child = childMotion.Motion.TryGetAsset(blendTree.Collection) as IBlendTree;
+			IBlendTree? child = childMotion.Motion.TryGetAssetOnly(blendTree.Collection) as IBlendTree;
 			if (child is not null)
 			{
 				foreach (IUnityObjectBase? reference in child.FetchHierarchy())

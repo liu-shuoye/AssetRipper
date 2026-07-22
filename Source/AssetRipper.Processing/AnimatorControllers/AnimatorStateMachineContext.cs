@@ -881,8 +881,9 @@ internal sealed class AnimatorStateMachineContext
 					{
 						ChildAnimatorState childState = stateMachine.ChildStates[i];
 						childState.Position.CopyValues(position);
-						childState.State.TryGetAsset(stateMachine.Collection, out state);
-					}
+						// 使用 TryGetAssetOnly 避免触发 stateMachine 所在 collection 的全量反序列化
+						stateMachine.Collection.TryGetAssetOnly(childState.State.FileID, childState.State.PathID, out state);
+				}
 					else
 					{
 						state = stateMachine.StatesP[i];
