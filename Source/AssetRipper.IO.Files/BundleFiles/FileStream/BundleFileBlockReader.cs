@@ -31,7 +31,7 @@ internal sealed class BundleFileBlockReader : IDisposable
 		ObjectDisposedException.ThrowIf(m_isDisposed, typeof(BundleFileBlockReader));
 
 		// Avoid storing entire non-compresed entries in memory by mapping a stream to the block location.
-		if (m_blocksInfo.StorageBlocks.Length == 1 && m_blocksInfo.StorageBlocks[0].CompressionType == CompressionType.None)
+		if (m_blocksInfo.StorageBlocks is [{ CompressionType: CompressionType.None }])
 		{
 			if (m_dataOffset + entry.Offset + entry.Size > m_stream.Length)
 			{
@@ -39,6 +39,7 @@ internal sealed class BundleFileBlockReader : IDisposable
 			}
 			return m_stream.CreatePartial(m_dataOffset + entry.Offset, entry.Size);
 		}
+		
 
 		// find block offsets
 		int blockIndex;
@@ -192,21 +193,21 @@ internal sealed class BundleFileBlockReader : IDisposable
 	}
 
 	/// <summary>
-	/// The arbitrary maximum size of a decompressed stream to be stored in RAM. 50 MB
+	/// 可存储在内存中的解压流的任意最大大小。50 MB
 	/// </summary>
 	/// <remarks>
-	/// This number can be set to any integer value, including <see cref="int.MaxValue"/>.
-	/// Previously, this was actually set to <see cref="int.MaxValue"/>, but that can cause
-	/// <see href="https://github.com/AssetRipper/AssetRipper/issues/1953">highly compressed games to use too much RAM</see>.
+	/// 此数值可设置为任意整数值，包括 <see cref="int.MaxValue"/>。  
+	/// 之前该值实际上被设置为 <see cref="int.MaxValue"/>，但这可能导致  
+	/// <see href="https://github.com/AssetRipper/AssetRipper/issues/1953">高度压缩的游戏占用过多内存</see>。
 	/// </remarks>
-	private const int MaxMemoryStreamLength = 50 * 1024 * 1024;
+	private const int MaxMemoryStreamLength = 1 * 1024 * 1024;
 	/// <summary>
-	/// The arbitrary maximum size of a decompressed stream to be pre-allocated. 30 MB
+	/// 预分配的解压流的任意最大大小。30 MB
 	/// </summary>
 	/// <remarks>
-	/// This number can be set to any integer value less than <see cref="MaxMemoryStreamLength"/>.
+	/// 该数值可设置为小于 <see cref="MaxMemoryStreamLength"/> 的任意整数值。
 	/// </remarks>
-	private const int MaxPreAllocatedMemoryStreamLength = 30 * 1024 * 1024;
+	private const int MaxPreAllocatedMemoryStreamLength = 1 * 512 * 1024;
 	private readonly SmartStream m_stream;
 	private readonly BlocksInfo m_blocksInfo = new();
 	private readonly long m_dataOffset;
