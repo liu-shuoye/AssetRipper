@@ -94,29 +94,86 @@ public class EditorFormatProcessor : IAssetProcessor
 		assemblyManager = gameData.AssemblyManager;
 		checksumCache = new PathChecksumCache(gameData);
 
+		// 元数据驱动：仅对 NeedsConversion 命中的 ClassID 调用 TryGetAssetOnly，
+		// 避免原 SelectMany(c => c) 触发 GetEnumerator → EnsureAssetsLoaded 的全量反序列化
+		// TryGetAssetOnly 内部写入 assets 字典非线程安全，故先 sequential 反序列化到 List，
+		// 再由后续 Parallel.ForEach 处理 List，避免并发写字典
+		List<IUnityObjectBase> assetsToConvert = new();
+		foreach (AssetCollection collection in GetReleaseCollections(gameData))
+		{
+			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
+			{
+				if (!NeedsConversion(meta.ClassID))
+				{
+					continue;
+				}
+				IUnityObjectBase? asset = collection.TryGetAssetOnly(meta.PathID);
+				if (asset is not null)
+				{
+					assetsToConvert.Add(asset);
+				}
+			}
+		}
+
 		//Sequential processing
-		foreach (IUnityObjectBase asset in GetReleaseAssets(gameData))
+		foreach (IUnityObjectBase asset in assetsToConvert)
 		{
 			Convert(asset);
 		}
 
 		//Parallel processing
-		Parallel.ForEach(GetReleaseAssets(gameData), ConvertAsync);
+		Parallel.ForEach(assetsToConvert, ConvertAsync);
 
 		checksumCache = null;
 		assemblyManager = null;
 		tagManager = null;
 	}
 
-	private static IEnumerable<IUnityObjectBase> GetReleaseAssets(GameData gameData)
-	{
-		return GetReleaseCollections(gameData).SelectMany(c => c);
-	}
-
 	private static IEnumerable<AssetCollection> GetReleaseCollections(GameData gameData)
 	{
 		return gameData.GameBundle.FetchAssetCollections().Where(c => c.Flags.IsRelease());
 	}
+
+	/// <summary>
+	/// Convert / ConvertAsync 涉及的 ClassID 集合。
+	/// 元数据驱动改造时只对集合内的 ClassID 调用 TryGetAssetOnly 反序列化，其余 ClassID 跳过。
+	/// 若未来 Convert / ConvertAsync 新增 case，需同步更新此集合。
+	/// </summary>
+	private static readonly HashSet<int> ConvertableClassIDs = new()
+	{
+		1,    // IGameObject (Convert)
+		4,    // ITransform (ConvertAsync)
+		19,   // IPhysics2DSettings (ConvertAsync)
+		23,   // IMeshRenderer (Convert - IRenderer)
+		26,   // IParticleRenderer (Convert - IRenderer)
+		30,   // IGraphicsSettings (ConvertAsync)
+		43,   // IMesh (ConvertAsync)
+		47,   // IQualitySettings (ConvertAsync)
+		74,   // IAnimationClip (Convert)
+		96,   // ITrailRenderer (Convert - IRenderer)
+		120,  // ILineRenderer (Convert - IRenderer)
+		129,  // PlayerSettings (Convert - TypeTreeObject.IsPlayerSettings)
+		137,  // ISkinnedMeshRenderer (Convert - IRenderer)
+		142,  // IAssetBundle (ConvertAsync)
+		157,  // ILightmapSettings (ConvertAsync)
+		161,  // IClothRenderer (Convert - IRenderer)
+		196,  // INavMeshSettings (Convert)
+		199,  // IParticleSystemRenderer (Convert - IRenderer)
+		212,  // ISpriteRenderer (Convert - IRenderer)
+		218,  // ITerrain (ConvertAsync)
+		222,  // ICanvasRenderer (Convert - IRenderer)
+		227,  // IBillboardRenderer (Convert - IRenderer)
+		310,  // IUnityConnectSettings (ConvertAsync)
+		320,  // IPlayableDirector (ConvertAsync)
+		687078895,    // ISpriteAtlas (Convert)
+		73398921,     // IVFXRenderer (Convert - IRenderer)
+		850595691,    // ILightingSettings (ConvertAsync)
+		483693784,    // ITilemapRenderer (Convert - IRenderer)
+		1931382933,   // IUIRenderer (Convert - IRenderer)
+		1971053207,   // ISpriteShapeRenderer (Convert - IRenderer)
+	};
+
+	private static bool NeedsConversion(int classID) => ConvertableClassIDs.Contains(classID);
 
 	private void Convert(IUnityObjectBase asset)
 	{
