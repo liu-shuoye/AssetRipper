@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets.Bundles;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects.PathIdMapping;
 using AssetRipper.Export.UnityProjects.Project;
@@ -46,12 +46,18 @@ public class ExportHandler(FullConfiguration settings)
 	public void Process(GameData gameData)
 	{
 		Logger.Info(LogCategory.Processing, "正在处理加载的资产...");
+		Logger.LogMemoryDiagnostics("Process开始");
 		foreach (IAssetProcessor processor in GetProcessors())
 		{
+			string processorName = processor.GetType().Name;
+			Logger.LogMemoryDiagnostics($"Process前 - {processorName}");
 			processor.Process(gameData);
+			Logger.LogMemoryDiagnostics($"Process后 - {processorName}");
 		}
+
 		Logger.Info(LogCategory.Processing, "已处理完资产");
 	}
+
 
 	/// <summary> 获取处理器 </summary>
 	protected virtual IEnumerable<IAssetProcessor> GetProcessors()
@@ -65,16 +71,19 @@ public class ExportHandler(FullConfiguration settings)
 		{
 			yield return new MethodStubbingProcessor();
 		}
+
 		yield return new NullRefReturnProcessor(Settings.ImportSettings.ScriptContentLevel);
 		yield return new UnmanagedConstraintRecoveryProcessor();
 		if (Settings.ProcessingSettings.RemoveNullableAttributes)
 		{
 			yield return new NullableRemovalProcessor();
 		}
+
 		if (Settings.ProcessingSettings.PublicizeAssemblies)
 		{
 			yield return new SafeAssemblyPublicizingProcessor();
 		}
+
 		yield return new RemoveAssemblyKeyFileAttributeProcessor();
 		yield return new InternalsVisibileToPublicKeyRemover();
 
@@ -86,7 +95,7 @@ public class ExportHandler(FullConfiguration settings)
 		yield return new AudioMixerProcessor();
 		yield return new EditorFormatProcessor(Settings.ProcessingSettings.BundledAssetsExportMode);
 		// 静态网格分离 在这里
-		yield return new LightingDataProcessor();//需要在静态网格分离之后进行
+		yield return new LightingDataProcessor(); //需要在静态网格分离之后进行
 		yield return new PrefabProcessor();
 		yield return new SpriteProcessor();
 		yield return new ScriptableObjectProcessor();
@@ -103,17 +112,24 @@ public class ExportHandler(FullConfiguration settings)
 		Settings.ExportRootPath = outputPath;
 		Settings.SetProjectSettings(gameData.ProjectVersion);
 
+		Logger.LogMemoryDiagnostics("Export前 - 创建ProjectExporter");
 		ProjectExporter projectExporter = new(Settings, gameData.AssemblyManager);
 		BeforeExport(projectExporter);
 		projectExporter.DoFinalOverrides(Settings);
+		Logger.LogMemoryDiagnostics("Export前 - DoFinalOverrides完成");
 		projectExporter.Export(gameData.GameBundle, Settings, fileSystem);
+		Logger.LogMemoryDiagnostics("Export后 - 主导出完成");
 
 		Logger.Info(LogCategory.Export, "资产导出完成");
 
 		foreach (IPostExporter postExporter in GetPostExporters())
 		{
+			string postExporterName = postExporter.GetType().Name;
+			Logger.LogMemoryDiagnostics($"PostExport前 - {postExporterName}");
 			postExporter.DoPostExport(gameData, Settings, fileSystem);
+			Logger.LogMemoryDiagnostics($"PostExport后 - {postExporterName}");
 		}
+
 		Logger.Info(LogCategory.Export, "导出完成之后");
 
 		static string GetListOfVersions(GameBundle gameBundle)
@@ -145,11 +161,16 @@ public class ExportHandler(FullConfiguration settings)
 	/// <summary> 加载并处理 </summary>
 	public GameData LoadAndProcess(IReadOnlyList<string> paths, FileSystem fileSystem)
 	{
+		// 分两步加载：先 Load（不触发反序列化），再 Process（触发反序列化）
+		// 中间输出内存诊断，用于验证懒加载效果
 		GameData gameData = Load(paths, fileSystem);
+		Logger.LogMemoryDiagnostics("Load完成（懒加载，资产未反序列化）");
 		if (gameData.GameBundle.HasAnyAssetCollections())
 		{
 			Process(gameData);
 		}
+		Logger.LogMemoryDiagnostics("Process完成（资产已反序列化）");
+
 		return gameData;
 	}
 

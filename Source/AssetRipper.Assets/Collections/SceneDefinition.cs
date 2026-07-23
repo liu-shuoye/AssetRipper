@@ -9,10 +9,10 @@ public sealed class SceneDefinition
 	}
 
 	/// <summary>
-	/// Creates a new <see cref="SceneDefinition"/> from the given name and guid.
+	/// 根据给定的名称和GUID创建一个新的<see cref="SceneDefinition"/>。
 	/// </summary>
-	/// <param name="name">The name of the scene.</param>
-	/// <param name="guid">The predefined <see cref="UnityGuid"/> for the scene. If default, a random one is assigned.</param>
+	/// <param name="name">场景的名称。</param>
+	/// <param name="guid">场景的预定义<see cref="UnityGuid"/>。如果为默认值，则分配一个随机值。</param>
 	/// <returns></returns>
 	public static SceneDefinition FromName(string name, UnityGuid guid = default)
 	{
@@ -25,10 +25,10 @@ public sealed class SceneDefinition
 	}
 
 	/// <summary>
-	/// Creates a new <see cref="SceneDefinition"/> from the given path and guid.
+	/// 根据给定的路径和GUID创建一个新的<see cref="SceneDefinition"/>。
 	/// </summary>
-	/// <param name="path">The relative path to the scene.</param>
-	/// <param name="guid">The predefined <see cref="UnityGuid"/> for the scene. If default, a random one is assigned.</param>
+	/// <param name="path">场景的相对路径。</param>
+	/// <param name="guid">场景的预定义<see cref="UnityGuid"/>。如果为默认值，则分配一个随机值。</param>
 	/// <returns></returns>
 	public static SceneDefinition FromPath(string path, UnityGuid guid = default)
 	{
@@ -41,34 +41,34 @@ public sealed class SceneDefinition
 	}
 
 	/// <summary>
-	/// The name of the scene, without any file extension.
+	/// 场景的名称，不带任何文件扩展名。
 	/// </summary>
 	public required string Name { get; init; }
 
 	/// <summary>
-	/// The scene path without any file extension, relative to the project root directory.
+	/// 场景路径，不带任何文件扩展名，相对项目根目录。
 	/// </summary>
 	public required string Path { get; init; }
 
 	/// <summary>
-	/// The GUID of this scene. It gets used in the scene's meta file. This will not be <see cref="UnityGuid.Zero"/>.
+	/// 该场景的GUID。它用于场景的元数据文件。这将不会是<see cref="UnityGuid.Zero"/>。
 	/// </summary>
 	public required UnityGuid GUID { get; init; }
 
 	/// <summary>
-	/// All the <see cref="AssetCollection"/>s that make up this scene.
+	/// 构成此场景的<see cref="AssetCollection"/>的所有<see cref="AssetCollection"/>。
 	/// </summary>
 	public IReadOnlyList<AssetCollection> Collections => collections;
 
 	/// <summary>
-	/// All the assets inside the <see cref="Collections"/> that make up this scene.
+	/// 构成此场景的<see cref="Collections"/>中的所有资产。
 	/// </summary>
 	public IEnumerable<IUnityObjectBase> Assets => collections.SelectMany(c => c);
 
 	/// <summary>
-	/// Adds an <see cref="AssetCollection"/> to this <see cref="SceneDefinition"/> and sets its <see cref="AssetCollection.Scene"/> property.
+	/// 将<see cref="AssetCollection"/>添加到此<see cref="SceneDefinition"/>并设置其<see cref="AssetCollection.Scene"/>属性。
 	/// </summary>
-	/// <param name="collection">The collection to be added.</param>
+	/// <param name="collection">要添加的集合。</param>
 	public void AddCollection(AssetCollection collection)
 	{
 		ThrowIfAlreadyPartOfAScene(collection);

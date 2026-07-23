@@ -1,5 +1,6 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Metadata;
 using AssetRipper.Checksum;
 using AssetRipper.Import.Structure.Assembly;
@@ -99,19 +100,36 @@ public readonly struct PathChecksumCache
 
 	private void BuildPathsCache(GameBundle bundle)
 	{
-		foreach (IUnityObjectBase asset in bundle.FetchAssets())
+		// 用元数据枚举避免 bundle.FetchAssets() 触发全量反序列化。
+		// 仅对 IAvatar (90) / IAnimator (95) / IAnimation (111) 调用 TryGetAssetOnly 做单对象反序列化。
+		foreach (AssetCollection collection in bundle.FetchAssetCollections())
 		{
-			switch (asset)
+			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
 			{
-				case IAvatar avatar:
-					AddAvatarTOS(avatar);
-					break;
-				case IAnimator animator:
-					AddAnimatorPathsToCache(animator);
-					break;
-				case IAnimation animation:
-					AddAnimationPathsToCache(animation);
-					break;
+				switch (meta.ClassID)
+				{
+					case 90: // IAvatar
+						IAvatar? avatar = collection.TryGetAssetOnly<IAvatar>(meta.PathID);
+						if (avatar is not null)
+						{
+							AddAvatarTOS(avatar);
+						}
+						break;
+					case 95: // IAnimator
+						IAnimator? animator = collection.TryGetAssetOnly<IAnimator>(meta.PathID);
+						if (animator is not null)
+						{
+							AddAnimatorPathsToCache(animator);
+						}
+						break;
+					case 111: // IAnimation
+						IAnimation? animation = collection.TryGetAssetOnly<IAnimation>(meta.PathID);
+						if (animation is not null)
+						{
+							AddAnimationPathsToCache(animation);
+						}
+						break;
+				}
 			}
 		}
 	}

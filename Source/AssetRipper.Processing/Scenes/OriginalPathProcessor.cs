@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Generics;
@@ -15,7 +15,7 @@ using AssetRipper.SourceGenerated.Subclasses.PPtr_Object;
 
 namespace AssetRipper.Processing.Scenes;
 
-public sealed class OriginalPathProcessor : IAssetProcessor
+public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsExportMode) : IAssetProcessor
 {
 	private const string ResourcesKeyword = "Resources";
 	private const string DirectorySeparator = "/";
@@ -24,36 +24,42 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 	private const string AssetBundleFullPath = AssetsDirectory + "AssetBundles";
 	private const string AssetsKeyword = "Assets";
 
-	private readonly BundledAssetsExportMode bundledAssetsExportMode;
-
-	public OriginalPathProcessor(BundledAssetsExportMode bundledAssetsExportMode)
-	{
-		this.bundledAssetsExportMode = bundledAssetsExportMode;
-	}
-
 	public void Process(GameData gameData)
 	{
 		Dictionary<AssetCollection, (string BundleName, IAssetBundle BundleAsset)> dictionary = [];
 		Dictionary<AssetCollection, string?> originalDirectories = [];
-		foreach (IUnityObjectBase asset in gameData.GameBundle.FetchAssets())
+		// 用元数据枚举避免 FetchAssets() 触发全量反序列化。
+		// 仅对 IResourceManager (147) 与 IAssetBundle (142) 调用 TryGetAssetOnly 做单对象反序列化。
+		foreach (AssetCollection collection in gameData.GameBundle.FetchAssetCollections())
 		{
-			switch (asset)
+			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
 			{
-				case IResourceManager resourceManager:
-					SetOriginalPaths(resourceManager);
-					break;
-				case IAssetBundle assetBundle:
+				if (meta.ClassID == 147) // IResourceManager
+				{
+					IResourceManager? resourceManager = collection.TryGetAssetOnly<IResourceManager>(meta.PathID);
+					if (resourceManager is not null)
+					{
+						SetOriginalPaths(resourceManager);
+					}
+				}
+				else if (meta.ClassID == 142) // IAssetBundle
+				{
+					IAssetBundle? assetBundle = collection.TryGetAssetOnly<IAssetBundle>(meta.PathID);
+					if (assetBundle is null)
+					{
+						continue;
+					}
 					string originalPath = SetOriginalPaths(assetBundle, bundledAssetsExportMode);
 					switch (bundledAssetsExportMode)
 					{
 						case BundledAssetsExportMode.GroupByBundleName:
 							{
 								string assetBundleName = EnsureDoesNotEndWithBundleExtension(assetBundle.GetAssetBundleName());
-								if (asset.Collection.Bundle is not GameBundle)
+								if (assetBundle.Collection.Bundle is not GameBundle)
 								{
-									foreach (AssetCollection collection in asset.Collection.Bundle.Collections)
+									foreach (AssetCollection c in assetBundle.Collection.Bundle.Collections)
 									{
-										dictionary[collection] = (assetBundleName, assetBundle);
+										dictionary[c] = (assetBundleName, assetBundle);
 									}
 								}
 
@@ -61,23 +67,33 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 							}
 						case BundledAssetsExportMode.ContainerExport:
 							// 获取资源文件夹
-							originalDirectories[asset.Collection] = originalPath;
+							originalDirectories[assetBundle.Collection] = originalPath;
 							break;
 					}
-
-					break;
+				}
 			}
 		}
 
 		foreach ((AssetCollection collection, (string BundleName, IAssetBundle BundleAsset)) in dictionary)
 		{
-			foreach (IUnityObjectBase asset in collection)
+			// 用元数据枚举 + collection 级别 OriginalDirectory 持久化，避免反序列化 asset 实例。
+			// ((ClassIDType)meta.ClassID).ToString() 与 asset.ClassName (GetType().Name) 一致——
+			// ClassIDType 枚举名与生成的类型名完全匹配（如 ClassIDType.GameObject 对应类型 GameObject）。
+			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
 			{
-				asset.OriginalDirectory ??= Path.Join(AssetBundleFullPath, BundleName, asset.ClassName);
+				// 保持原 ??= 语义：仅对未设置 OriginalDirectory 的 pathID 设置
+				if (collection.TryGetOriginalDirectory(meta.PathID) is not null)
+				{
+					continue;
+				}
+				string className = ((ClassIDType)meta.ClassID).ToString();
+				collection.SetOriginalDirectory(meta.PathID, Path.Join(AssetBundleFullPath, BundleName, className));
 			}
 		}
 
 
+		// 已知限制：ContainerExport 模式需要访问 asset.GetBestName() 字段，无法用元数据驱动，
+		// 仍触发全量反序列化。后续 spec 可考虑用 ClassID 推导 Name 字段位置以优化此分支。
 		if (bundledAssetsExportMode == BundledAssetsExportMode.ContainerExport)
 		{
 			foreach ((AssetCollection collection, string? originalPath) in originalDirectories)

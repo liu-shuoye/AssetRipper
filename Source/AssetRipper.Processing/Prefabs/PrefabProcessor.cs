@@ -1,4 +1,5 @@
-﻿using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets;
+using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Import.Logging;
 using AssetRipper.SourceGenerated;
@@ -34,7 +35,30 @@ public sealed class PrefabProcessor : IAssetProcessor
 			Bundle? bundle = scene.Collections.Select(c => c.Bundle).FirstOrDefault(b => b is SerializedBundle);
 			if (bundle is not null)
 			{
-				IAssetBundle? assetBundleAsset = bundle.FetchAssets().OfType<IAssetBundle>().FirstOrDefault();
+				// 用元数据枚举找到第一个 IAssetBundle (ClassID 142)，避免 FetchAssets 触发全量反序列化
+				IAssetBundle? assetBundleAsset = null;
+				foreach (AssetCollection c in bundle.FetchAssetCollections())
+				{
+					if (assetBundleAsset is not null)
+					{
+						break;
+					}
+
+					foreach (AssetCollection.AssetMetadata meta in c.EnumerateAssetMetadata())
+					{
+						if (meta.ClassID != 142)
+						{
+							continue;
+						}
+
+						assetBundleAsset = c.TryGetAssetOnly<IAssetBundle>(meta.PathID);
+						if (assetBundleAsset is not null)
+						{
+							break;
+						}
+					}
+				}
+
 				if (assetBundleAsset is not null)
 				{
 					Debug.Assert(!assetBundleAsset.Has_IsStreamedSceneAssetBundle() || assetBundleAsset.IsStreamedSceneAssetBundle);
@@ -47,8 +71,9 @@ public sealed class PrefabProcessor : IAssetProcessor
 			}
 		}
 
-		//Create hierarchies for prefabs with an existing PrefabInstance
-		foreach (IPrefabInstance prefab in gameData.GameBundle.FetchAssets().OfType<IPrefabInstance>())
+		// 使用现有的 PrefabInstance 创建预制件的层级结构
+		// 用元数据枚举找到所有 IPrefabInstance (ClassID 1001)，避免 FetchAssets 触发全量反序列化
+		foreach (IPrefabInstance prefab in gameData.EnumerateAssetsByClassID<IPrefabInstance>(1001))
 		{
 			if (prefab.RootGameObjectP is { } root && !gameObjectsAlreadyProcessed.Contains(root))
 			{
@@ -59,8 +84,9 @@ public sealed class PrefabProcessor : IAssetProcessor
 			}
 		}
 
-		//Create hierarchies for prefabs without an existing PrefabInstance
-		foreach (IGameObject asset in gameData.GameBundle.FetchAssets().OfType<IGameObject>())
+		// 为不存在的预制件实例创建层级关系
+		// 用元数据枚举找到所有 IGameObject (ClassID 1)，避免 FetchAssets 触发全量反序列化
+		foreach (IGameObject asset in gameData.EnumerateAssetsByClassID<IGameObject>(1))
 		{
 			if (gameObjectsAlreadyProcessed.Contains(asset))
 			{
@@ -78,10 +104,12 @@ public sealed class PrefabProcessor : IAssetProcessor
 		}
 	}
 
+
 	private static void AddMissingTransforms(GameData gameData, ProcessedBundle processedBundle, Dictionary<SceneDefinition, ProcessedAssetCollection> sceneCollectionDictionary)
 	{
 		ProcessedAssetCollection missingPrefabTransformCollection = processedBundle.AddNewProcessedCollection("Missing Prefab Transforms", gameData.ProjectVersion);
-		foreach (IGameObject gameObject in gameData.GameBundle.FetchAssets().OfType<IGameObject>().Where(HasNoTransform))
+		// 用元数据枚举找到所有 IGameObject (ClassID 1)，避免 FetchAssets 触发全量反序列化
+		foreach (IGameObject gameObject in gameData.EnumerateAssetsByClassID<IGameObject>(1).Where(HasNoTransform))
 		{
 			Logger.Warning(LogCategory.Processing, $"GameObject {gameObject.Name} has no Transform. Adding one.");
 

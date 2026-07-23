@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Generics;
@@ -21,37 +21,54 @@ public sealed class SceneDefinitionProcessor : IAssetProcessor
 	public void Process(GameData gameData)
 	{
 		Logger.Info(LogCategory.Processing, "Creating Scene Definitions");
+		// 构建设置
 		IBuildSettings? buildSettings = null;
+		// 场景集合
 		HashSet<AssetCollection> sceneCollections = new();
+		// 场景路径
 		Dictionary<AssetCollection, string> scenePaths = new();
+		// 场景 GUID
 		Dictionary<AssetCollection, UnityGuid> sceneGuids = new();
+		// 场景资源包
 		List<IAssetBundle> sceneAssetBundles = new();
 
-		//Find the relevant assets in this single pass over all the assets.
+		//在遍历所有资产的单次过程中查找相关资产。
+		// 用元数据枚举避免触发 EnsureAssetsLoaded 全量反序列化。
+		// 仅对真正需要访问字段的 IOcclusionCullingSettings / IBuildSettings / IAssetBundle 调用 TryGetAssetOnly。
 		foreach (AssetCollection collection in gameData.GameBundle.FetchAssetCollections())
 		{
-			foreach (IUnityObjectBase asset in collection)
+			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
 			{
-				if (asset is ILevelGameManager)
+				// ILevelGameManager 对应 ClassID 29 / 104 / 157 / 196（参见 ClassIDTypeExtention.IsSceneSettings）
+				if (meta.ClassID is 29 or 104 or 157 or 196)
 				{
 					sceneCollections.Add(collection);
-					if (asset is IOcclusionCullingSettings sceneSettings && sceneSettings.Has_SceneGUID())
+					// 仅 OcclusionCullingSettings (29) 需要 SceneGUID 字段
+					if (meta.ClassID == 29)
 					{
-						sceneGuids[collection] = sceneSettings.SceneGUID;
+						IOcclusionCullingSettings? sceneSettings = collection.TryGetAssetOnly<IOcclusionCullingSettings>(meta.PathID);
+						if (sceneSettings is not null && sceneSettings.Has_SceneGUID())
+						{
+							sceneGuids[collection] = sceneSettings.SceneGUID;
+						}
 					}
 				}
-				else if (asset is IBuildSettings buildSettings1)
+				else if (meta.ClassID == 141) // IBuildSettings
 				{
-					buildSettings = buildSettings1;
+					buildSettings = collection.TryGetAssetOnly<IBuildSettings>(meta.PathID);
 				}
-				else if (asset is IAssetBundle assetBundle && assetBundle.IsStreamedSceneAssetBundle)
+				else if (meta.ClassID == 142) // IAssetBundle
 				{
-					sceneAssetBundles.Add(assetBundle);
+					IAssetBundle? assetBundle = collection.TryGetAssetOnly<IAssetBundle>(meta.PathID);
+					if (assetBundle is not null && assetBundle.IsStreamedSceneAssetBundle)
+					{
+						sceneAssetBundles.Add(assetBundle);
+					}
 				}
 			}
 		}
 
-		//Currently, these paths are treated as lower precedent than paths defined in asset bundles, but they should never conflict.
+		// 目前，这些路径被视为比资产包中定义的路径优先级更低，但它们不应发生冲突。
 		foreach (AssetCollection sceneCollection in sceneCollections)
 		{
 			if (SceneHelpers.TryGetScenePath(sceneCollection, buildSettings, out string? scenePath))
@@ -60,13 +77,13 @@ public sealed class SceneDefinitionProcessor : IAssetProcessor
 			}
 		}
 
-		//Extract scene paths from asset bundles.
+		// 从资源包中提取场景路径。
 		foreach (IAssetBundle assetBundleAsset in sceneAssetBundles)
 		{
 			Bundle bundle = assetBundleAsset.Collection.Bundle;
 			if (bundle is not SerializedBundle)
 			{
-				Logger.Log(LogType.Warning, LogCategory.Processing, $"Scene name recovery is not supported for bundles of type {bundle.GetType().Name}");
+				Logger.Log(LogType.Warning, LogCategory.Processing, $"不支持恢复类型为 {bundle.GetType().Name} 的捆绑包的场景名称");
 			}
 			else if (assetBundleAsset.Has_SceneHashes() && assetBundleAsset.SceneHashes.Count > 0)
 			{
@@ -79,7 +96,7 @@ public sealed class SceneDefinitionProcessor : IAssetProcessor
 					string name = SpecialFileNames.FixFileIdentifier(collectionName);
 
 					AssetCollection sceneCollection = bundle.Collections.First(collection => collection.Name == name);
-					sceneCollections.Add(sceneCollection);//Just to be safe
+					sceneCollections.Add(sceneCollection);//为了安全起见
 					scenePaths[sceneCollection] = path;
 				}
 			}
@@ -88,7 +105,7 @@ public sealed class SceneDefinitionProcessor : IAssetProcessor
 				int startingIndex = 0;
 				foreach (AccessPairBase<Utf8String, IAssetInfo> pair in assetBundleAsset.Container)
 				{
-					Debug.Assert(pair.Value.Asset.IsNull(), "Scene pointer is not null");
+					Debug.Assert(pair.Value.Asset.IsNull(), "场景指针不为 null");
 
 					string path = Path.ChangeExtension(pair.Key.String, null);
 					path = OriginalPathHelper.EnsurePathNotRooted(path);
@@ -96,23 +113,23 @@ public sealed class SceneDefinitionProcessor : IAssetProcessor
 					int index = IndexOf(bundle.Collections, sceneCollections, startingIndex);
 					if (index < 0)
 					{
-						throw new Exception($"Scene collection not found in {bundle.Name} at or after index {startingIndex}");
+						throw new Exception($"在 {bundle.Name} 中，从索引 {startingIndex} 开始或之后未找到场景集合");
 					}
 
 					AssetCollection sceneCollection = bundle.Collections[index];
-					sceneCollections.Add(sceneCollection);//Just to be safe
+					sceneCollections.Add(sceneCollection);//为了安全起见
 					scenePaths[sceneCollection] = path;
 					startingIndex = index + 1;
 				}
 			}
 		}
 
-		//Make the scene definitions
+		// 生成场景定义
 		List<SceneDefinition> sceneDefinitions = new();
 		foreach (AssetCollection sceneCollection in sceneCollections)
 		{
 			SceneDefinition sceneDefinition;
-			UnityGuid guid = sceneGuids.TryGetValue(sceneCollection, out UnityGuid sceneGuid) ? sceneGuid : default;
+			UnityGuid guid = sceneGuids.GetValueOrDefault(sceneCollection);
 			if (scenePaths.TryGetValue(sceneCollection, out string? path))
 			{
 				sceneDefinition = SceneDefinition.FromPath(path, guid);
@@ -125,7 +142,7 @@ public sealed class SceneDefinitionProcessor : IAssetProcessor
 			sceneDefinitions.Add(sceneDefinition);
 		}
 
-		//Generate settings for the project
+		// 为项目生成设置
 		{
 			ProcessedAssetCollection processedCollection = gameData.AddNewProcessedCollection("Generated Settings");
 

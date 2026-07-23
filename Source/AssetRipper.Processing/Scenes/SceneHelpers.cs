@@ -81,18 +81,25 @@ public static partial class SceneHelpers
 		return $"{LevelName}{index}";
 	}
 
+	/// <summary>
+	/// 尝试从构建设置中获取场景路径。
+	/// </summary>
+	/// <param name="collection"></param>
+	/// <param name="buildSettings"></param>
+	/// <param name="result"></param>
+	/// <returns></returns>
 	public static bool TryGetScenePath(AssetCollection collection, [NotNullWhen(true)] IBuildSettings? buildSettings, [NotNullWhen(true)] out string? result)
 	{
 		if (buildSettings is not null && TryGetFileNameToSceneIndex(collection.Name, collection.OriginalVersion, out int index))
 		{
 			if (index >= buildSettings.Scenes.Count)
 			{
-				//This can happen in the following situation:
-				//1. A game is built with N scenes and published to a distribution platform.
-				//2. One of the scenes is removed from the project, for whatever reason.
-				//3. The game is built again, with the new scene list.
-				//4. When updating the game, the developer forgets to delete the Nth scene file.
-				//5. Now, there are N-1 scenes in the BuildSettings, but N scene files for AssetRipper to find.
+				// 这种情况可能出现在以下情形中：
+				// 1. 游戏包含 N 个场景，并发布到发行平台。
+				// 2. 因各种原因，项目中的某个场景被删除。
+				// 3. 游戏重新构建，使用更新后的场景列表。
+				// 4. 在更新游戏时，开发者忘记删除第 N 个场景文件。
+				// 5. 此时 BuildSettings 中显示 N-1 个场景，但 AssetRipper 需要查找 N 个场景文件。
 				result = null;
 				return false;
 			}
@@ -111,7 +118,7 @@ public static partial class SceneHelpers
 			else if (Path.IsPathRooted(scenePath))
 			{
 				// pull/uTiny 617
-				// NOTE: absolute project path may contain Assets/ in its name so in this case we get incorrect scene path, but there is no way to bypass this issue
+				// 注意：绝对项目路径中可能包含 Assets/，因此在这种情况下会得到错误的场景路径，但目前无法绕过此问题。
 				int startIndex = scenePath.IndexOf(AssetsName);
 				if (startIndex < 0)
 				{
@@ -127,7 +134,7 @@ public static partial class SceneHelpers
 			}
 			else if (scenePath.Length == 0)
 			{
-				// If a game is built without included scenes, Unity creates one with empty name.
+				// 如果游戏在没有包含场景的情况下构建，Unity 会创建一个名为空的场景。
 				result = null;
 				return false;
 			}

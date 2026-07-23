@@ -1,4 +1,6 @@
-﻿using AssetRipper.Assets.Collections;
+using AssetRipper.Assets;
+using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Metadata;
 using AssetRipper.Import.Logging;
 using AssetRipper.Import.Structure.Assembly;
@@ -24,11 +26,10 @@ public class ScriptableObjectProcessor : IAssetProcessor
 		List<IMonoBehaviour> timelineAssets = new();
 		List<IMonoBehaviour> postProcessProfiles = new();
 
-		foreach (IMonoBehaviour monoBehaviour in gameData.GameBundle.FetchAssets().OfType<IMonoBehaviour>())
+		// 用元数据枚举找到所有 IMonoBehaviour (ClassID 114)，避免 FetchAssets 触发全量反序列化
+		foreach (IMonoBehaviour monoBehaviour in gameData.EnumerateAssetsByClassID<IMonoBehaviour>(114))
 		{
-			if (monoBehaviour.MainAsset is not null)
-			{
-			}
+			if (monoBehaviour.MainAsset is not null) { }
 			else if (monoBehaviour.IsTimelineAsset())
 			{
 				nonuniqueAssets.Add(monoBehaviour);
@@ -48,6 +49,7 @@ public class ScriptableObjectProcessor : IAssetProcessor
 				AddChild(uniqueAssets, nonuniqueAssets, child);
 			}
 		}
+
 		foreach (IMonoBehaviour postProcessProfile in postProcessProfiles)
 		{
 			foreach (IMonoBehaviour child in FindPostProcessProfileChildren(postProcessProfile))
@@ -65,6 +67,7 @@ public class ScriptableObjectProcessor : IAssetProcessor
 			group.Children.AddRange(FindTimelineAssetChildren(timelineAsset).Where(uniqueAssets.Contains));
 			group.SetMainAsset();
 		}
+
 		foreach (IMonoBehaviour postProcessProfile in postProcessProfiles)
 		{
 			ScriptableObjectGroup group = CreateGroup(collection, postProcessProfile);
@@ -75,15 +78,9 @@ public class ScriptableObjectProcessor : IAssetProcessor
 
 	private static void AddChild(HashSet<IMonoBehaviour> uniqueAssets, HashSet<IMonoBehaviour> nonuniqueAssets, IMonoBehaviour child)
 	{
-		if (child.MainAsset is not null)
-		{
-		}
-		else if (nonuniqueAssets.Contains(child))
-		{
-		}
-		else if (uniqueAssets.Add(child))
-		{
-		}
+		if (child.MainAsset is not null) { }
+		else if (nonuniqueAssets.Contains(child)) { }
+		else if (uniqueAssets.Add(child)) { }
 		else
 		{
 			uniqueAssets.Remove(child);
@@ -155,6 +152,7 @@ public class ScriptableObjectProcessor : IAssetProcessor
 				}
 			}
 		}
+
 		if (structure.TryGetField("m_MarkerTrack", out SerializableValue markerTrack))
 		{
 			if (root.Collection.TryGetAsset(markerTrack.AsPPtr.FileID, markerTrack.AsPPtr.PathID, out IMonoBehaviour? child))

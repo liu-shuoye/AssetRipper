@@ -386,7 +386,7 @@ public abstract class Bundle : IDisposable
 	/// <summary>
 	/// 获取此 Bundle 中所有 AssetCollections 的 IEnumerable。
 	/// </summary>
-	/// <returns>An IEnumerable of all AssetCollections in the hierarchy.</returns>
+	/// <returns>包含层级中所有 AssetCollection 的 IEnumerable。</returns>
 	public IEnumerable<AssetCollection> FetchAssetCollections()
 	{
 		foreach (AssetCollection collection in collections)

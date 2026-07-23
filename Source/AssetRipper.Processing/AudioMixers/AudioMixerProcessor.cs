@@ -27,7 +27,7 @@ public sealed class AudioMixerProcessor : IAssetProcessor
 {
 	private static Utf8String ViewName { get; } = new("View");
 
-	//Many uses of IAudioMixerGroupController should be IAudioMixerGroup.
+	// 许多 IAudioMixerGroupController 的使用应为 IAudioMixerGroup。
 
 	public void Process(GameData gameData)
 	{
@@ -36,7 +36,8 @@ public sealed class AudioMixerProcessor : IAssetProcessor
 		ProcessedAssetCollection processedCollection = gameData.AddNewProcessedCollection("Generated Audio Mixer Effects");
 
 		Dictionary<IAudioMixer, Dictionary<UnityGuid, IAudioMixerGroup>> groupGuidMixerMap = new();
-		foreach (IAudioMixerGroup group in gameData.GameBundle.FetchAssets().OfType<IAudioMixerGroup>())
+		// 用元数据枚举找到所有 IAudioMixerGroup (ClassID 273)，避免 FetchAssets 触发全量反序列化
+		foreach (IAudioMixerGroup group in gameData.EnumerateAssetsByClassID<IAudioMixerGroup>(273))
 		{
 			IAudioMixer? mixer = group.AudioMixer_C273P;
 			if (mixer is not null)
@@ -46,7 +47,8 @@ public sealed class AudioMixerProcessor : IAssetProcessor
 			}
 		}
 
-		foreach (IAudioMixer mixer in gameData.GameBundle.FetchAssets().OfType<IAudioMixer>())
+		// 用元数据枚举找到所有 IAudioMixer (ClassID 240)，避免 FetchAssets 触发全量反序列化
+		foreach (IAudioMixer mixer in gameData.EnumerateAssetsByClassID<IAudioMixer>(240))
 		{
 			mixer.MainAsset = mixer;
 			ProcessAssets(mixer, processedCollection, groupGuidMixerMap.GetOrAdd(mixer));
@@ -94,6 +96,7 @@ public sealed class AudioMixerProcessor : IAssetProcessor
 			{
 				group.Send.CopyValues(indexToGuid.IndexNewGuid(groupConstant.SendIndex));
 			}
+
 			group.Mute = groupConstant.Mute;
 			group.Solo = groupConstant.Solo;
 			group.BypassEffects = groupConstant.BypassEffects;
@@ -164,6 +167,7 @@ public sealed class AudioMixerProcessor : IAssetProcessor
 			{
 				effect.SendTargetP = effects[effectConstant.SendTargetEffectIndex];
 			}
+
 			effect.EnableWetMix = enableWetMix;
 			effect.Bypass = effectConstant.Bypass;
 		}
@@ -265,6 +269,7 @@ public sealed class AudioMixerProcessor : IAssetProcessor
 		{
 			groupView.Guids.AddNew().CopyValues(group.GroupID);
 		}
+
 		mixer.CurrentViewIndex = 0;
 		mixer.TargetSnapshotP = mixer.StartSnapshotP;
 	}
@@ -297,10 +302,12 @@ public sealed class AudioMixerProcessor : IAssetProcessor
 					count++;
 				}
 			}
+
 			if (buffer[^1] != 0)
 			{
 				count++;
 			}
+
 			return count;
 		}
 	}
@@ -312,6 +319,7 @@ public sealed class AudioMixerProcessor : IAssetProcessor
 			pair = dictionary.AddNew();
 			pair.Key.CopyValues(key);
 		}
+
 		pair.Value = value;
 	}
 }
