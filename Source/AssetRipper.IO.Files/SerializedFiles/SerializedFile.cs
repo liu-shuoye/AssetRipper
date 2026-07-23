@@ -223,4 +223,30 @@ public sealed class SerializedFile : FileBase
 			UserInformation = builder.UserInformation,
 		};
 	}
+
+	// FileBase 已实现 IDisposable，这里只需重写 Dispose(bool) 释放 ObjectInfo 持有的 SmartStream 引用。
+	private bool disposedValue;
+
+	protected override void Dispose(bool disposing)
+	{
+		if (!disposedValue)
+		{
+			if (disposing)
+			{
+				// 释放所有 ObjectInfo 持有的 SmartStream 引用。
+				// 必须通过索引访问 m_objects[i]：ObjectInfo 是 struct，foreach 会按值拷贝，
+				// 无法修改原数组元素的字段；m_objects[i] 返回的是数组元素的 ref，可以原位修改。
+				// 若 SerializedAssetCollection.ReadData 已通过拷贝释放过引用，此处 FreeReference
+				// 会因 SmartStream.Stream 已为 null 而安全跳过，不会重复扣减引用计数。
+				if (m_objects is not null)
+				{
+					for (int i = 0; i < m_objects.Length; i++)
+					{
+						m_objects[i].ReleaseDataStream();
+					}
+				}
+			}
+			disposedValue = true;
+		}
+	}
 }

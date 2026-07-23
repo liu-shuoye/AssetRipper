@@ -43,7 +43,20 @@ public static class GameFileLoader
 	{
 		if (GameData is not null)
 		{
+			try
+			{
+				// 显式释放 Bundle 持有的所有非托管资源（FileStream、AssetCollection 字典等）
+				GameData.GameBundle.Dispose();
+			}
+			catch (Exception ex)
+			{
+				// 即使 Dispose 抛异常也不能阻塞重置流程，否则用户无法重新加载
+				Logger.Error(LogCategory.General, $"Error during GameBundle disposal: {ex}");
+			}
 			GameData = null;
+			// 双轮 GC：第一轮触发 finalizer，第二轮回收 finalizer 释放的对象
+			GC.Collect();
+			GC.WaitForPendingFinalizers();
 			GC.Collect();
 			Logger.Info(LogCategory.General, "Data was reset.");
 		}

@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.IO;
 using AssetRipper.Assets.Metadata;
 using AssetRipper.IO.Files.SerializedFiles;
@@ -77,11 +77,27 @@ public sealed class SerializedAssetCollection : AssetCollection
 		{
 			int classID = objectInfo.TypeID < 0 ? 114 : objectInfo.TypeID;
 			AssetInfo assetInfo = new AssetInfo(collection, objectInfo.FileID, classID);
-			IUnityObjectBase? asset = factory.ReadAsset(assetInfo, objectInfo.ObjectData, objectInfo.Type);
+			// 按需从底层流读取对象二进制数据，反序列化后立即释放 SmartStream 引用，
+			// 避免在资产反序列化完成后仍持有文件流引用。
+			// 注意：objectInfo 是 foreach 拷贝，ReleaseDataStream 会通过共享的 SmartStream
+			// 释放底层流引用；原数组中 ObjectInfo 的 _dataStream 字段仍非 null，但其
+			// SmartStream.Stream 已被置空，后续 LoadObjectData 会安全回退到 ObjectData 字段。
+			IUnityObjectBase? asset = factory.ReadAsset(assetInfo, objectInfo.LoadObjectData(), objectInfo.Type);
+			objectInfo.ReleaseDataStream();
 			if (asset is not null)
 			{
 				collection.AddAsset(asset);
 			}
 		}
+	}
+
+	protected override void Dispose(bool disposing)
+	{
+		if (disposing)
+		{
+			// DependencyIdentifiers 是加载阶段临时数据，加载完成后已不再需要
+			DependencyIdentifiers = null;
+		}
+		base.Dispose(disposing);
 	}
 }
