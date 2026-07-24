@@ -53,8 +53,8 @@ namespace AssetRipper.Processing.Editor;
 /// <para>
 /// <b>分阶段执行策略：</b>
 /// <list type="bullet">
-/// <item><see cref="Process"/> 阶段仅处理 <see cref="ProcessStageClassIDs"/> 中的类型——这些 Convert 会清空源数据以释放内存（破坏性内存优化），必须在反序列化后立即执行，否则源数据 + 转换结果会同时驻留。</item>
-/// <item>其余类型由 <see cref="ProcessForExport"/> 在导出阶段按需处理（见 <see cref="ExportStageClassIDs"/>）。</item>
+/// <item><see cref="Process"/> 阶段仅构建 <see cref="checksumCache"/> 并通过 <see cref="PrepareForExport"/> 准备依赖，不再执行 Convert。</item>
+/// <item>所有 Convert 由 <see cref="ProcessForExport"/> 在导出阶段按需处理（见 <see cref="ExportStageClassIDs"/>）。</item>
 /// <item>调用方需在导出开始前先调用 <see cref="PrepareForExport"/> 重建 <see cref="tagManager"/> 与 <see cref="assemblyManager"/> 依赖。</item>
 /// </list>
 /// </para>
@@ -68,44 +68,14 @@ public class EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMo
 
 	public void Process(GameData gameData)
 	{
-		Logger.Info(LogCategory.Processing, "编辑格式转换（破坏性内存优化阶段）");
+		Logger.Info(LogCategory.Processing, "编辑格式转换（准备阶段）");
 
-		// 仅 AnimationClip 需要 checksumCache；AssetBundle 不需要外部依赖。
-		// 重建 checksumCache 会反序列化 IAvatar/IAnimator/IAnimation 用于构建路径缓存，这是必要的。
+		// checksumCache 供 Export 阶段的 ProcessForExport → Convert(IAnimationClip) 使用。
+		// 必须在 Process 阶段构建（此时资产尚未被 Unload），PathChecksumCache 构造函数会反序列化
+		// IAvatar/IAnimator/IAnimation 来构建路径缓存，这些资产在 Unload 后释放但缓存本身仍有效。
 		checksumCache = new PathChecksumCache(gameData);
 
 		PrepareForExport(gameData);
-
-		// 元数据驱动：仅对 ProcessStageClassIDs 命中的 ClassID 调用 TryGetAssetOnly，
-		// 避免原 SelectMany(c => c) 触发 GetEnumerator → EnsureAssetsLoaded 的全量反序列化。
-		// TryGetAssetOnly 内部写入 assets 字典非线程安全，故先 sequential 反序列化到 List，
-		// 再由后续 Parallel.ForEach 处理 List，避免并发写字典。
-		List<IUnityObjectBase> assetsToProcess = new();
-		foreach (AssetCollection collection in GetReleaseCollections(gameData))
-		{
-			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
-			{
-				if (!NeedsConversionInProcess(meta.ClassID))
-				{
-					continue;
-				}
-
-				IUnityObjectBase? asset = collection.TryGetAssetOnly(meta.PathID);
-				if (asset is not null)
-				{
-					assetsToProcess.Add(asset);
-				}
-			}
-		}
-
-		// 顺序处理：AnimationClip 的 Convert 依赖 checksumCache，且 ProcessInner 内部有状态写入，不能并行
-		foreach (IUnityObjectBase asset in assetsToProcess)
-		{
-			Convert(asset);
-		}
-
-		// 并行处理：AssetBundle 的 PreloadTable.Clear 是无共享状态的破坏性操作，可并行
-		Parallel.ForEach(assetsToProcess, ConvertAsync);
 	}
 
 	/// <summary>
@@ -144,7 +114,7 @@ public class EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMo
 		}
 
 		assemblyManager = gameData.AssemblyManager;
-		// checksumCache 仅 AnimationClip 需要，而 AnimationClip 已在 Process 阶段处理，导出阶段不需要
+		// checksumCache 在 Process 阶段已构建，此处无需重建；供 Export 阶段的 ProcessForExport 使用
 	}
 
 	/// <summary>
@@ -153,8 +123,8 @@ public class EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMo
 	/// </summary>
 	/// <remarks>
 	/// <para>幂等：字段被设置为确定值，多次调用不会累积错误。</para>
-	/// <para>仅处理 <see cref="ExportStageClassIDs"/> 中的类型——破坏性内存优化类型已在
-	/// <see cref="Process"/> 阶段处理完毕，此处跳过以避免重复执行（AnimationClip 源数据已被清空）。</para>
+	/// <para>仅处理 <see cref="ExportStageClassIDs"/> 中的类型——Process 阶段不再执行任何 Convert，
+	/// 所有转换（含 AnimationClip 解压与源数据清空）均在此处按需执行。</para>
 	/// </remarks>
 	public void ProcessForExport(IUnityObjectBase asset)
 	{
@@ -167,26 +137,10 @@ public class EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMo
 		ConvertAsync(asset);
 	}
 
-	private static IEnumerable<AssetCollection> GetReleaseCollections(GameData gameData)
-	{
-		return gameData.GameBundle.FetchAssetCollections().Where(c => c.Flags.IsRelease());
-	}
-
-	/// <summary>
-	/// Process 阶段需处理的 ClassID 集合（破坏性内存优化）。
-	/// 这些 Convert 会清空源数据以释放内存，必须在反序列化后立即执行，
-	/// 不能延迟到导出阶段（否则源数据 + 转换结果会同时驻留）。
-	/// </summary>
-	private static readonly HashSet<int> ProcessStageClassIDs = new()
-	{
-		// (int)ClassIDType.AnimationClip, // IAnimationClip - 清空 StreamedClip/DenseClip/ConstantClip
-		// (int)ClassIDType.AssetBundle,   // IAssetBundle - 清空 PreloadTable
-	};
-
 	/// <summary>
 	/// 导出阶段需处理的 ClassID 集合（非破坏性字段设置/计算）。
 	/// 这些 Convert 只是设置编辑器默认值或重算字段，可安全延迟到导出阶段按需执行。
-	/// 若未来 Convert / ConvertAsync 新增 case，需同步更新此集合与 <see cref="ProcessStageClassIDs"/>。
+	/// 若未来 Convert / ConvertAsync 新增 case，需同步更新此集合。
 	/// </summary>
 	private static readonly HashSet<int> ExportStageClassIDs = new()
 	{
@@ -221,8 +175,6 @@ public class EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMo
 		(int)ClassIDType.UIRenderer, // IUIRenderer (Convert - IRenderer)
 		(int)ClassIDType.SpriteShapeRenderer, // ISpriteShapeRenderer (Convert - IRenderer)
 	};
-
-	private static bool NeedsConversionInProcess(int classID) => ProcessStageClassIDs.Contains(classID);
 
 	private static bool NeedsConversionForExport(int classID) => ExportStageClassIDs.Contains(classID);
 

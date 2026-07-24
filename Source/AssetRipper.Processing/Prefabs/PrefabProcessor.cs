@@ -47,7 +47,7 @@ public sealed class PrefabProcessor : IAssetProcessor
 
 					foreach (AssetCollection.AssetMetadata meta in c.EnumerateAssetMetadata())
 					{
-						if (meta.ClassID != 142)
+						if (meta.ClassID != (int)ClassIDType.AssetBundle)
 						{
 							continue;
 						}
@@ -74,7 +74,7 @@ public sealed class PrefabProcessor : IAssetProcessor
 
 		// 使用现有的 PrefabInstance 创建预制件的层级结构
 		// 用元数据枚举找到所有 IPrefabInstance (ClassID 1001)，避免 FetchAssets 触发全量反序列化
-		foreach (IPrefabInstance prefab in gameData.EnumerateAssetsByClassID<IPrefabInstance>(1001))
+		foreach (IPrefabInstance prefab in gameData.EnumerateAssetsByClassID<IPrefabInstance>((int)ClassIDType.PrefabInstance))
 		{
 			if (prefab.RootGameObjectP is { } root && !gameObjectsAlreadyProcessed.Contains(root))
 			{
@@ -84,10 +84,10 @@ public sealed class PrefabProcessor : IAssetProcessor
 				gameObjectsAlreadyProcessed.AddRange(prefabHierarchy.GameObjects);
 			}
 		}
-		// TODO 这里加载了所有 资源
+		// TODO 这里加载了所有资源？
 		// 为不存在的预制件实例创建层级关系
 		// 用元数据枚举找到所有 IGameObject (ClassID 1)，避免 FetchAssets 触发全量反序列化
-		foreach (IGameObject asset in gameData.EnumerateAssetsByClassID<IGameObject>(1))
+		foreach (IGameObject asset in gameData.EnumerateAssetsByClassID<IGameObject>((int)ClassIDType.GameObject))
 		{
 			if (gameObjectsAlreadyProcessed.Contains(asset))
 			{
@@ -110,7 +110,7 @@ public sealed class PrefabProcessor : IAssetProcessor
 	{
 		ProcessedAssetCollection missingPrefabTransformCollection = processedBundle.AddNewProcessedCollection("Missing Prefab Transforms", gameData.ProjectVersion);
 		// 用元数据枚举找到所有 IGameObject (ClassID 1)，避免 FetchAssets 触发全量反序列化
-		foreach (IGameObject gameObject in gameData.EnumerateAssetsByClassID<IGameObject>(1).Where(HasNoTransform))
+		foreach (IGameObject gameObject in gameData.EnumerateAssetsByClassID<IGameObject>((int)ClassIDType.GameObject).Where(HasNoTransform))
 		{
 			Logger.Warning(LogCategory.Processing, $"游戏对象 {gameObject.Name} 没有 Transform。正在添加一个。");
 

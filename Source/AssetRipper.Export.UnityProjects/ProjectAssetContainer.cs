@@ -4,6 +4,7 @@ using AssetRipper.Export.UnityProjects.Project;
 using AssetRipper.Import.Configuration;
 using AssetRipper.Processing.Scenes;
 using AssetRipper.SourceGenerated.Classes.ClassID_141;
+using AssetRipper.SourceGenerated.Extensions.SourceGenerator;
 using System.Diagnostics;
 
 
@@ -11,7 +12,7 @@ namespace AssetRipper.Export.UnityProjects;
 
 public class ProjectAssetContainer : IExportContainer
 {
-	public ProjectAssetContainer(ProjectExporter exporter, CoreConfiguration options, IEnumerable<IUnityObjectBase> assets,
+	public ProjectAssetContainer(ProjectExporter exporter, CoreConfiguration options, IEnumerable<AssetCollection> assetCollections,
 		IReadOnlyList<IExportCollection> collections, HashSet<IExportCollection> skippedCollections,
 		Dictionary<IUnityObjectBase, IUnityObjectBase> redirectMap)
 	{
@@ -22,7 +23,29 @@ public class ProjectAssetContainer : IExportContainer
 
 		ExportVersion = options.Version;
 
-		m_buildSettings = assets.OfType<IBuildSettings>().FirstOrDefault();
+		// 用元数据枚举查找 IBuildSettings (ClassID 141)，避免 OfType 触发全量反序列化
+		m_buildSettings = null;
+		foreach (AssetCollection collection in assetCollections)
+		{
+			if (m_buildSettings is not null)
+			{
+				break;
+			}
+
+			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
+			{
+				if (meta.ClassID != (int)ClassIDType.BuildSettings)
+				{
+					continue;
+				}
+
+				m_buildSettings = collection.TryGetAssetOnly<IBuildSettings>(meta.PathID);
+				if (m_buildSettings is not null)
+				{
+					break;
+				}
+			}
+		}
 
 		List<SceneExportCollection> scenes = new();
 		foreach (IExportCollection collection in collections)

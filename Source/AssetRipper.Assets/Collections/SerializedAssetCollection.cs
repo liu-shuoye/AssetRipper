@@ -250,7 +250,7 @@ public sealed class SerializedAssetCollection : AssetCollection
 	/// </summary>
 	public override void UnloadAssets()
 	{
-		base.UnloadAssets();
+		assets.Clear();
 		_assetsLoaded = false;
 	}
 

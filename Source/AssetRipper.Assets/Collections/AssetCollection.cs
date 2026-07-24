@@ -405,11 +405,13 @@ public abstract class AssetCollection : IReadOnlyCollection<IUnityObjectBase>, I
 	/// <summary>
 	/// 清空已反序列化的资产对象，但保留重新加载所需的数据源引用。
 	/// 调用后再次访问资产会触发 <see cref="EnsureAssetsLoaded"/> 重新反序列化。
-	/// 默认实现清空 assets 字典；子类可重写以重置懒加载标志。
+	/// 默认实现为空操作——非懒加载 collection（<see cref="ProcessedAssetCollection"/> /
+	/// <see cref="VirtualAssetCollection"/>）持有的资产不可恢复，不能被释放。
+	/// 子类 <see cref="SerializedAssetCollection"/> 重写此方法做真正的清理。
 	/// </summary>
 	public virtual void UnloadAssets()
 	{
-		assets.Clear();
+		// 默认空操作：非懒加载 collection 持有的是 Process 阶段新建的资产，不能被释放。
 	}
 
 	public IUnityObjectBase? TryGetAsset(long pathID)
@@ -572,7 +574,10 @@ public abstract class AssetCollection : IReadOnlyCollection<IUnityObjectBase>, I
 		{
 			if (disposing)
 			{
-				// 清空资产字典以断开对象图引用，让 GC 能尽早回收反序列化的资产
+				// 先调用 UnloadAssets 让懒加载子类（SerializedAssetCollection）清空资产并重置懒加载标志
+				UnloadAssets();
+				// 对于非懒加载 collection（ProcessedAssetCollection 等），UnloadAssets 是空操作，
+				// 此处额外清空 assets 字典以断开对象图引用，让 GC 能尽早回收
 				assets.Clear();
 				_originalDirectoryOverrides?.Clear();
 				_originalDirectoryOverrides = null;

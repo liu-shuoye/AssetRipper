@@ -189,7 +189,7 @@ internal sealed class ContentHashWalker : AssetWalker
 
 	public override void VisitPPtr<TAsset>(PPtr<TAsset> pptr)
 	{
-		IUnityObjectBase? target = rootAsset.Collection?.TryGetAsset(pptr.FileID, pptr.PathID);
+		IUnityObjectBase? target = rootAsset.Collection?.TryGetAssetOnly(pptr.FileID, pptr.PathID);
 		if (target is null)
 		{
 			// Target not resolvable; fall back to hashing the pointer coordinates.

@@ -102,7 +102,7 @@ internal class DeduplicationTests
 		BaseManager assemblyManager = new(_ => { });
 		ProjectExporter projectExporter = new(settings, assemblyManager);
 
-		ProjectAssetContainer container = new(projectExporter, settings, gameBundle.FetchAssets(),
+		ProjectAssetContainer container = new(projectExporter, settings, gameBundle.FetchAssetCollections(),
 			new List<IExportCollection> { keptCollection!, skippedCollection! }, skippedCollections, redirectMap);
 		container.CurrentCollection = keptCollection!;
 

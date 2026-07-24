@@ -1,6 +1,7 @@
 using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Cloning;
+using AssetRipper.Assets.Collections;
 using AssetRipper.Export.UnityProjects.Project;
 using AssetRipper.Import.Configuration;
 using AssetRipper.Import.Logging;
@@ -81,6 +82,8 @@ public sealed partial class ProjectExporter
 		throw new Exception($"There is no exporter that can handle '{asset}'");
 	}
 
+	/// <summary> 导出项目。 </summary>
+	/// <param name="fileSystem"></param>
 	/// <param name="editorFormatProcessor">
 	/// 可选的 EditorFormat 处理器。传入时其 <see cref="EditorFormatProcessor.ProcessForExport"/>
 	/// 会作为按需转换回调注入 <see cref="ProjectAssetContainer"/>，由
@@ -88,6 +91,8 @@ public sealed partial class ProjectExporter
 	/// 调用方需在传入前先执行 <see cref="EditorFormatProcessor.PrepareForExport"/>。
 	/// 传 <c>null</c> 时禁用延迟转换（兼容旧调用路径）。
 	/// </param>
+	/// <param name="fileCollection"></param>
+	/// <param name="options"></param>
 	public void Export(GameBundle fileCollection, CoreConfiguration options, FileSystem fileSystem,
 		EditorFormatProcessor? editorFormatProcessor = null)
 	{
@@ -104,7 +109,7 @@ public sealed partial class ProjectExporter
 		EventExportPreparationFinished?.Invoke();
 
 		EventExportStarted?.Invoke();
-		ProjectAssetContainer container = new ProjectAssetContainer(this, options, fileCollection.FetchAssets(),
+		ProjectAssetContainer container = new ProjectAssetContainer(this, options, fileCollection.FetchAssetCollections(),
 			collections, skippedCollections, redirectMap);
 
 		// 注入按需转换回调：ProjectYamlWalker.ExportYamlDocument 会在 WalkEditor 之前调用它，
@@ -152,17 +157,24 @@ public sealed partial class ProjectExporter
 		List<IExportCollection> collections = new();
 		HashSet<IUnityObjectBase> queued = new();
 
-		foreach (IUnityObjectBase asset in fileCollection.FetchAssets())
+		// 用元数据枚举 + 按需反序列化替代 FetchAssets() 全量遍历，避免一次性触发所有 collection 的 EnsureAssetsLoaded。
+		// Process 阶段完成后已调用 UnloadAssets，此处对每个 meta 调用 TryGetAssetOnly 只反序列化单个对象。
+		foreach (AssetCollection collection in fileCollection.FetchAssetCollections())
 		{
-			if (!queued.Contains(asset))
+			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
 			{
-				IExportCollection collection = CreateCollection(asset);
-				foreach (IUnityObjectBase element in collection.Assets)
+				IUnityObjectBase? asset = collection.TryGetAssetOnly(meta.PathID);
+				if (asset is null || queued.Contains(asset))
+				{
+					continue;
+				}
+
+				IExportCollection exportCollection = CreateCollection(asset);
+				foreach (IUnityObjectBase element in exportCollection.Assets)
 				{
 					queued.Add(element);
 				}
-
-				collections.Add(collection);
+				collections.Add(exportCollection);
 			}
 		}
 

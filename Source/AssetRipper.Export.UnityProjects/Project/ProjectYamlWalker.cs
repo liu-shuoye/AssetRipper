@@ -59,7 +59,7 @@ public sealed class ProjectYamlWalker : YamlWalker
 		{
 			return MetaPtr.NullPtr.ExportYaml(container.ExportVersion);
 		}
-		else if (CurrentAsset.Collection.TryGetAsset(pptr, out TAsset? asset))
+		else if (CurrentAsset.Collection.TryGetAssetOnly(pptr.PathID, out TAsset? asset))
 		{
 			return container.CreateExportPointer(asset).ExportYaml(container.ExportVersion);
 		}

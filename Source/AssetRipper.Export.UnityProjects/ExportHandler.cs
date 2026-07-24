@@ -1,4 +1,5 @@
 using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets.Collections;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects.PathIdMapping;
 using AssetRipper.Export.UnityProjects.Project;
@@ -114,11 +115,21 @@ public sealed class ExportHandler(FullConfiguration settings)
 		projectExporter.DoFinalOverrides(Settings);
 		Logger.LogMemoryDiagnostics("Export前 - DoFinalOverrides完成");
 
-		// 为导出阶段准备 EditorFormatProcessor：重建 tagManager 与 assemblyManager 依赖。
-		// Process 阶段已处理破坏性内存优化（AnimationClip、AssetBundle），此处仅准备导出阶段所需的依赖，
-		// 让 ProjectYamlWalker 在 WalkEditor 之前能按需对单个资产调用 ProcessForExport。
-		EditorFormatProcessor.PrepareForExport(gameData);
-		Logger.LogMemoryDiagnostics("Export前 - EditorFormatProcessor.PrepareForExport完成");
+		// Process 阶段已反序列化的资产在 Export 开始前释放，让 Load/Process 阶段的内存峰值在 Export 前下降。
+		// SerializedAssetCollection.UnloadAssets 清空 assets 字典并重置 _assetsLoaded，保留 _sourceFile/_factory
+		// 以便 Export 阶段按需重新反序列化。ProcessedAssetCollection 等非懒加载 collection 的 UnloadAssets 为空操作。
+		Logger.LogMemoryDiagnostics("Process 后 Unload 前");
+		foreach (AssetCollection collection in gameData.GameBundle.FetchAssetCollections())
+		{
+			collection.UnloadAssets();
+		}
+		Logger.LogMemoryDiagnostics("Process 后 Unload 完成");
+
+		// // 为导出阶段准备 EditorFormatProcessor：重建 tagManager 与 assemblyManager 依赖。
+		// // Process 阶段不再执行 Convert/ConvertAsync，此处仅准备导出阶段所需的依赖，
+		// // 让 ProjectYamlWalker 在 WalkEditor 之前能按需对单个资产调用 ProcessForExport。
+		// EditorFormatProcessor.PrepareForExport(gameData);
+		// Logger.LogMemoryDiagnostics("Export前 - EditorFormatProcessor.PrepareForExport完成");
 
 		projectExporter.Export(gameData.GameBundle, Settings, fileSystem, EditorFormatProcessor);
 		Logger.LogMemoryDiagnostics("Export后 - 主导出完成");
