@@ -1,4 +1,3 @@
-using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Generics;
@@ -8,7 +7,6 @@ using AssetRipper.SourceGenerated.Classes.ClassID_1045;
 using AssetRipper.SourceGenerated.Classes.ClassID_141;
 using AssetRipper.SourceGenerated.Classes.ClassID_142;
 using AssetRipper.SourceGenerated.Classes.ClassID_29;
-using AssetRipper.SourceGenerated.Classes.ClassID_3;
 using AssetRipper.SourceGenerated.Extensions;
 using AssetRipper.SourceGenerated.Subclasses.AssetInfo;
 using AssetRipper.SourceGenerated.Subclasses.Scene;
@@ -20,7 +18,7 @@ public sealed class SceneDefinitionProcessor : IAssetProcessor
 {
 	public void Process(GameData gameData)
 	{
-		Logger.Info(LogCategory.Processing, "Creating Scene Definitions");
+		Logger.Info(LogCategory.Processing, "创建场景定义");
 		// 构建设置
 		IBuildSettings? buildSettings = null;
 		// 场景集合

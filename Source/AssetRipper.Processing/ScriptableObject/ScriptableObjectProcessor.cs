@@ -14,7 +14,7 @@ public class ScriptableObjectProcessor : IAssetProcessor
 {
 	public void Process(GameData gameData)
 	{
-		Logger.Info(LogCategory.Processing, "Processing Scriptable Object Groups");
+		Logger.Info(LogCategory.Processing, "处理可脚本化对象组");
 		ProcessedAssetCollection collection = gameData.AddNewProcessedCollection("Generated Scriptable Object Groups");
 
 		// Assets that can be a child of a group

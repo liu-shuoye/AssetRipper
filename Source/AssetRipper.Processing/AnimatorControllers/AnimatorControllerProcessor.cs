@@ -21,7 +21,7 @@ public sealed class AnimatorControllerProcessor : IAssetProcessor
 {
 	public void Process(GameData gameData)
 	{
-		Logger.Info(LogCategory.Processing, "Reconstruct AnimatorController Assets");
+		Logger.Info(LogCategory.Processing, "重建 AnimatorController 资源");
 
 		// 用元数据枚举 + TryGetAssetOnly 仅反序列化 ClassID_91 (IAnimatorController) 对象，
 		// 替代原 SelectMany(c => c.OfType<IAnimatorController>())。后者通过 GetEnumerator 触发

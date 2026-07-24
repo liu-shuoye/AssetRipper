@@ -31,7 +31,7 @@ public sealed class AudioMixerProcessor : IAssetProcessor
 
 	public void Process(GameData gameData)
 	{
-		Logger.Info(LogCategory.Processing, "Reconstruct AudioMixer Assets");
+		Logger.Info(LogCategory.Processing, "重建音频混音器资源");
 
 		ProcessedAssetCollection processedCollection = gameData.AddNewProcessedCollection("Generated Audio Mixer Effects");
 

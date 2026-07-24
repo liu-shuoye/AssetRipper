@@ -51,7 +51,7 @@ public abstract class Bundle : IDisposable
 	public abstract string Name { get; }
 
 	/// <summary>
-	/// All the <see cref="SceneDefinition"/>s in this bundle.
+	/// 此捆绑包中的所有 <see cref="SceneDefinition"/>。
 	/// </summary>
 	public IEnumerable<SceneDefinition> Scenes
 	{

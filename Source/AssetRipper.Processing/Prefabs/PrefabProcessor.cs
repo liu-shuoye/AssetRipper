@@ -24,8 +24,9 @@ public sealed class PrefabProcessor : IAssetProcessor
 		AddMissingTransforms(gameData, processedBundle, sceneCollectionDictionary);
 
 		HashSet<IGameObject> gameObjectsAlreadyProcessed = new();
+		
 
-		//Create scene hierarchies
+		// 创建场景层级
 		foreach (SceneDefinition scene in gameData.GameBundle.Scenes.ToList())
 		{
 			ProcessedAssetCollection sceneCollection = GetOrCreateSceneCollection(gameData, processedBundle, sceneCollectionDictionary, scene);
@@ -83,7 +84,7 @@ public sealed class PrefabProcessor : IAssetProcessor
 				gameObjectsAlreadyProcessed.AddRange(prefabHierarchy.GameObjects);
 			}
 		}
-
+		// TODO 这里加载了所有 资源
 		// 为不存在的预制件实例创建层级关系
 		// 用元数据枚举找到所有 IGameObject (ClassID 1)，避免 FetchAssets 触发全量反序列化
 		foreach (IGameObject asset in gameData.EnumerateAssetsByClassID<IGameObject>(1))
@@ -111,7 +112,7 @@ public sealed class PrefabProcessor : IAssetProcessor
 		// 用元数据枚举找到所有 IGameObject (ClassID 1)，避免 FetchAssets 触发全量反序列化
 		foreach (IGameObject gameObject in gameData.EnumerateAssetsByClassID<IGameObject>(1).Where(HasNoTransform))
 		{
-			Logger.Warning(LogCategory.Processing, $"GameObject {gameObject.Name} has no Transform. Adding one.");
+			Logger.Warning(LogCategory.Processing, $"游戏对象 {gameObject.Name} 没有 Transform。正在添加一个。");
 
 			ProcessedAssetCollection collection;
 			if (gameObject.Collection.IsScene)

@@ -7,6 +7,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\AssetRipper.IO.Files\AssetRipper.IO.Files.csproj" />
+		<ProjectReference Include="..\AssetRipper.SourceGenerated.Extensions.SourceGenerator\AssetRipper.SourceGenerated.Extensions.SourceGenerator.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

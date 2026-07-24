@@ -2,6 +2,7 @@ using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Generics;
+using AssetRipper.Import.Logging;
 using AssetRipper.Processing.Configuration;
 using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Classes.ClassID_142;
@@ -15,6 +16,10 @@ using AssetRipper.SourceGenerated.Subclasses.PPtr_Object;
 
 namespace AssetRipper.Processing.Scenes;
 
+/// <summary>
+/// 处理原始路径
+/// </summary>
+/// <param name="bundledAssetsExportMode"></param>
 public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsExportMode) : IAssetProcessor
 {
 	private const string ResourcesKeyword = "Resources";
@@ -26,6 +31,7 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 
 	public void Process(GameData gameData)
 	{
+		Logger.Info(LogCategory.Processing, "处理原始路径");
 		Dictionary<AssetCollection, (string BundleName, IAssetBundle BundleAsset)> dictionary = [];
 		Dictionary<AssetCollection, string?> originalDirectories = [];
 		// 用元数据枚举避免 FetchAssets() 触发全量反序列化。
@@ -49,6 +55,7 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 					{
 						continue;
 					}
+
 					string originalPath = SetOriginalPaths(assetBundle, bundledAssetsExportMode);
 					switch (bundledAssetsExportMode)
 					{
@@ -86,6 +93,7 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 				{
 					continue;
 				}
+
 				string className = ((ClassIDType)meta.ClassID).ToString();
 				collection.SetOriginalDirectory(meta.PathID, Path.Join(AssetBundleFullPath, BundleName, className));
 			}
@@ -105,22 +113,23 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 
 				string? originalDirectory = Path.GetDirectoryName(originalPath);
 				// 用元数据枚举 + TryGetAssetTransient 检查 GetBestName：
-			// transient 反序列化不进入 assets 字典，循环结束后对象即可被 GC 回收，
-			// 避免此前 TryGetAssetOnly 把 collection 中所有非 Shader 对象永久驻留字典造成的 1.6GB 内存峰值。
-			// 短路：count > 30 时立即退出，等价于原 Count(predicate) > 30 判断
-			int count = 0;
-			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
-			{
-				IUnityObjectBase? asset = collection.TryGetAssetTransient(meta.PathID);
-				if (asset is not null && asset.GetBestName() != asset.ClassName)
+				// transient 反序列化不进入 assets 字典，循环结束后对象即可被 GC 回收，
+				// 避免此前 TryGetAssetOnly 把 collection 中所有非 Shader 对象永久驻留字典造成的 1.6GB 内存峰值。
+				// 短路：count > 30 时立即退出，等价于原 Count(predicate) > 30 判断
+				int count = 0;
+				foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
 				{
-					count++;
-					if (count > 30)
+					IUnityObjectBase? asset = collection.TryGetAssetTransient(meta.PathID);
+					if (asset is not null && asset.GetBestName() != asset.ClassName)
 					{
-						break;
+						count++;
+						if (count > 30)
+						{
+							break;
+						}
 					}
 				}
-			}
+
 				if (count > 30)
 				{
 					// 移除扩展名
@@ -137,10 +146,12 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 					{
 						continue;
 					}
+
 					if (collection.TryGetOriginalDirectory(meta.PathID) is not null)
 					{
 						continue;
 					}
+
 					collection.SetOriginalDirectory(meta.PathID, originalDirectory!);
 				}
 			}

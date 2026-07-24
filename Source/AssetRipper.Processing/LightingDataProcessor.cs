@@ -27,13 +27,13 @@ namespace AssetRipper.Processing;
 public class LightingDataProcessor : IAssetProcessor
 {
 	/// <summary>
-	/// The default name of newly created <see cref="ILightingDataAsset"/>s.
+	/// 新创建的 <see cref="ILightingDataAsset"/> 的默认名称。
 	/// </summary>
 	private static Utf8String LightingDataName { get; } = new("LightingData");
 
 	public void Process(GameData gameData)
 	{
-		Logger.Info(LogCategory.Processing, "Lighting Data Assets");
+		Logger.Info(LogCategory.Processing, "照明数据资产");
 		ProcessedAssetCollection processedCollection = gameData.AddNewProcessedCollection("Generated Lighting Data Assets");
 
 		Dictionary<ILightmapSettings, SceneDefinition> lightmapSettingsDictionary = new();
@@ -42,7 +42,7 @@ public class LightingDataProcessor : IAssetProcessor
 
 		foreach (SceneDefinition scene in gameData.GameBundle.Scenes)
 		{
-			//Only scenes can contain a LightmapSettings asset.
+			// 只有场景才能包含 LightmapSettings 资产。
 			ILightmapSettings? lightmapSettings = scene.Assets.OfType<ILightmapSettings>().FirstOrDefault();
 			if (lightmapSettings is null)
 			{
@@ -52,7 +52,7 @@ public class LightingDataProcessor : IAssetProcessor
 			IRenderSettings? renderSettings = scene.Assets.OfType<IRenderSettings>().FirstOrDefault();
 			if (renderSettings is null)
 			{
-				// This should never happen. All scenes need a RenderSettings asset.
+				// 这应该永远不会发生。所有场景都需要一个 RenderSettings 资产。
 				continue;
 			}
 
@@ -60,13 +60,13 @@ public class LightingDataProcessor : IAssetProcessor
 
 			if (lightmapSettings.LightProbesP is { } lightProbes && !lightProbeDictionary.TryAdd(lightProbes, scene))
 			{
-				//This set of light probes is shared between scenes.
+				//这个光探针集在场景之间共享。
 				lightProbeDictionary[lightProbes] = null;
 			}
 
 			if (lightmapSettings.LightingSettingsP is { } lightingSettings && !lightingSettingsDictionary.TryAdd(lightingSettings, scene))
 			{
-				//This LightingSettings is shared between scenes.
+				//这个 LightingSettings 在场景之间共享。
 				lightingSettingsDictionary[lightingSettings] = null;
 			}
 
@@ -92,6 +92,7 @@ public class LightingDataProcessor : IAssetProcessor
 			SetLightProbes(lightingDataAsset, lightmapSettings);
 			SetEnlightenDataVersion(lightingDataAsset);
 
+			// TODO 内存击穿?
 			foreach (IUnityObjectBase asset in scene.Assets)
 			{
 				switch (asset)
@@ -114,13 +115,13 @@ public class LightingDataProcessor : IAssetProcessor
 			ILightProbes? lightProbes = lightmapSettings.LightProbesP;
 			if (lightProbes is not null && lightProbeDictionary[lightProbes] is null)
 			{
-				lightProbes = null;//Shared light probes should not have their path set.
+				lightProbes = null; //共享光探针不应设置其路径。
 			}
 
 			ILightingSettings? lightingSettings = lightmapSettings.LightingSettingsP;
 			if (lightingSettings is not null && lightingSettingsDictionary[lightingSettings] is null)
 			{
-				lightingSettings = null;//Shared light settings should not have their path set.
+				lightingSettings = null; //共享光设置不应设置其路径。
 			}
 
 			SetPathsAndMainAsset(lightmapSettings, lightProbes, lightingSettings, scene);
@@ -129,9 +130,9 @@ public class LightingDataProcessor : IAssetProcessor
 
 	private static void AddRenderer(ILightingDataAsset lightingDataAsset, IRenderer renderer)
 	{
-		//-1 indicates that it's not part of the lightmap.
+		//-1 表示它不属于光照贴图的一部分。
 		ushort lightmapIndex = renderer.GetLightmapIndex();
-		if (lightmapIndex != ushort.MaxValue)// || renderer.LightmapIndexDynamic_C25 != ushort.MaxValue)
+		if (lightmapIndex != ushort.MaxValue) // || renderer.LightmapIndexDynamic_C25 != ushort.MaxValue)
 		{
 			//Scene object identifiers for the renderer associated with each value in the lightmapped renderer data array
 			SceneObjectIdentifier identifier = lightingDataAsset.LightmappedRendererDataIDs.AddNew();
@@ -143,7 +144,7 @@ public class LightingDataProcessor : IAssetProcessor
 
 			//This seems to crash the editor when it's not set to -1.
 			//See: https://github.com/AssetRipper/AssetRipper/issues/811
-			rendererData.LightmapIndexDynamic = ushort.MaxValue;//renderer.LightmapIndexDynamic_C25;
+			rendererData.LightmapIndexDynamic = ushort.MaxValue; //renderer.LightmapIndexDynamic_C25;
 
 			rendererData.LightmapST.CopyValues(renderer.LightmapTilingOffset_C25);
 			rendererData.LightmapSTDynamic.CopyValues(renderer.LightmapTilingOffsetDynamic_C25);
@@ -157,8 +158,8 @@ public class LightingDataProcessor : IAssetProcessor
 
 	private static void AddTerrain(ILightingDataAsset lightingDataAsset, ITerrain terrain)
 	{
-		//-1 indicates that it's not part of the lightmap.
-		if (terrain.LightmapIndex != ushort.MaxValue)// || terrain.LightmapIndexDynamic != ushort.MaxValue)
+		//-1 表示它不属于光照贴图的一部分。
+		if (terrain.LightmapIndex != ushort.MaxValue) // || terrain.LightmapIndexDynamic != ushort.MaxValue)
 		{
 			//Scene object identifiers for the terrain associated with each value in the lightmapped renderer data array
 			SceneObjectIdentifier identifier = lightingDataAsset.LightmappedRendererDataIDs.AddNew();
@@ -170,7 +171,7 @@ public class LightingDataProcessor : IAssetProcessor
 
 			//This seems to crash the editor when it's not set to -1.
 			//See: https://github.com/AssetRipper/AssetRipper/issues/811
-			rendererData.LightmapIndexDynamic = ushort.MaxValue;//terrain.LightmapIndexDynamic;
+			rendererData.LightmapIndexDynamic = ushort.MaxValue; //terrain.LightmapIndexDynamic;
 
 			rendererData.LightmapST.CopyValues(terrain.LightmapTilingOffset);
 			rendererData.LightmapSTDynamic.CopyValues(terrain.LightmapTilingOffsetDynamic);
@@ -187,8 +188,8 @@ public class LightingDataProcessor : IAssetProcessor
 
 	private static void AddLight(ILightingDataAsset lightingDataAsset, ILight light)
 	{
-		// We're not sure what the most appropriate way to check if a light belongs
-		// in these arrays or not is, but just including all of them is harmless.
+		// 我们不确定最合适的检查灯光是否属于这些数组的方法是什么，
+		// 在这些数组中或不是，但只是包含所有它们也没有害处。
 
 		SceneObjectIdentifier identifier = lightingDataAsset.Lights.AddNew();
 		identifier.TargetObjectReference = light;
@@ -223,6 +224,7 @@ public class LightingDataProcessor : IAssetProcessor
 				lightingDataAsset.BakedAmbientProbesInGamma.AddNew().CopyValues(renderSettings.AmbientProbeInGamma);
 			}
 		}
+
 		if (renderSettings.Has_AmbientProbe())
 		{
 			if (lightingDataAsset.Has_BakedAmbientProbeInLinear())
@@ -245,7 +247,7 @@ public class LightingDataProcessor : IAssetProcessor
 	}
 
 	/// <summary>
-	/// Add several <see cref="ILightmapData"/> to <see cref="ILightingDataAsset.Lightmaps"/>.
+	/// 将多个 <see cref="ILightmapData"/> 添加到 <see cref="ILightingDataAsset.Lightmaps"/> 中。
 	/// </summary>
 	/// <param name="lightingDataAsset"></param>
 	/// <param name="lightmaps"></param>
@@ -258,16 +260,22 @@ public class LightingDataProcessor : IAssetProcessor
 		}
 	}
 
+	/// <summary>
+	/// 设置光照数据资源、光照探针和光照设置的路径及主资源。
+	/// </summary>
+	/// <param name="lightmapSettings"></param>
+	/// <param name="lightProbes"></param>
+	/// <param name="lightingSettings"></param>
+	/// <param name="scene"></param>
 	private static void SetPathsAndMainAsset(ILightmapSettings lightmapSettings, ILightProbes? lightProbes, ILightingSettings? lightingSettings, SceneDefinition scene)
 	{
-		//Several assets should all be exported in a subfolder beside the scene.
+		//几个资产应该都导出在场景旁边的子文件夹中。
 		//Example:
-		//Scenes
+		//场景
 		//  MyScene.unity
-		//  MyScene //This folder has the same name as the scene.
-		//    LightingData.asset //This is the default name from Unity.
-		//    LightProbes.asset //optional; this can be anywhere
-		//    <a bunch of lightmap textures> //optional; the textures can be anywhere
+		//  照明数据资产 //这是默认名称来自 Unity。
+		//    LightProbes.asset //可选；这可以放在任何地方
+		//    <一堆光照贴图纹理> //可选；纹理可以放在任何地方
 
 		ILightingDataAsset? lightingDataAsset = lightmapSettings.LightingDataAssetP;
 		if (lightingDataAsset is not null)
@@ -280,25 +288,25 @@ public class LightingDataProcessor : IAssetProcessor
 				lightingDataAsset.Name = LightingDataName;
 			}
 
-			//This OriginalName is purely for the UI. Name is used for exporting the asset.
+			// 此原始名称仅用于界面。名称用于导出资源。
 			lightingDataAsset.OriginalName ??= scene.Name;
 		}
 
-		//Move the light probes to the scene subfolder if it exists and is not shared with other scenes.
+		// 如果存在且未与其他场景共享，请将光探针移动到场景的子文件夹中。
 		if (lightProbes is not null)
 		{
 			lightProbes.OriginalDirectory ??= scene.Path;
 		}
 
-		//Move the light settings to the scene subfolder if it exists and is not shared with other scenes.
-		//There's no requirement to place it there, but it helps with organization.
-		//This is particularly useful when many LightingSettings have the same name.
+		// 如果存在且未与其他场景共享，请将灯光设置移动到场景的子文件夹中。  
+		// 虽然没有强制要求必须放置于此，但有助于组织管理。  
+		// 当多个 LightingSettings 具有相同名称时，此操作尤为有用。
 		if (lightingSettings is not null)
 		{
 			lightingSettings.OriginalDirectory ??= scene.Path;
 		}
 
-		//Move the lightmap textures to the scene subfolder.
+		// 将光照贴图纹理移动到场景子文件夹中。
 		foreach (ILightmapData lightmapData in lightmapSettings.Lightmaps)
 		{
 			if (lightmapData.DirLightmap?.TryGetAsset(lightmapSettings.Collection, out ITexture2D? dirLightmap) ?? false)
@@ -306,16 +314,19 @@ public class LightingDataProcessor : IAssetProcessor
 				dirLightmap.OriginalDirectory ??= scene.Path;
 				dirLightmap.MainAsset = lightingDataAsset;
 			}
+
 			if (lightmapData.IndirectLightmap?.TryGetAsset(lightmapSettings.Collection, out ITexture2D? indirectLightmap) ?? false)
 			{
 				indirectLightmap.OriginalDirectory ??= scene.Path;
 				indirectLightmap.MainAsset = lightingDataAsset;
 			}
+
 			if (lightmapData.Lightmap.TryGetAsset(lightmapSettings.Collection, out ITexture2D? lightmap))
 			{
 				lightmap.OriginalDirectory ??= scene.Path;
 				lightmap.MainAsset = lightingDataAsset;
 			}
+
 			if (lightmapData.ShadowMask?.TryGetAsset(lightmapSettings.Collection, out ITexture2D? shadowMask) ?? false)
 			{
 				shadowMask.OriginalDirectory ??= scene.Path;
@@ -360,16 +371,15 @@ public class LightingDataProcessor : IAssetProcessor
 	}
 
 	/// <summary>
-	/// Sets <see cref="ILightingDataAsset.EnlightenDataVersion"/>
+	/// 设置 <see cref="ILightingDataAsset.EnlightenDataVersion"/>
 	/// </summary>
 	/// <remarks>
-	/// This value must be assigned correctly. The version varies widely based on Unity version.<br/>
-	/// It seems that -1 will not suffice. 112 is the version that 2021.1 and 2021.2 use.<br/>
-	/// Since Enlighten is no longer being maintained, any later version should also use 112.<br/>
-	/// Supposedly, 112 has been in use since 2017 or possibly even late Unity 5.<br/>
-	/// To extract the Enlighten version for each Unity version, one would have to create
-	/// a test project on each version and then bake the lighting in the test project.<br/>
-	/// There is no proper API to create a LightingDataAsset.
+	/// 此值必须正确设置。版本会因 Unity 版本而有很大差异。<br/>
+	/// 看来 -1 是不够用的。2021.1 和 2021.2 使用的是 112 版本。<br/>
+	/// 由于 Enlighten 已不再维护，任何后续版本也应使用 112。<br/>
+	/// 据说，112 自 2017 年起已被使用，甚至可能在 Unity 5 的较晚版本中仍在使用。<br/>
+	/// 要提取每个 Unity 版本中的 Enlighten 版本，需要为每个版本创建一个测试项目，然后在该测试项目中烘焙光照。<br/>
+	/// 目前没有合适的 API 可以创建 LightingDataAsset。
 	/// </remarks>
 	/// <param name="lightingDataAsset"></param>
 	private static void SetEnlightenDataVersion(ILightingDataAsset lightingDataAsset)
@@ -386,11 +396,11 @@ public class LightingDataProcessor : IAssetProcessor
 
 	private static byte[] CreateEnlightenData(UnityVersion version)
 	{
-		// For many of the lighting data assets I've encountered, they just contained the bytes of an empty asset bundle.
+		// 我遇到的许多照明数据资产，仅仅包含了一个空资产包的字节。
 		BundleVersion bundleVersion = false switch
 		{
 			_ when version.GreaterThanOrEquals(2022, 2) => BundleVersion.BF_2022_2,
-			_ when version.GreaterThanOrEquals(2020) => BundleVersion.BF_LargeFilesSupport, // This started sometime during 2019.4.X, so we use 2020 just to be safe.
+			_ when version.GreaterThanOrEquals(2020) => BundleVersion.BF_LargeFilesSupport, // 这始于2019年4.X版本的某个时间点，因此我们使用2020年作为备用。
 			_ when version.GreaterThanOrEquals(5, 2, 0, UnityVersionType.Final) => BundleVersion.BF_520_x,
 			_ => BundleVersion.BF_350_4x,
 		};

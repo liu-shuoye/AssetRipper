@@ -14,7 +14,7 @@ public class MainAssetProcessor : IAssetProcessor
 {
 	public void Process(GameData gameData)
 	{
-		Logger.Info(LogCategory.Processing, "Main Asset Pairing");
+		Logger.Info(LogCategory.Processing, "主要资产配对");
 		// 用元数据枚举避免 FetchAssets() 触发全量反序列化。
 		// 仅对 IFont (128) 与 ITerrainData (156) 调用 TryGetAssetOnly 做单对象反序列化。
 		foreach (AssetCollection collection in gameData.GameBundle.FetchAssetCollections())
@@ -48,7 +48,7 @@ public class MainAssetProcessor : IAssetProcessor
 					terrainData.MainAsset = terrainData;
 					foreach (ITexture2D alphaTexture in terrainData.GetSplatAlphaTextures())
 					{
-						//Sometimes TerrainData can be duplicated, but retain the same alpha textures.
+						//有时 TerrainData 可能会被复制，但保留相同的 alpha 纹理。
 						//https://github.com/AssetRipper/AssetRipper/issues/1356
 						alphaTexture.MainAsset ??= terrainData;
 					}

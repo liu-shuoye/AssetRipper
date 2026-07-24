@@ -8,6 +8,7 @@ using AssetRipper.Import.Structure.Assembly.Serializable;
 using AssetRipper.IO.Files.SerializedFiles;
 using AssetRipper.Processing.AnimationClips;
 using AssetRipper.Processing.Configuration;
+using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Classes.ClassID_1;
 using AssetRipper.SourceGenerated.Classes.ClassID_142;
 using AssetRipper.SourceGenerated.Classes.ClassID_147;
@@ -34,42 +35,32 @@ namespace AssetRipper.Processing.Editor;
 
 /// <summary>
 /// <para>
-/// This processor primarily handles "editor-only" fields.
-/// These fields exist in the Unity Editor, but not in compiled game files.
-/// Without this processing, those fields would have C# default values of zero.
+/// 此处理器主要处理“仅限编辑器”的字段。
+/// 这些字段存在于 Unity 编辑器中，但在编译后的游戏文件中不存在。
+/// 如果不进行此处理，这些字段将具有 C# 默认值零。
 /// </para>
 /// <para>
-/// For most fields, this is just setting the field to the Unity default.
-/// However for some fields, there can be a calculation to recover an appropriate
-/// value for the field. For example, <see cref="ITransform.LocalEulerAnglesHint_C4"/>
-/// is set using <see cref="ITransform.LocalRotation_C4"/> with a Quaternion to
-/// Euler angle conversion. Similarly, <see cref="ITransform.RootOrder_C4"/> is
-/// calculated from <see cref="ITransform.Father_C4P"/> and <see cref="ITransform.Children_C4P"/>.
+/// 对于大多数字段，该处理器只需将其设置为 Unity 的默认值。
+/// 然而，对于某些字段，可能需要进行计算以恢复其适当的值。
+/// 例如，<see cref="ITransform.LocalEulerAnglesHint_C4"/> 是通过使用 <see cref="ITransform.LocalRotation_C4"/> 并结合 Quaternion 转换为欧拉角来设置的。同样，<see cref="ITransform.RootOrder_C4"/> 是根据 <see cref="ITransform.Father_C4P"/> 和 <see cref="ITransform.Children_C4P"/> 计算得出的。
 /// </para>
 /// <para>
-/// Compiled game files can be identified from binary editor files by the 
-/// <see cref="TransferInstructionFlags.SerializeGameRelease"/> flag.
-/// However, those binary editor files are not commonly ripped with AssetRipper.
-/// More often, generated <see cref="ProcessedAssetCollection"/>s are given editor flags
-/// so as to exclude them from unnecessary processing. This is the default for
+/// 可通过 <see cref="TransferInstructionFlags.SerializeGameRelease"/> 标志来识别编译后的游戏文件，该标志来自二进制编辑器文件。
+/// 然而，这些二进制编辑器文件通常不会被 AssetRipper 打包提取。
+/// 更常见的是，生成的 <see cref="ProcessedAssetCollection"/> 会带有编辑器标志，以便排除不必要的处理。这是默认行为。
 /// <see cref="GameBundle.AddNewProcessedCollection(string, UnityVersion)"/>.
 /// </para>
 /// </summary>
-public class EditorFormatProcessor : IAssetProcessor
+public class EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMode) : IAssetProcessor
 {
 	private ITagManager? tagManager;
-	private readonly BundledAssetsExportMode bundledAssetsExportMode;
+	private readonly BundledAssetsExportMode bundledAssetsExportMode = bundledAssetsExportMode;
 	private IAssemblyManager? assemblyManager;
 	private PathChecksumCache? checksumCache;
 
-	public EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMode)
-	{
-		this.bundledAssetsExportMode = bundledAssetsExportMode;
-	}
-
 	public void Process(GameData gameData)
 	{
-		Logger.Info(LogCategory.Processing, "Editor Format Conversion");
+		Logger.Info(LogCategory.Processing, "编辑格式转换");
 		// 用元数据枚举找到第一个 ITagManager (ClassID 78)，避免 FetchAssets 触发全量反序列化
 		tagManager = null;
 		foreach (AssetCollection collection in gameData.GameBundle.FetchAssetCollections())
@@ -78,12 +69,14 @@ public class EditorFormatProcessor : IAssetProcessor
 			{
 				break;
 			}
+
 			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
 			{
-				if (meta.ClassID != 78)
+				if (meta.ClassID != (int)ClassIDType.TagManager)
 				{
 					continue;
 				}
+
 				tagManager = collection.TryGetAssetOnly<ITagManager>(meta.PathID);
 				if (tagManager is not null)
 				{
@@ -91,6 +84,7 @@ public class EditorFormatProcessor : IAssetProcessor
 				}
 			}
 		}
+
 		assemblyManager = gameData.AssemblyManager;
 		checksumCache = new PathChecksumCache(gameData);
 
@@ -107,6 +101,7 @@ public class EditorFormatProcessor : IAssetProcessor
 				{
 					continue;
 				}
+
 				IUnityObjectBase? asset = collection.TryGetAssetOnly(meta.PathID);
 				if (asset is not null)
 				{
@@ -115,13 +110,13 @@ public class EditorFormatProcessor : IAssetProcessor
 			}
 		}
 
-		//Sequential processing
+		// 顺序处理
 		foreach (IUnityObjectBase asset in assetsToConvert)
 		{
 			Convert(asset);
 		}
 
-		//Parallel processing
+		// 并行处理
 		Parallel.ForEach(assetsToConvert, ConvertAsync);
 
 		checksumCache = null;
@@ -141,40 +136,44 @@ public class EditorFormatProcessor : IAssetProcessor
 	/// </summary>
 	private static readonly HashSet<int> ConvertableClassIDs = new()
 	{
-		1,    // IGameObject (Convert)
-		4,    // ITransform (ConvertAsync)
-		19,   // IPhysics2DSettings (ConvertAsync)
-		23,   // IMeshRenderer (Convert - IRenderer)
-		26,   // IParticleRenderer (Convert - IRenderer)
-		30,   // IGraphicsSettings (ConvertAsync)
-		43,   // IMesh (ConvertAsync)
-		47,   // IQualitySettings (ConvertAsync)
-		74,   // IAnimationClip (Convert)
-		96,   // ITrailRenderer (Convert - IRenderer)
-		120,  // ILineRenderer (Convert - IRenderer)
-		129,  // PlayerSettings (Convert - TypeTreeObject.IsPlayerSettings)
-		137,  // ISkinnedMeshRenderer (Convert - IRenderer)
-		142,  // IAssetBundle (ConvertAsync)
-		157,  // ILightmapSettings (ConvertAsync)
-		161,  // IClothRenderer (Convert - IRenderer)
-		196,  // INavMeshSettings (Convert)
-		199,  // IParticleSystemRenderer (Convert - IRenderer)
-		212,  // ISpriteRenderer (Convert - IRenderer)
-		218,  // ITerrain (ConvertAsync)
-		222,  // ICanvasRenderer (Convert - IRenderer)
-		227,  // IBillboardRenderer (Convert - IRenderer)
-		310,  // IUnityConnectSettings (ConvertAsync)
-		320,  // IPlayableDirector (ConvertAsync)
-		687078895,    // ISpriteAtlas (Convert)
-		73398921,     // IVFXRenderer (Convert - IRenderer)
-		850595691,    // ILightingSettings (ConvertAsync)
-		483693784,    // ITilemapRenderer (Convert - IRenderer)
-		1931382933,   // IUIRenderer (Convert - IRenderer)
-		1971053207,   // ISpriteShapeRenderer (Convert - IRenderer)
+		(int)ClassIDType.GameObject, // IGameObject (Convert)
+		(int)ClassIDType.Transform, // ITransform (ConvertAsync)
+		(int)ClassIDType.Physics2DSettings, // IPhysics2DSettings (ConvertAsync)
+		(int)ClassIDType.MeshRenderer, // IMeshRenderer (Convert - IRenderer)
+		(int)ClassIDType.ParticleRenderer, // IParticleRenderer (Convert - IRenderer)
+		(int)ClassIDType.GraphicsSettings, // IGraphicsSettings (ConvertAsync)
+		(int)ClassIDType.Mesh, // IMesh (ConvertAsync)
+		(int)ClassIDType.QualitySettings, // IQualitySettings (ConvertAsync)
+		(int)ClassIDType.AnimationClip, // IAnimationClip (Convert)
+		(int)ClassIDType.TrailRenderer, // ITrailRenderer (Convert - IRenderer)
+		(int)ClassIDType.LineRenderer, // ILineRenderer (Convert - IRenderer)
+		129, // PlayerSettings (Convert - TypeTreeObject.IsPlayerSettings)
+		(int)ClassIDType.SpriteRenderer, // ISpriteRenderer (Convert - IRenderer)
+		(int)ClassIDType.SkinnedMeshRenderer, // ISkinnedMeshRenderer (Convert - IRenderer)
+		(int)ClassIDType.AssetBundle, // IAssetBundle (ConvertAsync)
+		(int)ClassIDType.LightmapSettings, // ILightmapSettings (ConvertAsync)
+		(int)ClassIDType.ClothRenderer, // IClothRenderer (Convert - IRenderer)
+		(int)ClassIDType.NavMeshSettings, // INavMeshSettings (Convert)
+		(int)ClassIDType.ParticleSystemRenderer, // IParticleSystemRenderer (Convert - IRenderer)
+		(int)ClassIDType.Terrain, // ITerrain (ConvertAsync)
+		(int)ClassIDType.CanvasRenderer, // ICanvasRenderer (Convert - IRenderer)
+		(int)ClassIDType.BillboardRenderer, // IBillboardRenderer (Convert - IRenderer)
+		(int)ClassIDType.UnityConnectSettings, // IUnityConnectSettings (ConvertAsync)
+		(int)ClassIDType.PlayableDirector, // IPlayableDirector (ConvertAsync)
+		(int)ClassIDType.SpriteAtlas, // ISpriteAtlas (Convert)
+		(int)ClassIDType.VFXRenderer, // IVFXRenderer (Convert - IRenderer)
+		(int)ClassIDType.LightingSettings, // ILightingSettings (ConvertAsync)
+		(int)ClassIDType.TilemapRenderer, // ITilemapRenderer (Convert - IRenderer)
+		(int)ClassIDType.UIRenderer, // IUIRenderer (Convert - IRenderer)
+		(int)ClassIDType.SpriteShapeRenderer, // ISpriteShapeRenderer (Convert - IRenderer)
 	};
 
 	private static bool NeedsConversion(int classID) => ConvertableClassIDs.Contains(classID);
 
+	/// <summary>
+	/// 处理仅限编辑器的字段。
+	/// </summary>
+	/// <param name="asset"></param>
 	private void Convert(IUnityObjectBase asset)
 	{
 		switch (asset)
@@ -201,10 +200,12 @@ public class EditorFormatProcessor : IAssetProcessor
 				{
 					editorStructure["webGLLinkerTarget"].AsInt32 = 1;
 				}
+
 				if (editorStructure.ContainsField("allowUnsafeCode"))
 				{
 					editorStructure["allowUnsafeCode"].AsBoolean = true;
 				}
+
 				ApiCompatibilityLevel compatibilityLevel;
 				ScriptingRuntimeVersion runtimeVersion;
 				Debug.Assert(assemblyManager is not null);
@@ -218,23 +219,30 @@ public class EditorFormatProcessor : IAssetProcessor
 					compatibilityLevel = ApiCompatibilityLevel.NET_Unity_4_8;
 					runtimeVersion = ScriptingRuntimeVersion.Latest;
 				}
+
 				if (editorStructure.ContainsField("apiCompatibilityLevel"))
 				{
 					editorStructure["apiCompatibilityLevel"].AsInt32 = (int)compatibilityLevel;
 				}
+
 				if (editorStructure.ContainsField("scriptingRuntimeVersion"))
 				{
 					editorStructure["scriptingRuntimeVersion"].AsInt32 = (int)runtimeVersion;
 				}
+
 				break;
 		}
 	}
 
+	/// <summary>
+	/// 处理仅限编辑器的字段。
+	/// </summary>
+	/// <param name="asset"></param>
 	private static void ConvertAsync(IUnityObjectBase asset)
 	{
 		switch (asset)
 		{
-			//ordered by approximate frequency
+			// 按大致频率排序
 			case ITransform transform:
 				EditorFormatConverterAsync.Convert(transform);
 				break;
@@ -248,7 +256,7 @@ public class EditorFormatProcessor : IAssetProcessor
 				EditorFormatConverterAsync.Convert(playableDirector);
 				break;
 			case IAssetBundle assetBundle:
-				// PreloadTable is not used by AssetRipper and can be very large, so clear it to save memory and processing time.
+				// PreloadTable 未被 AssetRipper 使用，且可能非常大，因此请清除它以节省内存和处理时间。
 				assetBundle.PreloadTable.Clear();
 				assetBundle.PreloadTable.Capacity = 0;
 				break;

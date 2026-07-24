@@ -22,9 +22,10 @@ namespace AssetRipper.Export.UnityProjects;
 /// 导出处理器
 /// </summary>
 /// <param name="settings"></param>
-public class ExportHandler(FullConfiguration settings)
+public sealed class ExportHandler(FullConfiguration settings)
 {
-	protected FullConfiguration Settings { get; } = settings;
+	private FullConfiguration Settings { get; } = settings;
+	private EditorFormatProcessor EditorFormatProcessor { get; } = new(settings.ProcessingSettings.BundledAssetsExportMode);
 
 	public GameData Load(IReadOnlyList<string> paths, FileSystem fileSystem)
 	{
@@ -60,8 +61,9 @@ public class ExportHandler(FullConfiguration settings)
 
 
 	/// <summary> 获取处理器 </summary>
-	protected virtual IEnumerable<IAssetProcessor> GetProcessors()
+	private IEnumerable<IAssetProcessor> GetProcessors()
 	{
+		Logger.Info(LogCategory.Processing, "汇编处理器");
 		// 汇编处理器
 		yield return new AttributePolyfillGenerator();
 		yield return new MonoExplicitPropertyRepairProcessor();
@@ -87,13 +89,14 @@ public class ExportHandler(FullConfiguration settings)
 		yield return new RemoveAssemblyKeyFileAttributeProcessor();
 		yield return new InternalsVisibileToPublicKeyRemover();
 
+		Logger.Info(LogCategory.Processing, "资产处理器");
 		// 资产处理器
 		yield return new SceneDefinitionProcessor();
 		yield return new OriginalPathProcessor(Settings.ProcessingSettings.BundledAssetsExportMode);
 		yield return new MainAssetProcessor();
 		yield return new AnimatorControllerProcessor();
 		yield return new AudioMixerProcessor();
-		yield return new EditorFormatProcessor(Settings.ProcessingSettings.BundledAssetsExportMode);
+		yield return EditorFormatProcessor;
 		// 静态网格分离 在这里
 		yield return new LightingDataProcessor(); //需要在静态网格分离之后进行
 		yield return new PrefabProcessor();
@@ -143,13 +146,13 @@ public class ExportHandler(FullConfiguration settings)
 	}
 
 	/// <summary> 导出之前 </summary>
-	protected virtual void BeforeExport(ProjectExporter projectExporter)
+	private void BeforeExport(ProjectExporter projectExporter)
 	{
 		// 高级版所需
 	}
 
 	/// <summary> 获取导出之后的处理器 </summary>
-	protected virtual IEnumerable<IPostExporter> GetPostExporters()
+	private IEnumerable<IPostExporter> GetPostExporters()
 	{
 		yield return new ProjectVersionPostExporter();
 		yield return new PackageManifestPostExporter();
