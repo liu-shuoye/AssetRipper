@@ -29,14 +29,7 @@ public sealed class ExportHandler(FullConfiguration settings)
 
 	public GameData Load(IReadOnlyList<string> paths, FileSystem fileSystem)
 	{
-		if (paths.Count == 1)
-		{
-			Logger.Info(LogCategory.Import, $"尝试从 {paths[0]} 读取文件");
-		}
-		else
-		{
-			Logger.Info(LogCategory.Import, $"尝试从 {paths.Count} 个路径读取文件……");
-		}
+		Logger.Info(LogCategory.Import, paths.Count == 1 ? $"尝试从 {paths[0]} 读取文件" : $"尝试从 {paths.Count} 个路径读取文件……");
 
 		GameStructure gameStructure = GameStructure.Load(paths, fileSystem, Settings);
 		GameData gameData = GameData.FromGameStructure(gameStructure);
@@ -120,7 +113,14 @@ public sealed class ExportHandler(FullConfiguration settings)
 		BeforeExport(projectExporter);
 		projectExporter.DoFinalOverrides(Settings);
 		Logger.LogMemoryDiagnostics("Export前 - DoFinalOverrides完成");
-		projectExporter.Export(gameData.GameBundle, Settings, fileSystem);
+
+		// 为导出阶段准备 EditorFormatProcessor：重建 tagManager 与 assemblyManager 依赖。
+		// Process 阶段已处理破坏性内存优化（AnimationClip、AssetBundle），此处仅准备导出阶段所需的依赖，
+		// 让 ProjectYamlWalker 在 WalkEditor 之前能按需对单个资产调用 ProcessForExport。
+		EditorFormatProcessor.PrepareForExport(gameData);
+		Logger.LogMemoryDiagnostics("Export前 - EditorFormatProcessor.PrepareForExport完成");
+
+		projectExporter.Export(gameData.GameBundle, Settings, fileSystem, EditorFormatProcessor);
 		Logger.LogMemoryDiagnostics("Export后 - 主导出完成");
 
 		Logger.Info(LogCategory.Export, "资产导出完成");
@@ -172,6 +172,7 @@ public sealed class ExportHandler(FullConfiguration settings)
 		{
 			Process(gameData);
 		}
+
 		Logger.LogMemoryDiagnostics("Process完成（资产已反序列化）");
 
 		return gameData;

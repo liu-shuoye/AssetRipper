@@ -50,6 +50,14 @@ namespace AssetRipper.Processing.Editor;
 /// 更常见的是，生成的 <see cref="ProcessedAssetCollection"/> 会带有编辑器标志，以便排除不必要的处理。这是默认行为。
 /// <see cref="GameBundle.AddNewProcessedCollection(string, UnityVersion)"/>.
 /// </para>
+/// <para>
+/// <b>分阶段执行策略：</b>
+/// <list type="bullet">
+/// <item><see cref="Process"/> 阶段仅处理 <see cref="ProcessStageClassIDs"/> 中的类型——这些 Convert 会清空源数据以释放内存（破坏性内存优化），必须在反序列化后立即执行，否则源数据 + 转换结果会同时驻留。</item>
+/// <item>其余类型由 <see cref="ProcessForExport"/> 在导出阶段按需处理（见 <see cref="ExportStageClassIDs"/>）。</item>
+/// <item>调用方需在导出开始前先调用 <see cref="PrepareForExport"/> 重建 <see cref="tagManager"/> 与 <see cref="assemblyManager"/> 依赖。</item>
+/// </list>
+/// </para>
 /// </summary>
 public class EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMode) : IAssetProcessor
 {
@@ -60,7 +68,57 @@ public class EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMo
 
 	public void Process(GameData gameData)
 	{
-		Logger.Info(LogCategory.Processing, "编辑格式转换");
+		Logger.Info(LogCategory.Processing, "编辑格式转换（破坏性内存优化阶段）");
+
+		// 仅 AnimationClip 需要 checksumCache；AssetBundle 不需要外部依赖。
+		// 重建 checksumCache 会反序列化 IAvatar/IAnimator/IAnimation 用于构建路径缓存，这是必要的。
+		checksumCache = new PathChecksumCache(gameData);
+
+		PrepareForExport(gameData);
+
+		// 元数据驱动：仅对 ProcessStageClassIDs 命中的 ClassID 调用 TryGetAssetOnly，
+		// 避免原 SelectMany(c => c) 触发 GetEnumerator → EnsureAssetsLoaded 的全量反序列化。
+		// TryGetAssetOnly 内部写入 assets 字典非线程安全，故先 sequential 反序列化到 List，
+		// 再由后续 Parallel.ForEach 处理 List，避免并发写字典。
+		List<IUnityObjectBase> assetsToProcess = new();
+		foreach (AssetCollection collection in GetReleaseCollections(gameData))
+		{
+			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
+			{
+				if (!NeedsConversionInProcess(meta.ClassID))
+				{
+					continue;
+				}
+
+				IUnityObjectBase? asset = collection.TryGetAssetOnly(meta.PathID);
+				if (asset is not null)
+				{
+					assetsToProcess.Add(asset);
+				}
+			}
+		}
+
+		// 顺序处理：AnimationClip 的 Convert 依赖 checksumCache，且 ProcessInner 内部有状态写入，不能并行
+		foreach (IUnityObjectBase asset in assetsToProcess)
+		{
+			Convert(asset);
+		}
+
+		// 并行处理：AssetBundle 的 PreloadTable.Clear 是无共享状态的破坏性操作，可并行
+		Parallel.ForEach(assetsToProcess, ConvertAsync);
+	}
+
+	/// <summary>
+	/// 为导出阶段准备 <see cref="tagManager"/> 与 <see cref="assemblyManager"/> 依赖。
+	/// 必须在首次调用 <see cref="ProcessForExport"/> 之前调用一次。
+	/// </summary>
+	/// <remarks>
+	/// 此方法不反序列化资产本体——只通过 <see cref="AssetCollection.EnumerateAssetMetadata"/>
+	/// 定位 <see cref="ITagManager"/> 并单对象反序列化它。其余资产由
+	/// <see cref="ProjectYamlWalker"/> 在 <c>WalkEditor</c> 触发时按需反序列化。
+	/// </remarks>
+	public void PrepareForExport(GameData gameData)
+	{
 		// 用元数据枚举找到第一个 ITagManager (ClassID 78)，避免 FetchAssets 触发全量反序列化
 		tagManager = null;
 		foreach (AssetCollection collection in gameData.GameBundle.FetchAssetCollections())
@@ -86,42 +144,27 @@ public class EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMo
 		}
 
 		assemblyManager = gameData.AssemblyManager;
-		checksumCache = new PathChecksumCache(gameData);
+		// checksumCache 仅 AnimationClip 需要，而 AnimationClip 已在 Process 阶段处理，导出阶段不需要
+	}
 
-		// 元数据驱动：仅对 NeedsConversion 命中的 ClassID 调用 TryGetAssetOnly，
-		// 避免原 SelectMany(c => c) 触发 GetEnumerator → EnsureAssetsLoaded 的全量反序列化
-		// TryGetAssetOnly 内部写入 assets 字典非线程安全，故先 sequential 反序列化到 List，
-		// 再由后续 Parallel.ForEach 处理 List，避免并发写字典
-		List<IUnityObjectBase> assetsToConvert = new();
-		foreach (AssetCollection collection in GetReleaseCollections(gameData))
+	/// <summary>
+	/// 导出阶段按需对单个资产执行 EditorFormat 转换。
+	/// 在 <see cref="ProjectYamlWalker.ExportYamlDocument"/> 中、<c>WalkEditor</c> 之前调用。
+	/// </summary>
+	/// <remarks>
+	/// <para>幂等：字段被设置为确定值，多次调用不会累积错误。</para>
+	/// <para>仅处理 <see cref="ExportStageClassIDs"/> 中的类型——破坏性内存优化类型已在
+	/// <see cref="Process"/> 阶段处理完毕，此处跳过以避免重复执行（AnimationClip 源数据已被清空）。</para>
+	/// </remarks>
+	public void ProcessForExport(IUnityObjectBase asset)
+	{
+		if (!NeedsConversionForExport(asset.ClassID))
 		{
-			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
-			{
-				if (!NeedsConversion(meta.ClassID))
-				{
-					continue;
-				}
-
-				IUnityObjectBase? asset = collection.TryGetAssetOnly(meta.PathID);
-				if (asset is not null)
-				{
-					assetsToConvert.Add(asset);
-				}
-			}
+			return;
 		}
 
-		// 顺序处理
-		foreach (IUnityObjectBase asset in assetsToConvert)
-		{
-			Convert(asset);
-		}
-
-		// 并行处理
-		Parallel.ForEach(assetsToConvert, ConvertAsync);
-
-		checksumCache = null;
-		assemblyManager = null;
-		tagManager = null;
+		Convert(asset);
+		ConvertAsync(asset);
 	}
 
 	private static IEnumerable<AssetCollection> GetReleaseCollections(GameData gameData)
@@ -130,11 +173,22 @@ public class EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMo
 	}
 
 	/// <summary>
-	/// Convert / ConvertAsync 涉及的 ClassID 集合。
-	/// 元数据驱动改造时只对集合内的 ClassID 调用 TryGetAssetOnly 反序列化，其余 ClassID 跳过。
-	/// 若未来 Convert / ConvertAsync 新增 case，需同步更新此集合。
+	/// Process 阶段需处理的 ClassID 集合（破坏性内存优化）。
+	/// 这些 Convert 会清空源数据以释放内存，必须在反序列化后立即执行，
+	/// 不能延迟到导出阶段（否则源数据 + 转换结果会同时驻留）。
 	/// </summary>
-	private static readonly HashSet<int> ConvertableClassIDs = new()
+	private static readonly HashSet<int> ProcessStageClassIDs = new()
+	{
+		// (int)ClassIDType.AnimationClip, // IAnimationClip - 清空 StreamedClip/DenseClip/ConstantClip
+		// (int)ClassIDType.AssetBundle,   // IAssetBundle - 清空 PreloadTable
+	};
+
+	/// <summary>
+	/// 导出阶段需处理的 ClassID 集合（非破坏性字段设置/计算）。
+	/// 这些 Convert 只是设置编辑器默认值或重算字段，可安全延迟到导出阶段按需执行。
+	/// 若未来 Convert / ConvertAsync 新增 case，需同步更新此集合与 <see cref="ProcessStageClassIDs"/>。
+	/// </summary>
+	private static readonly HashSet<int> ExportStageClassIDs = new()
 	{
 		(int)ClassIDType.GameObject, // IGameObject (Convert)
 		(int)ClassIDType.Transform, // ITransform (ConvertAsync)
@@ -168,13 +222,15 @@ public class EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMo
 		(int)ClassIDType.SpriteShapeRenderer, // ISpriteShapeRenderer (Convert - IRenderer)
 	};
 
-	private static bool NeedsConversion(int classID) => ConvertableClassIDs.Contains(classID);
+	private static bool NeedsConversionInProcess(int classID) => ProcessStageClassIDs.Contains(classID);
+
+	private static bool NeedsConversionForExport(int classID) => ExportStageClassIDs.Contains(classID);
 
 	/// <summary>
 	/// 处理仅限编辑器的字段。
 	/// </summary>
 	/// <param name="asset"></param>
-	private void Convert(IUnityObjectBase asset)
+	public void Convert(IUnityObjectBase asset)
 	{
 		switch (asset)
 		{
@@ -238,7 +294,7 @@ public class EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMo
 	/// 处理仅限编辑器的字段。
 	/// </summary>
 	/// <param name="asset"></param>
-	private static void ConvertAsync(IUnityObjectBase asset)
+	public static void ConvertAsync(IUnityObjectBase asset)
 	{
 		switch (asset)
 		{

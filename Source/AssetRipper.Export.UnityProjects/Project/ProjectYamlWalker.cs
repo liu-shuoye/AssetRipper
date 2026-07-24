@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Metadata;
 using AssetRipper.SourceGenerated.Subclasses.SceneObjectIdentifier;
 using AssetRipper.Yaml;
@@ -20,6 +20,10 @@ public sealed class ProjectYamlWalker : YamlWalker
 	public YamlDocument ExportYamlDocument(IUnityObjectBase asset)
 	{
 		CurrentAsset = asset;
+		// 导出阶段按需转换：在 WalkEditor 写出编辑器字段之前，对单个资产执行非破坏性 EditorFormat 转换。
+		// 这样 Process 阶段无需反序列化全部资产做 Convert，只对真正导出（未被去重跳过）的资产做转换。
+		// 幂等：多次调用安全；为 null 时表示调用方未启用延迟转换。
+		container.EditorFormatConverter?.Invoke(asset);
 		return ExportYamlDocument(asset, container.GetExportID(asset));
 	}
 
@@ -39,11 +43,7 @@ public sealed class ProjectYamlWalker : YamlWalker
 			long targetPrefab = sceneObjectIdentifier.TargetPrefabReference is not null
 				? container.CreateExportPointer(sceneObjectIdentifier.TargetPrefabReference).FileID
 				: sceneObjectIdentifier.TargetPrefab;
-			YamlMappingNode yamlMappingNode = new()
-			{
-				{ YamlScalarNode.Create("targetObject"), targetObject },
-				{ YamlScalarNode.Create("targetPrefab"), targetPrefab },
-			};
+			YamlMappingNode yamlMappingNode = new() { { YamlScalarNode.Create("targetObject"), targetObject }, { YamlScalarNode.Create("targetPrefab"), targetPrefab }, };
 			AddNode(yamlMappingNode);
 			return false;
 		}

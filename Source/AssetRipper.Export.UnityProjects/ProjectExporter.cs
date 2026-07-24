@@ -5,6 +5,7 @@ using AssetRipper.Export.UnityProjects.Project;
 using AssetRipper.Import.Configuration;
 using AssetRipper.Import.Logging;
 using AssetRipper.Processing.Configuration;
+using AssetRipper.Processing.Editor;
 using AssetRipper.SourceGenerated;
 using System.Text;
 
@@ -80,7 +81,15 @@ public sealed partial class ProjectExporter
 		throw new Exception($"There is no exporter that can handle '{asset}'");
 	}
 
-	public void Export(GameBundle fileCollection, CoreConfiguration options, FileSystem fileSystem)
+	/// <param name="editorFormatProcessor">
+	/// 可选的 EditorFormat 处理器。传入时其 <see cref="EditorFormatProcessor.ProcessForExport"/>
+	/// 会作为按需转换回调注入 <see cref="ProjectAssetContainer"/>，由
+	/// <see cref="ProjectYamlWalker.ExportYamlDocument"/> 在 <c>WalkEditor</c> 之前调用。
+	/// 调用方需在传入前先执行 <see cref="EditorFormatProcessor.PrepareForExport"/>。
+	/// 传 <c>null</c> 时禁用延迟转换（兼容旧调用路径）。
+	/// </param>
+	public void Export(GameBundle fileCollection, CoreConfiguration options, FileSystem fileSystem,
+		EditorFormatProcessor? editorFormatProcessor = null)
 	{
 		// ProcessingSettings 由 FullConfiguration 存储在 SingletonData 中。
 		// 由于本项目未引用 AssetRipper.Export，因此需通过 CoreConfiguration 直接访问。
@@ -97,6 +106,14 @@ public sealed partial class ProjectExporter
 		EventExportStarted?.Invoke();
 		ProjectAssetContainer container = new ProjectAssetContainer(this, options, fileCollection.FetchAssets(),
 			collections, skippedCollections, redirectMap);
+
+		// 注入按需转换回调：ProjectYamlWalker.ExportYamlDocument 会在 WalkEditor 之前调用它，
+		// 把 Process 阶段保留的非破坏性 EditorFormat 转换延迟到导出阶段逐资产执行。
+		if (editorFormatProcessor != null)
+		{
+			container.EditorFormatConverter = editorFormatProcessor.ProcessForExport;
+		}
+
 		int exportableCount = collections.Count(c => c.Exportable && !skippedCollections.Contains(c));
 		int currentExportable = 0;
 

@@ -114,6 +114,12 @@ public class ProjectAssetContainer : IExportContainer
 	public AssetCollection File => CurrentCollection.File;
 	public UnityVersion ExportVersion { get; }
 
+	/// <summary>
+	/// 导出阶段的 EditorFormat 转换回调，由 <see cref="Project.ProjectYamlWalker"/> 在 <c>WalkEditor</c> 之前调用。
+	/// 由 <see cref="ProjectExporter.Export"/> 在创建容器后注入。
+	/// </summary>
+	public Action<IUnityObjectBase>? EditorFormatConverter { get; set; }
+
 	private readonly ProjectExporter m_exporter;
 	private readonly Dictionary<IUnityObjectBase, IExportCollection> m_assetCollections = new();
 	private readonly HashSet<IExportCollection> m_skippedCollections;
