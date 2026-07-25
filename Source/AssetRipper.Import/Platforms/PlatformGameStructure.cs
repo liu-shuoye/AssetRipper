@@ -359,7 +359,7 @@ public abstract partial class PlatformGameStructure
 	protected static void AddAssetBundle(List<KeyValuePair<string, string>> files, string name, string path)
 	{
 		files.Add(name, path);
-		Logger.Info(LogCategory.Import, $"Asset bundle '{name}' has been found");
+		Logger.Info(LogCategory.Import, $"已找到资源包 '{name}'");
 	}
 
 	protected UnityVersion GetUnityVersionFromSerializedFile(string filePath)
