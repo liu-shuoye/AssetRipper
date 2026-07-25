@@ -1,4 +1,4 @@
-using AssetRipper.Assets.Collections;
+﻿using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.IO;
 using AssetRipper.IO.Files;
 using AssetRipper.IO.Files.ResourceFiles;
@@ -70,7 +70,7 @@ public abstract class Bundle : IDisposable
 	}
 
 	/// <summary>
-	/// Initializes the dependency list for each SerializedAssetCollection in this Bundle and its children Bundles.
+	/// 初始化此 Bundle 及其子 Bundle 中每个 SerializedAssetCollection 的依赖列表。
 	/// </summary>
 	internal void InitializeAllDependencyLists(IDependencyProvider? dependencyProvider)
 	{

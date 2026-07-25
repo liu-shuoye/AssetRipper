@@ -10,6 +10,7 @@ using AssetRipper.SourceGenerated.Subclasses.DefaultPreset;
 using AssetRipper.SourceGenerated.Subclasses.FloatCurve;
 using AssetRipper.SourceGenerated.Subclasses.Hash128;
 using AssetRipper.SourceGenerated.Subclasses.MatrixParameter;
+using AssetRipper.SourceGenerated.Subclasses.MeshBlendShape;
 using AssetRipper.SourceGenerated.Subclasses.MinMaxCurve;
 using AssetRipper.SourceGenerated.Subclasses.OffsetPtr_LayerConstant;
 using AssetRipper.SourceGenerated.Subclasses.OffsetPtr_StateMachineConstant;
@@ -131,6 +132,24 @@ static class ReadReleaseMethods
 	}
 
 	public static void ReadRelease_ArrayAlign_Asset<T>(
+		this AssetList<MeshBlendShape_4_3> value,
+		ref EndianSpanReader reader)
+	{
+		value.Clear();
+		int num1 = reader.ReadInt32();
+		int num2 = 0;
+		while (num2 < num1)
+		{
+			value.AddNew().ReadRelease(ref reader);
+			reader.Position -= 2;
+			checked { ++num2; }
+		}
+
+		value.Capacity = num1;
+		reader.Align();
+	}
+
+	public static void ReadRelease_ArrayAlign_Asset<T>(
 		this AssetList<T> value,
 		ref EndianSpanReader reader)
 		where T : UnityAssetBase, new()
@@ -236,10 +255,10 @@ static class ReadReleaseMethods
 		value.Type = reader.ReadInt32();
 		value.State.ReadReleaseState(ref reader);
 		value.ProgramMask = reader.ReadUInt32();
-		
+
 		// value.ProgVertex.ReadRelease(ref reader);
 		value.ProgVertex.SubPrograms.ReadRelease_ArrayAlign_Asset<SerializedSubProgram_2019>(ref reader);
-		
+
 		// value.ProgFragment.ReadRelease(ref reader);
 		// value.ProgGeometry.ReadRelease(ref reader);
 		// value.ProgHull.ReadRelease(ref reader);
@@ -250,8 +269,8 @@ static class ReadReleaseMethods
 		value.ProgHull.SubPrograms.ReadRelease_ArrayAlign_Asset<SerializedSubProgram_2019>(ref reader);
 		value.ProgDomain.SubPrograms.ReadRelease_ArrayAlign_Asset<SerializedSubProgram_2019>(ref reader);
 		value.ProgRayTracing.SubPrograms.ReadRelease_ArrayAlign_Asset<SerializedSubProgram_2019>(ref reader);
-		
-		
+
+
 		value.HasInstancingVariant = reader.ReadBoolean();
 		value.HasProceduralInstancingVariant = reader.ReadRelease_BooleanAlign();
 		value.UseName = reader.ReadRelease_Utf8StringAlign();
@@ -535,6 +554,7 @@ static class ReadReleaseMethods
 		value.Capacity = num1;
 		reader.Align();
 	}
+
 	public static void ReadRelease_ArrayAlign_Asset<T>(
 		this AccessListBase<IConstantBuffer>? value,
 		ref EndianSpanReader reader)
@@ -552,6 +572,7 @@ static class ReadReleaseMethods
 		value.Capacity = num1;
 		reader.Align();
 	}
+
 	public static void ReadRelease_ArrayAlign_Asset<T>(
 		this AccessListBase<ITextureParameter>? value,
 		ref EndianSpanReader reader)

@@ -10,7 +10,7 @@ public enum GameType
 	/// </summary>
 	Generic = 0,
 	/// <summary>
-	/// 无限暖暖（Infinity Nikki）专属资产解析。
+	/// 闪耀暖暖（Infinity Nikki）专属资产解析。
 	/// </summary>
 	Nikki4,
 }

@@ -30,7 +30,7 @@ internal sealed partial record class GameInitializer
 
 		public void ReportMissingDependency(FileIdentifier identifier)
 		{
-			Logger.Log(LogType.Warning, LogCategory.Import, $"Dependency '{identifier}' wasn't found");
+			Logger.Log(LogType.Warning, LogCategory.Import, $"未找到依赖项 '{identifier.PathNameOrigin}',{identifier.PathName}");
 		}
 	}
 }

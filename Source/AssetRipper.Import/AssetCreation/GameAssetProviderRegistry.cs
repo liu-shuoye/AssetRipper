@@ -19,7 +19,7 @@ public static class GameAssetProviderRegistry
 	/// </summary>
 	private static readonly Dictionary<GameType, IGameAssetProvider> Providers = new()
 	{
-		// 无限暖暖专属资产解析
+		// 闪耀暖暖专属资产解析
 		[GameType.Nikki4] = new Nikki4GameAssetProvider(),
 	};
 

@@ -6,7 +6,7 @@ using AssetRipper.SourceGenerated;
 namespace AssetRipper.Import.AssetCreation.Nikki4;
 
 /// <summary>
-/// 无限暖暖专属资产提供者，为 Nikki4 定制格式的资产类型创建专属解析对象。
+/// 闪耀暖暖专属资产提供者，为 Nikki4 定制格式的资产类型创建专属解析对象。
 /// </summary>
 public sealed class Nikki4GameAssetProvider : IGameAssetProvider
 {
@@ -27,6 +27,7 @@ public sealed class Nikki4GameAssetProvider : IGameAssetProvider
 			ClassIDType.TrailRenderer => new TrailRenderer_Nikki4(assetInfo),
 			ClassIDType.SpriteRenderer => new SpriteRenderer_Nikki4(assetInfo),
 			ClassIDType.VisualEffect => new VisualEffect_Nikk4(assetInfo),
+			ClassIDType.LineRenderer => new LineRenderer_nikki4(assetInfo),
 			_ => null,
 		};
 	}
