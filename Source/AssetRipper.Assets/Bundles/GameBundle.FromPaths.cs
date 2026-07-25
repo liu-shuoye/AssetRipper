@@ -5,6 +5,7 @@ using AssetRipper.IO.Files.CompressedFiles;
 using AssetRipper.IO.Files.ResourceFiles;
 using AssetRipper.IO.Files.SerializedFiles;
 using AssetRipper.IO.Files.SerializedFiles.Parser;
+using Cpp2IL.Core.Logging;
 
 namespace AssetRipper.Assets.Bundles;
 
@@ -38,7 +39,7 @@ partial class GameBundle
 		ResourceProvider = initializer?.ResourceProvider;
 		List<FileBase> fileStack = LoadFilesAndDependencies(paths, fileSystem, initializer?.DependencyProvider);
 		UnityVersion defaultVersion = initializer?.DefaultVersion ?? default;
-
+		LogMemoryDiagnostics("加载文件和依赖项后");
 		while (fileStack.Count > 0)
 		{
 			switch (RemoveLastItem(fileStack))
@@ -58,6 +59,23 @@ partial class GameBundle
 					break;
 			}
 		}
+
+		LogMemoryDiagnostics("资源序列化后");
+	}
+
+	/// <summary>
+	/// 输出当前内存状态，用于定位哪个阶段内存上涨最多。
+	/// </summary>
+	public static void LogMemoryDiagnostics(string stage)
+	{
+		// 强制 GC 后再统计，排除已可回收但未回收的对象干扰
+		GC.Collect();
+		GC.WaitForPendingFinalizers();
+		GC.Collect();
+
+		long managedMemory = GC.GetTotalMemory(false);
+		long workingSet = Environment.WorkingSet;
+		Logger.Info($"[内存诊断] {stage}: 托管: {managedMemory / 1024.0 / 1024.0:F1} MB | 工作集: {workingSet / 1024.0 / 1024.0:F1} MB");
 	}
 
 	private static FileBase RemoveLastItem(List<FileBase> list)
@@ -72,7 +90,7 @@ partial class GameBundle
 	private static List<FileBase> LoadFilesAndDependencies(IEnumerable<string> paths, FileSystem fileSystem, IDependencyProvider? dependencyProvider)
 	{
 		List<FileBase> files = new();
-		HashSet<string> serializedFileNames = new();//包含缺失的依赖项
+		HashSet<string> serializedFileNames = new(); //包含缺失的依赖项
 		foreach (string path in paths)
 		{
 			FileBase? file;
@@ -83,17 +101,14 @@ partial class GameBundle
 			}
 			catch (Exception ex)
 			{
-				file = new FailedFile()
-				{
-					Name = fileSystem.Path.GetFileName(path),
-					FilePath = path,
-					StackTrace = ex.ToString(),
-				};
+				file = new FailedFile() { Name = fileSystem.Path.GetFileName(path), FilePath = path, StackTrace = ex.ToString(), };
 			}
+
 			while (file is CompressedFile compressedFile)
 			{
 				file = compressedFile.UncompressedFile;
 			}
+
 			if (file is ResourceFile or FailedFile)
 			{
 				files.Add(file);
@@ -127,12 +142,14 @@ partial class GameBundle
 					{
 						LoadDependencies(serializedFileInContainer, files, serializedFileNames, dependencyProvider);
 					}
+
 					break;
 			}
 		}
 
 		return files;
 	}
+
 	/// <summary> 加载文件的依赖项。 </summary>
 	private static void LoadDependencies(SerializedFile serializedFile, List<FileBase> files, HashSet<string> serializedFileNames, IDependencyProvider? dependencyProvider)
 	{

@@ -55,17 +55,12 @@ namespace AssetRipper.Processing.Editor;
 /// <see cref="GameBundle.AddNewProcessedCollection(string, UnityVersion)"/>.
 /// </para>
 /// </summary>
-public class EditorFormatProcessor : IAssetProcessor
+public class EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMode) : IAssetProcessor
 {
 	private ITagManager? tagManager;
-	private readonly BundledAssetsExportMode bundledAssetsExportMode;
+	private readonly BundledAssetsExportMode bundledAssetsExportMode = bundledAssetsExportMode;
 	private IAssemblyManager? assemblyManager;
 	private PathChecksumCache? checksumCache;
-
-	public EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMode)
-	{
-		this.bundledAssetsExportMode = bundledAssetsExportMode;
-	}
 
 	public void Process(GameData gameData)
 	{

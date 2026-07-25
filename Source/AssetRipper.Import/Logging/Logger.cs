@@ -57,6 +57,7 @@ public static class Logger
 	}
 
 	public static void BlankLine() => BlankLine(1);
+
 	public static void BlankLine(int numLines)
 	{
 		foreach (ILogger instance in loggers)
@@ -73,6 +74,7 @@ public static class Logger
 	public static void Error(LogCategory category, string message) => Log(LogType.Error, category, message);
 	public static void Error(Exception e) => Error(LogCategory.None, null, e);
 	public static void Error(string message, Exception e) => Error(LogCategory.None, message, e);
+
 	public static void Error(LogCategory category, string? message, Exception e)
 	{
 		StringBuilder sb = new();
@@ -84,6 +86,7 @@ public static class Logger
 		sb.AppendLine(e.ToString());
 		Log(LogType.Error, category, sb.ToString());
 	}
+
 	public static void Verbose(string message) => Log(LogType.Verbose, LogCategory.None, message);
 	public static void Verbose(LogCategory category, string message) => Log(LogType.Verbose, category, message);
 	public static void Debug(string message) => Log(LogType.Debug, LogCategory.None, message);
@@ -107,6 +110,21 @@ public static class Logger
 		Log(LogType.Info, LogCategory.System, $"AssetRipper Build Type: {AssetRipperRuntimeInformation.Build.Configuration} {AssetRipperRuntimeInformation.Build.Type}");
 		Log(LogType.Info, LogCategory.System, $"UTC Current Time: {AssetRipperRuntimeInformation.CurrentTime}");
 		Log(LogType.Info, LogCategory.System, $"UTC Compile Time: {AssetRipperRuntimeInformation.CompileTime}");
+	}
+
+	/// <summary>
+	/// 输出当前内存状态，用于定位哪个阶段内存上涨最多。
+	/// </summary>
+	public static void LogMemoryDiagnostics(string stage)
+	{
+		// 强制 GC 后再统计，排除已可回收但未回收的对象干扰
+		GC.Collect();
+		GC.WaitForPendingFinalizers();
+		GC.Collect();
+
+		long managedMemory = GC.GetTotalMemory(false);
+		long workingSet = Environment.WorkingSet;
+		Info(LogCategory.Processing, $"[内存诊断] {stage}: 托管: {managedMemory / 1024.0 / 1024.0:F1} MB | 工作集: {workingSet / 1024.0 / 1024.0:F1} MB");
 	}
 
 	public static void Add(ILogger logger) => loggers.Add(logger);

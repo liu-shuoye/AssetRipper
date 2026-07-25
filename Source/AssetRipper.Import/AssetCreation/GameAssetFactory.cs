@@ -109,11 +109,12 @@ public sealed class GameAssetFactory : AssetFactoryBase
 		{
 			return asset;
 		}
-		else if (SpecialFileNames.IsDefaultResourceOrBuiltinExtra(assetInfo.Collection.Name))
+
+		if (SpecialFileNames.IsDefaultResourceOrBuiltinExtra(assetInfo.Collection.Name))
 		{
 			if (asset is IShader)
 			{
-				Logger.Info(LogCategory.Import, $"Shader with PathID {asset.PathID} in {assetInfo.Collection.Name} uses engine type trees.");
+				Logger.Info(LogCategory.Import, $"在 {assetInfo.Collection.Name} 中，使用 PathID 为 {asset.PathID} 的着色器使用了引擎类型树。");
 			}
 			else
 			{
@@ -121,7 +122,8 @@ public sealed class GameAssetFactory : AssetFactoryBase
 			}
 			return asset;
 		}
-		else if (assetInfo.Collection.Version.Type == UnityVersionType.Patch)
+
+		if (assetInfo.Collection.Version.Type == UnityVersionType.Patch)
 		{
 			UnityVersion oldVersion = assetInfo.Collection.Version;
 			UnityVersion newVersion = new UnityVersion(oldVersion.Major, oldVersion.Minor, unchecked((ushort)(oldVersion.Build + 1u)));

@@ -9,4 +9,8 @@
 		<ProjectReference Include="..\AssetRipper.IO.Files\AssetRipper.IO.Files.csproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <PackageReference Include="AssetRipper.Cpp2IL.Core" Version="1.0.5" />
+	</ItemGroup>
+
 </Project>
