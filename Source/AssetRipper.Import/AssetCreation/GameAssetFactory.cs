@@ -189,9 +189,8 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 		if (error is not null)
 		{
 			reader.Position = 0;
-			Utf8String name = reader.ReadUtf8String();
 			// 保存失败数据
-			FileStream fileStream = File.Create($"D:/UserData/errorData/{name}.{asset.GetType().Name}.bytes");
+			FileStream fileStream = File.Create($"D:/UserData/errorData/{asset.GetBestName()}.{asset.GetType().Name}.bytes");
 			fileStream.Write(assetData);
 			fileStream.Flush();
 			fileStream.Close();
