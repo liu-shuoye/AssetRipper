@@ -14,10 +14,16 @@ internal sealed partial record class GameInitializer
 		FileSystem FileSystem)
 		: IDependencyProvider
 	{
-		public FileBase? FindDependency(FileIdentifier identifier)
+		public FileBase? FindDependency(FileIdentifier identifier, Dictionary<string, string> skipContent)
 		{
-			string? systemFilePath = RequestDependency(identifier.PathName);
-			return systemFilePath is null ? null : SchemeReader.LoadFile(systemFilePath, FileSystem);
+			string? systemFilePath = RequestDependency(identifier.PathName) ?? skipContent.GetValueOrDefault(identifier.PathName);
+			if (systemFilePath is null)
+			{
+				Logger.Log(LogType.Warning, LogCategory.Import, $"未找到依赖项 '{identifier.PathName}',{identifier.PathName}");
+				return null;
+			}
+
+			return SchemeReader.LoadFile(systemFilePath, FileSystem);
 		}
 
 		/// <summary>

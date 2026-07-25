@@ -91,6 +91,7 @@ partial class GameBundle
 	{
 		List<FileBase> files = new();
 		HashSet<string> serializedFileNames = new(); //包含缺失的依赖项
+		Dictionary<string, string> skipContent = new();
 		foreach (string path in paths)
 		{
 			FileBase? file;
@@ -107,6 +108,29 @@ partial class GameBundle
 			while (file is CompressedFile compressedFile)
 			{
 				file = compressedFile.UncompressedFile;
+			}
+
+
+			string assetsPath = path.Split(@"\assets\")[1];
+			if (assetsPath.StartsWith(@"art\audio")
+			    || assetsPath.StartsWith(@"art\ui")
+			    || assetsPath.StartsWith(@"art\character"))
+			{
+				if (file is SerializedFile serializedFile)
+				{
+					skipContent[serializedFile.NameFixed] = serializedFile.FilePath;
+					continue;
+				}
+
+				if (file is FileContainer container)
+				{
+					foreach (SerializedFile serializedFileInContainer in container.FetchSerializedFiles())
+					{
+						skipContent[serializedFileInContainer.NameFixed] = serializedFileInContainer.FilePath;
+					}
+				}
+
+				continue;
 			}
 
 			if (file is ResourceFile or FailedFile)
@@ -135,12 +159,12 @@ partial class GameBundle
 			switch (file)
 			{
 				case SerializedFile serializedFile:
-					LoadDependencies(serializedFile, files, serializedFileNames, dependencyProvider);
+					LoadDependencies(serializedFile, files, serializedFileNames, dependencyProvider,skipContent);
 					break;
 				case FileContainer container:
 					foreach (SerializedFile serializedFileInContainer in container.FetchSerializedFiles())
 					{
-						LoadDependencies(serializedFileInContainer, files, serializedFileNames, dependencyProvider);
+						LoadDependencies(serializedFileInContainer, files, serializedFileNames, dependencyProvider, skipContent);
 					}
 
 					break;
@@ -151,14 +175,31 @@ partial class GameBundle
 	}
 
 	/// <summary> 加载文件的依赖项。 </summary>
-	private static void LoadDependencies(SerializedFile serializedFile, List<FileBase> files, HashSet<string> serializedFileNames, IDependencyProvider? dependencyProvider)
+	private static void LoadDependencies(SerializedFile serializedFile, List<FileBase> files, HashSet<string> serializedFileNames, IDependencyProvider? dependencyProvider, Dictionary<string, string> skipContent)
 	{
 		foreach (FileIdentifier fileIdentifier in serializedFile.Dependencies)
 		{
 			string name = fileIdentifier.GetFilePath();
-			if (serializedFileNames.Add(name) && dependencyProvider?.FindDependency(fileIdentifier) is { } dependency)
+			if (serializedFileNames.Add(name) && dependencyProvider?.FindDependency(fileIdentifier,skipContent) is { } dependency)
 			{
-				files.Add(dependency);
+				dependency.ReadContentsRecursively();
+				if (dependency is ResourceFile or FailedFile)
+				{
+					files.Add(dependency);
+				}
+				else if (dependency is SerializedFile serializedFileDependency)
+				{
+					files.Add(dependency);
+					serializedFileNames.Add(serializedFileDependency.NameFixed);
+				}
+				else if (dependency is FileContainer container)
+				{
+					files.Add(dependency);
+					foreach (SerializedFile serializedFileInContainer in container.FetchSerializedFiles())
+					{
+						serializedFileNames.Add(serializedFileInContainer.NameFixed);
+					}
+				}
 			}
 		}
 	}

@@ -92,7 +92,10 @@ public sealed class OriginalPathProcessor : IAssetProcessor
 				if (count > 30)
 				{
 					// 移除扩展名
-					originalDirectory = originalPath[..originalPath.LastIndexOf('.')];
+					if(originalPath.LastIndexOf('.') > 0)
+					{
+						originalDirectory = originalPath[..originalPath.LastIndexOf('.')];
+					}
 				}
 
 				foreach (IUnityObjectBase asset in collection)

@@ -87,7 +87,7 @@ public abstract partial class PlatformGameStructure
 		return false;
 	}
 
-	/// <summary>Attempts to find the path for the dependency with that name.</summary>
+	/// <summary>尝试查找具有该名称的依赖项路径。</summary>
 	public string? RequestDependency(string dependency)
 	{
 		string? dependencyPath = Files.FirstOrDefault(t => t.Key == dependency).Value;
