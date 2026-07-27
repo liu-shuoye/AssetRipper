@@ -46,18 +46,19 @@ public class TextureAssetExporter : BinaryAssetExporter
 
 		if (TextureConverter.TryConvertToBitmap(texture, out DirectBitmap bitmap))
 		{
+			ImageExportFormat imageExportFormat = ImageExportFormat;
 			if (ImageExportFormat.Original == ImageExportFormat)
 			{
-				ImageExportFormat = ImageExportFormatExtensions.GetFromExtension(path);
+				imageExportFormat = ImageExportFormatExtensions.GetFromExtension(path);
 				
 			}
-			string extension = ImageExportFormat.GetFileExtension();
+			string extension = imageExportFormat.GetFileExtension();
 			if (!path.EndsWith(extension))
 			{
 				path = Path.ChangeExtension(path, extension);
 			}
 			using Stream stream = fileSystem.File.Create(path);
-			bitmap.Save(stream, ImageExportFormat, path);
+			bitmap.Save(stream, imageExportFormat, path);
 			return true;
 		}
 		else
