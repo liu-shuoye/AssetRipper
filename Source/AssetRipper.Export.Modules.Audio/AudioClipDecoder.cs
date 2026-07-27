@@ -1,4 +1,5 @@
-﻿using AssetRipper.SourceGenerated.Classes.ClassID_83;
+using AssetRipper.Import.Logging;
+using AssetRipper.SourceGenerated.Classes.ClassID_83;
 using AssetRipper.SourceGenerated.Extensions;
 using AssetRipper.SourceGenerated.NativeEnums.Fmod;
 using Fmod5Sharp;
@@ -34,13 +35,14 @@ public static class AudioClipDecoder
 		}
 		else if (CheckMagic(rawData, "FSB5"u8))
 		{
-			FmodAudioType audioType = (FmodAudioType)uint.MaxValue;
+			// 使用 nullable 类型，区分"未确定"和"已确定但不支持"
+			FmodAudioType? audioType = null;
 			try
 			{
 				if (FsbLoader.TryLoadFsbFromByteArray(rawData, out FmodSoundBank? fsbData))
 				{
 					audioType = fsbData!.Header.AudioType;
-					if (audioType.IsSupported() && fsbData.Samples.Single().RebuildAsStandardFileFormat(out decodedData, out fileExtension))
+					if (audioType.Value.IsSupported() && fsbData.Samples.Single().RebuildAsStandardFileFormat(out decodedData, out fileExtension))
 					{
 						message = null;
 						return true;
@@ -49,18 +51,30 @@ public static class AudioClipDecoder
 					{
 						decodedData = null;
 						fileExtension = null;
-						message = $"Can't decode audio clip '{audioClip.Name}' with Fmod5Sharp because it's '{audioType}' encoded.";
+						message = $"Can't decode audio clip '{audioClip.Name}' with Fmod5Sharp because it's '{audioType.Value}' encoded.";
 						return false;
 					}
 				}
 			}
 			catch (Exception ex)
 			{
-				decodedData = null;
-				fileExtension = null;
-				message = $"Failed to convert audio ({audioType})\n{ex}";
-				return false;
+				// Fmod5Sharp 解析 FSB5 时抛出异常（如数据截断导致 EndOfStreamException）。
+				// 此时 audioType 可能为 null，不应报告误导性的 uint.MaxValue。
+				// 回退为导出原始 FSB5 数据，避免音频完全丢失并维持引用完整性，
+				// 用户可用外部工具（如 fsbank、VGMStream）处理导出的 .fsb 文件。
+				string typeInfo = audioType.HasValue ? $" ({audioType.Value})" : " (unknown)";
+				Logger.Warning(LogCategory.Export, $"Failed to decode FSB5 audio clip '{audioClip.Name}'{typeInfo} with data length {rawData.Length}, falling back to raw export.\n{ex}");
+				fileExtension = "fsb";
+				decodedData = rawData;
+				message = null;
+				return true;
 			}
+			// TryLoadFsbFromByteArray 返回 false（未抛出异常），说明 FSB5 头校验失败但数据确实是 FSB5 格式。
+			// 同样回退为导出原始 FSB5 数据。
+			fileExtension = "fsb";
+			decodedData = rawData;
+			message = null;
+			return true;
 		}
 		else if (CheckMagic(rawData, "IMPM"u8))
 		{
