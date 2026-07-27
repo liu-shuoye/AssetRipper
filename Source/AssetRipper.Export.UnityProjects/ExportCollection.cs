@@ -82,7 +82,13 @@ public abstract class ExportCollection : IExportCollection
 			fileName = FileSystem.FixInvalidFileNameCharacters(fileName);
 		}
 
-		fileName = $"{fileName}.{GetExportExtension(asset)}";
+		string ex = asset.GetBestExtension() ?? GetExportExtension(asset);
+		if (string.IsNullOrEmpty(ex))
+		{
+			ex = GetExportExtension(asset);
+		}
+
+		fileName = $"{fileName}.{ex}";
 		return GetUniqueFileName(dirPath, fileName, fileSystem);
 	}
 
