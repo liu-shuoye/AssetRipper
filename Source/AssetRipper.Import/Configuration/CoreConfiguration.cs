@@ -27,7 +27,7 @@ public class CoreConfiguration
 	/// </summary>
 	public string ExportRootPath { get; set; } = "";
 	/// <summary>
-	/// 创建新unity项目的方法
+	/// 创建新unity项目的路径
 	/// </summary>
 	public string ProjectRootPath => Path.Join(ExportRootPath, "ExportedProject");
 	public string AssetsPath => Path.Join(ProjectRootPath, "Assets");

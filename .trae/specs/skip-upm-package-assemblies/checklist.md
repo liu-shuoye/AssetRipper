@@ -1,0 +1,20 @@
+- [x] 采集工具能正确扫描 BuiltInPackages 与 PackageCache 两个目录
+- [x] 采集工具能从 .asmdef 文件解析出程序集名（name 字段）
+- [x] 采集工具能从 .asmdef.meta 文件解析出真实 GUID（guid 字段）
+- [x] 采集工具能从 package.json 解析出 UPM 包名（name 字段）与版本（version 字段）
+- [x] 采集工具在同名程序集冲突时优先采用 PackageCache 版本并输出警告
+- [x] 生成的 `UnityPackageAssemblyMap.generated.cs` 能通过 AssetRipper 项目编译
+- [x] `UnityPackageAssemblyInfo` 类型定义存在且含 PackageName、Guid、Version 三个字段
+- [x] `UnityPackageAssemblyMap.TryGetInfo` 能正确查询已知 UPM 程序集（如 Unity.Mathematics）
+- [x] `ScriptExporter.GetExportType` 对命中映射表的程序集返回 `AssemblyExportType.Skip`
+- [x] `ScriptExporter.GetExportType` 对未命中的程序集仍走原逻辑（不破坏现有行为）
+- [x] `ScriptExporter.CreateExportPointer` 的 Skip 分支对 UPM 程序集使用映射表中的真实 GUID
+- [x] `ScriptExporter.CreateExportPointer` 的 Skip 分支对传统引用程序集仍用 `ReferenceAssemblyDictionary` 的 GUID
+- [x] `PackageManifestPostExporter.CreateManifest` 能接收实际加载的程序集列表
+- [x] `PackageManifestPostExporter.CreateManifest` 把命中 UPM 映射的包写入 `manifest.json` 的 `dependencies`
+- [x] `manifest.json` 仍包含 `com.unity.modules.*` 默认依赖
+- [x] `manifest.json` 不覆盖已存在的依赖条目（TryAdd 语义）
+- [x] 未命中映射表的第三方 DLL 仍按原逻辑导出到 `Assets/Plugins/`
+- [x] 单元测试覆盖 GetExportType、CreateExportPointer、CreateManifest 三个修改点
+- [ ] 端到端导出后 `Assets/Plugins/` 不含已知 UPM 程序集（需用户用实际游戏文件验证）
+- [ ] 端到端导出后 Unity 打开工程，预制体 MonoBehaviour 引用未丢失（需用户用 Unity 编辑器验证）

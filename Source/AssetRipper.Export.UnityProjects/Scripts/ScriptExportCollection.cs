@@ -52,7 +52,7 @@ public sealed class ScriptExportCollection : ScriptExportCollectionBase
 
 	public override bool Export(IExportContainer container, string projectDirectory, FileSystem fileSystem)
 	{
-		Logger.Info(LogCategory.Export, "Exporting scripts...");
+		Logger.Info(LogCategory.Export, "导出脚本中...");
 
 		string assetsDirectoryPath = fileSystem.Path.Join(projectDirectory, AssetsKeyword);
 

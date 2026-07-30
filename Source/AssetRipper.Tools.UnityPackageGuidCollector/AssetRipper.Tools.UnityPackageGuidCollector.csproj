@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<OutputPath>..\0Bins\Other\AssetRipper.Tools.UnityPackageGuidCollector\$(Configuration)\</OutputPath>
+		<IntermediateOutputPath>..\0Bins\obj\AssetRipper.Tools.UnityPackageGuidCollector\$(Configuration)\</IntermediateOutputPath>
+	</PropertyGroup>
+
+</Project>

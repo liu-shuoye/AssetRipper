@@ -108,6 +108,7 @@
   <Project Path="Source/AssetRipper.Tools.RawTextureExtractor/AssetRipper.Tools.RawTextureExtractor.csproj" />
   <Project Path="Source/AssetRipper.Tools.SystemTester/AssetRipper.Tools.SystemTester.csproj" />
   <Project Path="Source/AssetRipper.Tools.TypeTreeExtractor/AssetRipper.Tools.TypeTreeExtractor.csproj" />
+  <Project Path="Source/AssetRipper.Tools.UnityPackageGuidCollector/AssetRipper.Tools.UnityPackageGuidCollector.csproj" />
   <Project Path="Source/AssetRipper.Web/AssetRipper.Web.csproj" />
   <Project Path="Source/AssetRipper.Yaml.Tests/AssetRipper.Yaml.Tests.csproj" />
   <Project Path="Source/AssetRipper.Yaml/AssetRipper.Yaml.csproj" />

@@ -1,0 +1,14 @@
+- [x] 采集工具能扫描 UPM 包目录下的所有 .cs + .cs.meta 文件
+- [x] 采集工具能从 .cs.meta 解析出 guid 字段
+- [x] 采集工具能用正则从 .cs 文件提取命名空间和顶层类型声明（class/struct/interface/enum）
+- [x] 采集工具能处理无 namespace 的 .cs 文件（命名空间记为空字符串）
+- [x] 采集工具能处理一个 .cs 文件含多个类型声明的情况
+- [x] 采集工具能通过 .asmdef 关联 .cs 文件所属程序集名
+- [x] 生成的 `UnityPackageAssemblyMap.generated.cs` 含 `s_scriptGuidMap` 字典
+- [x] 生成的 `TryGetScriptGuid` 方法能正确查询已知脚本（如 Text → 5f7201a12d95ffc409449d95f23cf332）
+- [x] `ScriptExporter.CreateExportPointer` 对 UPM 脚本使用 fileID=11500000
+- [x] `ScriptExporter.CreateExportPointer` 对 UPM 脚本使用 .cs.meta 真实 GUID
+- [x] `ScriptExporter.CreateExportPointer` 对未命中脚本映射的 UPM 程序集有兜底逻辑
+- [x] 单元测试覆盖 TryGetScriptGuid 的命中与未命中场景
+- [ ] 端到端导出后 MainScene.prefab 中 Text 引用的 guid = 5f7201a12d95ffc409449d95f23cf332（需用户验证）
+- [ ] 端到端导出后 Unity 打开工程，MonoBehaviour 引用未丢失（需用户验证）
