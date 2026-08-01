@@ -55,6 +55,13 @@ public sealed record class ExportSettings
 
 	public string? LanguageCode { get; set; }
 
+	/// <summary>
+	/// 用户 Unity 项目根目录或资产文件夹路径。
+	/// 导出时，同类型同名的资产将直接复制该目录中的源文件与 .meta（保留其 GUID），
+	/// 而不是导出反编译/转换版本。留空则禁用该功能。
+	/// </summary>
+	public string? CustomProjectPath { get; set; }
+
 	public void Log()
 	{
 		Logger.Info(LogCategory.General, $"{nameof(AudioExportFormat)}: {AudioExportFormat}");
@@ -66,5 +73,6 @@ public sealed record class ExportSettings
 		Logger.Info(LogCategory.General, $"{nameof(SpriteExportMode)}: {SpriteExportMode}");
 		Logger.Info(LogCategory.General, $"{nameof(TextExportMode)}: {TextExportMode}");
 		Logger.Info(LogCategory.General, $"{nameof(ExportUnreadableAssets)}: {ExportUnreadableAssets}");
+		Logger.Info(LogCategory.General, $"{nameof(CustomProjectPath)}: {CustomProjectPath}");
 	}
 }

@@ -49,3 +49,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 		}
 	});
 });
+
+// For settings page "browse" buttons: open the native folder picker and fill the selected path into the target input
+async function browseForFolder(inputId) {
+	try {
+		const response = await fetch('/Dialogs/OpenFolder');
+		const path = await response.json();
+		if (path) {
+			document.getElementById(inputId).value = path;
+		}
+	} catch (error) {
+		console.error('Error fetching the folder path:', error);
+	}
+}

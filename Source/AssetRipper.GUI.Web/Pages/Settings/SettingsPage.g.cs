@@ -57,6 +57,9 @@ partial class SettingsPage
 			case nameof(ExportSettings.LanguageCode):
 				Configuration.ExportSettings.LanguageCode = value;
 				break;
+			case nameof(ExportSettings.CustomProjectPath):
+				Configuration.ExportSettings.CustomProjectPath = value;
+				break;
 		}
 	}
 

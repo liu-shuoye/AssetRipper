@@ -12,7 +12,9 @@ using AssetRipper.Export.UnityProjects.Scripts;
 using AssetRipper.Export.UnityProjects.Shaders;
 using AssetRipper.Export.UnityProjects.Terrains;
 using AssetRipper.Export.UnityProjects.Textures;
+using AssetRipper.Export.UnityProjects.UserAssets;
 using AssetRipper.Import.AssetCreation;
+using AssetRipper.Import.Logging;
 using AssetRipper.Import.Structure.Assembly.Managers;
 using AssetRipper.Mining.PredefinedAssets;
 using AssetRipper.Processing.ScriptableObject;
@@ -192,5 +194,17 @@ partial class ProjectExporter
 
 		//删除的资源
 		OverrideExporter<IUnityObjectBase>(new DeletedAssetsExporter());
+
+		//用户提供的项目资产：同类型同名资产直接复制用户源文件与 .meta。
+		//用户显式指定的优先级最高，必须最后注册（导出器栈为后进先出，栈顶最先被尝试）。
+		string? customProjectPath = settings.ExportSettings.CustomProjectPath;
+		if (!string.IsNullOrWhiteSpace(customProjectPath)
+			&& UserAssetIndex.TryCreate(customProjectPath, out UserAssetIndex? userAssetIndex))
+		{
+			UserProjectAssetExporter userProjectAssetExporter = new(userAssetIndex);
+			OverrideExporter<IUnityObjectBase>(userProjectAssetExporter, true);
+			EventExportFinished += () => Logger.Info(LogCategory.Export,
+				$"用户项目资产替换完成：索引 {userAssetIndex.EntryCount} 项，共替换 {userProjectAssetExporter.ReplacedCount} 个资产。");
+		}
 	}
 }

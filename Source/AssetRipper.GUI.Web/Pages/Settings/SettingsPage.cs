@@ -177,6 +177,14 @@ public sealed partial class SettingsPage : DefaultPage
 									WriteCheckBoxForExportUnreadableAssets(writer, Localization.ExportUnreadableAssets);
 								}
 							}
+
+							using (new Div(writer).WithClass("row").End())
+							{
+								using (new Div(writer).WithClass("col").End())
+								{
+									WriteTextInputForCustomProjectPath(writer);
+								}
+							}
 						}
 					}
 
@@ -211,6 +219,30 @@ public sealed partial class SettingsPage : DefaultPage
 			.WithName(nameof(Configuration.ImportSettings.TargetVersion))
 			.WithValue(Configuration.ImportSettings.TargetVersion.ToString())
 			.Close();
+	}
+
+	/// <summary>
+	/// 自定义 Unity 项目路径的文本输入框，附带"选择文件夹"按钮（调用全局 JS 打开本机目录选择对话框）。
+	/// </summary>
+	private static void WriteTextInputForCustomProjectPath(TextWriter writer)
+	{
+		string id = nameof(Configuration.ExportSettings.CustomProjectPath);
+		new Label(writer).WithClass("form-label").WithFor(id).Close(Localization.CustomProjectPath);
+		using (new Div(writer).WithClass("input-group").End())
+		{
+			new Input(writer)
+				.WithType("text")
+				.WithClass("form-control")
+				.WithId(id)
+				.WithName(id)
+				.WithValue(Configuration.ExportSettings.CustomProjectPath ?? "")
+				.Close();
+			new Button(writer)
+				.WithType("button")
+				.WithClass("btn btn-outline-secondary")
+				.WithCustomAttribute("onclick", $"browseForFolder('{id}')")
+				.Close(Localization.SelectFolder);
+		}
 	}
 
 	private static void WriteCheckBox(TextWriter writer, string label, bool @checked, string id, bool disabled = false)
