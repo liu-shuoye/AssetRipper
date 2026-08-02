@@ -106,8 +106,14 @@ public static class Commands
 			if (!string.IsNullOrEmpty(path))
 			{
 				bool createSubfolder = TryGetCreateSubfolder(form);
-				path = MaybeAppendTimestampedSubfolder(path, createSubfolder);
-				await GameFileLoader.ExportUnityProject(path);
+				string finalPath = MaybeAppendTimestampedSubfolder(path, createSubfolder);
+
+				// 记住本次导出：保存用户输入的基础路径与子文件夹选项，下次打开导出页自动预填
+				GameFileLoader.LastExport.ExportPath = path;
+				GameFileLoader.LastExport.CreateSubfolder = createSubfolder;
+				GameFileLoader.LastExport.SaveToDefaultPath();
+
+				await GameFileLoader.ExportUnityProject(finalPath);
 			}
 			return null;
 		}
@@ -132,8 +138,14 @@ public static class Commands
 			if (!string.IsNullOrEmpty(path))
 			{
 				bool createSubfolder = TryGetCreateSubfolder(form);
-				path = MaybeAppendTimestampedSubfolder(path, createSubfolder);
-				await GameFileLoader.ExportPrimaryContent(path);
+				string finalPath = MaybeAppendTimestampedSubfolder(path, createSubfolder);
+
+				// 记住本次导出：保存用户输入的基础路径与子文件夹选项，下次打开导出页自动预填
+				GameFileLoader.LastExport.ExportPath = path;
+				GameFileLoader.LastExport.CreateSubfolder = createSubfolder;
+				GameFileLoader.LastExport.SaveToDefaultPath();
+
+				await GameFileLoader.ExportPrimaryContent(finalPath);
 			}
 			return null;
 		}

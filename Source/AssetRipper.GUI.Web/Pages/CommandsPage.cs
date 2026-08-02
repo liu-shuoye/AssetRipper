@@ -1,4 +1,6 @@
-﻿using AssetRipper.GUI.Web.Paths;
+﻿using AssetRipper.Export.Configuration;
+using AssetRipper.GUI.Web.Paths;
+using System.Text.Json;
 
 namespace AssetRipper.GUI.Web.Pages;
 
@@ -95,6 +97,13 @@ public sealed class CommandsPage : VuePage
 
 	protected override void WriteScriptReferences(TextWriter writer)
 	{
+		// 在 Vue 脚本之前注入上次导出的记忆：用源生成上下文编码，避免反射式序列化
+		// （应用已禁用反射式 System.Text.Json，反射式 Serialize 会抛 InvalidOperationException）
+		writer.Write("<script>");
+		writer.Write($"window.__lastExportPath = {JsonSerializer.Serialize(GameFileLoader.LastExport.ExportPath, AppJsonSerializerContext.Default.String)};");
+		writer.Write($"window.__createSubfolder = {JsonSerializer.Serialize(GameFileLoader.LastExport.CreateSubfolder, AppJsonSerializerContext.Default.Boolean)};");
+		writer.Write("</script>");
+
 		base.WriteScriptReferences(writer);
 		new Script(writer).WithSrc("/js/commands_page.js").Close();
 	}

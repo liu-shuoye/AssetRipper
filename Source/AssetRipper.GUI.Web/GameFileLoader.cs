@@ -18,6 +18,10 @@ public static class GameFileLoader
 	public static GameBundle GameBundle => GameData!.GameBundle;
 	public static IAssemblyManager AssemblyManager => GameData!.AssemblyManager;
 	public static FullConfiguration Settings { get; } = LoadSettings();
+
+	// 上次导出的记忆（路径 + 子文件夹选项），始终从磁盘加载，与"保存到磁盘"开关无关
+	public static LastExportSettings LastExport { get; } = LoadLastExport();
+
 	public static bool Headless { get; set; }
 
 	public static ExportHandler ExportHandler
@@ -115,6 +119,12 @@ public static class GameFileLoader
 	{
 		FullConfiguration settings = new();
 		settings.LoadFromDefaultPath();
+		return settings;
+	}
+
+	private static LastExportSettings LoadLastExport()
+	{
+		LastExportSettings.TryLoadFromDefaultPath(out LastExportSettings settings);
 		return settings;
 	}
 

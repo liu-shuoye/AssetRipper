@@ -5,10 +5,14 @@ const app = createApp({
 		return {
 			load_path: '',
 			load_path_exists: false,
-			export_path: '',
+			export_path: window.__lastExportPath ?? '',
 			export_path_has_files: false,
-			create_subfolder: false
+			create_subfolder: window.__createSubfolder ?? false
 		}
+	},
+	mounted() {
+		// 预填后重新计算"目录非空"警告状态
+		this.handleExportPathChange();
 	},
 	methods: {
 		async handleLoadPathChange() {
