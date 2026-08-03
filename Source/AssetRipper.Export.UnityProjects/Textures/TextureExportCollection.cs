@@ -30,6 +30,7 @@ public class TextureExportCollection : AssetsExportCollection<ITexture2D>
 				AddAsset(sprite);
 			}
 		}
+
 		AddAsset(spriteInformationObject);
 	}
 
@@ -57,8 +58,17 @@ public class TextureExportCollection : AssetsExportCollection<ITexture2D>
 	{
 		if (m_convert)
 		{
-			return ((TextureAssetExporter)AssetExporter).ImageExportFormat.GetFileExtension();
+			ImageExportFormat imageExportFormat = ((TextureAssetExporter)AssetExporter).ImageExportFormat;
+			if (ImageExportFormat.Original == imageExportFormat)
+			{
+				imageExportFormat = ImageExportFormatExtensions.GetFromExtension($".{asset.GetBestExtension()}");
+			}
+
+			string extension = imageExportFormat.GetFileExtension();
+
+			return extension;
 		}
+
 		return base.GetExportExtension(asset);
 	}
 
@@ -75,12 +85,13 @@ public class TextureExportCollection : AssetsExportCollection<ITexture2D>
 		{
 			importer.SpriteModeE = SpriteImportMode.Single;
 			importer.SpriteExtrude = 1;
-			importer.SpriteMeshType = (int)SpriteMeshType.FullRect;//See pull request #306
+			importer.SpriteMeshType = (int)SpriteMeshType.FullRect; //See pull request #306
 			importer.Alignment = (int)SpriteAlignment.Center;
 			if (importer.Has_SpritePivot())
 			{
 				importer.SpritePivot.SetValues(0.5f, 0.5f);
 			}
+
 			importer.SpritePixelsToUnits = 100.0f;
 		}
 		else if (textureSpriteInformation.Count == 1)
@@ -96,6 +107,7 @@ public class TextureExportCollection : AssetsExportCollection<ITexture2D>
 				importer.SpriteModeE = SpriteImportMode.Multiple;
 				importer.TextureTypeE = TextureImporterType.Sprite;
 			}
+
 			importer.SpriteExtrude = sprite.Extrude;
 			importer.SpriteMeshType = (int)sprite.RD.MeshType;
 			importer.Alignment = (int)SpriteAlignment.Custom;
@@ -103,10 +115,12 @@ public class TextureExportCollection : AssetsExportCollection<ITexture2D>
 			{
 				importer.SpritePivot.CopyValues(sprite.Pivot);
 			}
+
 			if (importer.Has_SpriteBorder() && sprite.Has_Border())
 			{
 				importer.SpriteBorder.CopyValues(sprite.Border);
 			}
+
 			importer.SpritePixelsToUnits = sprite.PixelsToUnits;
 			importer.TextureTypeE = TextureImporterType.Sprite;
 			if (m_exportSprites)
@@ -127,6 +141,7 @@ public class TextureExportCollection : AssetsExportCollection<ITexture2D>
 			{
 				importer.SpritePivot.SetValues(0.5f, 0.5f);
 			}
+
 			importer.SpritePixelsToUnits = sprite.PixelsToUnits;
 			importer.TextureTypeE = TextureImporterType.Sprite;
 			if (m_exportSprites)
@@ -139,9 +154,7 @@ public class TextureExportCollection : AssetsExportCollection<ITexture2D>
 
 	private void AddSpriteSheet(IExportContainer container, ITextureImporter importer, IReadOnlyDictionary<ISprite, ISpriteAtlas?> textureSpriteInformation)
 	{
-		if (!importer.Has_SpriteSheet())
-		{
-		}
+		if (!importer.Has_SpriteSheet()) { }
 		else if (importer.SpriteModeE == SpriteImportMode.Single)
 		{
 			KeyValuePair<ISprite, ISpriteAtlas?> kvp = textureSpriteInformation.First();
@@ -203,6 +216,7 @@ public class TextureExportCollection : AssetsExportCollection<ITexture2D>
 	/// yet we still need the sprites to properly set other texture importer settings.
 	/// </summary>
 	private readonly bool m_exportSprites;
+
 	private readonly bool m_convert = true;
 	private uint m_nextExportID = 0;
 }

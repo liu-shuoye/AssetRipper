@@ -80,6 +80,11 @@ public static class ImageExportFormatExtensions
 
 	public static ImageExportFormat GetFromExtension(string path)
 	{
+		if (string.IsNullOrEmpty(path))
+		{
+			return ImageExportFormat.Png;
+		}
+
 		string extension = Path.GetExtension(path).ToLowerInvariant();
 		ImageExportFormat format = extension switch
 		{

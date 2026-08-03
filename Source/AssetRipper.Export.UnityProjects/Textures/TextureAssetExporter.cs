@@ -52,11 +52,6 @@ public class TextureAssetExporter : BinaryAssetExporter
 				imageExportFormat = ImageExportFormatExtensions.GetFromExtension(path);
 				
 			}
-			string extension = imageExportFormat.GetFileExtension();
-			if (!path.EndsWith(extension))
-			{
-				path = Path.ChangeExtension(path, extension);
-			}
 			using Stream stream = fileSystem.File.Create(path);
 			bitmap.Save(stream, imageExportFormat, path);
 			return true;
