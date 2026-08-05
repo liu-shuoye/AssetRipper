@@ -46,7 +46,8 @@ internal static class Program
 		Dictionary<string, string> asmdefPaths = new(StringComparer.Ordinal);
 
 		CollectFromDirectory(builtInPackagesPath, EntrySource.BuiltInPackages, entries, asmdefPaths);
-		CollectFromDirectory(packageCachePath, EntrySource.PackageCache, entries, asmdefPaths);
+		CollectFromDirectory($@"{packageCachePath}\Library\PackageCache", EntrySource.PackageCache, entries, asmdefPaths);
+		CollectFromDirectory($@"{packageCachePath}\Assets\Plugins", EntrySource.PackageCache, entries, asmdefPaths);
 
 		// 扫描 .cs + .cs.meta，建立脚本级 GUID 映射
 		List<ScriptEntry> scriptEntries = new();

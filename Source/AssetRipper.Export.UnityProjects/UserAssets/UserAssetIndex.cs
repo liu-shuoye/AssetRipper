@@ -190,10 +190,10 @@ public sealed class UserAssetIndex
 		{
 			".shader" => UserAssetKind.Shader,
 			".mat" => UserAssetKind.Material,
-			".cs" => UserAssetKind.Script,
-			".png" or ".tga" or ".jpg" or ".jpeg" or ".psd" or ".tif" or ".tiff" or ".exr" or ".bmp" => UserAssetKind.Texture,
-			".wav" or ".mp3" or ".ogg" or ".aif" or ".aiff" or ".flac" => UserAssetKind.Audio,
-			".txt" or ".json" or ".xml" or ".csv" or ".bytes" => UserAssetKind.Text,
+			// ".cs" => UserAssetKind.Script,
+			// ".png" or ".tga" or ".jpg" or ".jpeg" or ".psd" or ".tif" or ".tiff" or ".exr" or ".bmp" => UserAssetKind.Texture,
+			// ".wav" or ".mp3" or ".ogg" or ".aif" or ".aiff" or ".flac" => UserAssetKind.Audio,
+			// ".txt" or ".json" or ".xml" or ".csv" or ".bytes" => UserAssetKind.Text,
 			_ => null,
 		};
 	}
