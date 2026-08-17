@@ -47,10 +47,10 @@ public sealed class UserProjectAssetExporter : IAssetExporter
 			ICubemap => null,
 			IShader => UserAssetKind.Shader,
 			IMaterial => UserAssetKind.Material,
-			IMonoScript => UserAssetKind.Script,
-			ITexture2D => UserAssetKind.Texture,
-			IAudioClip => UserAssetKind.Audio,
-			ITextAsset => UserAssetKind.Text,
+			// IMonoScript => UserAssetKind.Script,
+			// ITexture2D => UserAssetKind.Texture,
+			// IAudioClip => UserAssetKind.Audio,
+			// ITextAsset => UserAssetKind.Text,
 			_ => null,
 		};
 		if (kind is null)
@@ -71,7 +71,16 @@ public sealed class UserProjectAssetExporter : IAssetExporter
 		}
 		name = name.Trim();
 
-		if (!index.TryGet(kind.Value, name, out UserAssetEntry? entry))
+		// 材质不能仅以名称判等：需同时比对引用的着色器名，与索引侧 (名称, 着色器名) 复合键一致。
+		// 着色器解析不到时传 null，与索引中未解析到着色器名的材质按名称回退匹配。
+		string? shaderName = null;
+		if (kind.Value is UserAssetKind.Material && asset is IMaterial material)
+		{
+			IShader? shader = material.Shader_C21P;
+			shaderName = shader?.Name.ToString();
+		}
+
+		if (!index.TryGet(kind.Value, name, shaderName, out UserAssetEntry? entry))
 		{
 			return false;
 		}

@@ -5,15 +5,22 @@ namespace AssetRipper.Export.UnityProjects.UserAssets;
 
 /// <summary>
 /// 用户项目资产索引：扫描用户提供的 Unity 项目根目录或资产文件夹，
-/// 建立 (资产类别, 名称) 到 (源文件, GUID, 目标相对路径) 的映射，供导出时替换同名资产。
+/// 建立 (资产类别, 名称, 着色器名) 到 (源文件, GUID, 目标相对路径) 的映射，供导出时替换同名资产。
 /// </summary>
 /// <remarks>
-/// 由于构建后的游戏中资产原始 GUID 已丢失，匹配只能按"类型 + 名称"进行：
-/// Shader 取 .shader 文件内 <c>Shader "名称"</c> 声明，其余类别取文件名（不含扩展名）。
+/// 由于构建后的游戏中资产原始 GUID 已丢失，匹配只能按"类型 + 名称"进行。
+/// 但材质不能仅以名称判断是否同一资源：同名材质可能引用完全不同的着色器（从而属性、外观都不同）。
+/// 因此材质以 (名称, 着色器名) 复合键区分，与引擎 <c>PredefinedAssetCache.MaterialKey</c> 的判定口径一致；
+/// 着色器名无法解析时（如内置着色器）退化为仅按名称匹配，此时同名仍可能误判，属已知限制。
+/// Shader 取 .shader 文件内 <c>Shader "名称"</c> 声明，其余类别取文件名（不含扩展名）；
+/// 材质另取 .mat 内 <c>m_Name</c> 作为名称（与导出侧 <c>named.Name</c> 一致），而非文件名。
 /// </remarks>
 public sealed class UserAssetIndex
 {
-	private readonly Dictionary<(UserAssetKind Kind, string Name), UserAssetEntry> entries = new(KeyComparer.Instance);
+	// 资产类别不同，键的含义不同：Shader 的 Shader 分量为 null，材质用 Shader 分量着色器名区分。
+	private readonly Dictionary<AssetKey, UserAssetEntry> entries = new();
+	private readonly Dictionary<UnityGuid, string> shaderNameByGuid = new();
+	private readonly List<PendingMaterial> pendingMaterials = new();
 
 	/// <summary>索引中的条目总数。</summary>
 	public int EntryCount => entries.Count;
@@ -84,6 +91,10 @@ public sealed class UserAssetIndex
 			result.ScanDirectory(fullPath, $"Assets/{directoryName}", statistics);
 		}
 
+		// 扫描阶段把材质先收集为待定项（其着色器名需依赖已索引的着色器 guid 映射才能解析），
+		// 故在所有目录扫描完毕后再统一建键，确保跨 Assets/Packages 的着色器都能被解析到。
+		result.ResolvePendingMaterials();
+
 		if (result.EntryCount == 0)
 		{
 			Logger.Warning(LogCategory.Export, $"用户项目路径 '{fullPath}' 中未找到任何可替换资产（需要带 .meta 的受支持类型文件），用户资产替换已禁用。");
@@ -101,11 +112,12 @@ public sealed class UserAssetIndex
 	}
 
 	/// <summary>
-	/// 按类别与名称查找用户资产条目（名称比较不区分大小写）。
+	/// 按类别、名称与（材质专用的）着色器名查找用户资产条目。
 	/// </summary>
-	public bool TryGet(UserAssetKind kind, string name, [NotNullWhen(true)] out UserAssetEntry? entry)
+	/// <param name="shaderName">材质的着色器名；非材质类别传 null。名称与着色器名比较均不区分大小写。</param>
+	public bool TryGet(UserAssetKind kind, string name, string? shaderName, [NotNullWhen(true)] out UserAssetEntry? entry)
 	{
-		return entries.TryGetValue((kind, name), out entry);
+		return entries.TryGetValue(new AssetKey(kind, name, shaderName), out entry);
 	}
 
 	/// <summary>
@@ -168,15 +180,35 @@ public sealed class UserAssetIndex
 				statistics.SkippedNoName++;
 				continue;
 			}
-
 			name = name.Trim();
+
 			string relativePath = Path.GetRelativePath(directory, filePath).Replace('\\', '/');
 			UserAssetEntry entry = new(filePath, metaPath, guid, $"{relativeTargetPrefix}/{relativePath}");
 
-			if (!entries.TryAdd((kind.Value, name), entry))
+			if (kind.Value is UserAssetKind.Shader)
 			{
-				UserAssetEntry existing = entries[(kind.Value, name)];
-				Logger.Warning(LogCategory.Export, $"用户项目中存在重名资产 '{name}'（{kind.Value}）：'{filePath}' 与 '{existing.SourceFilePath}'，仅首个生效。");
+				// 同步建立 guid -> 着色器名 映射，供后续材质解析其引用的着色器名。
+				shaderNameByGuid[guid] = name;
+				AddEntry(UserAssetKind.Shader, name, null, entry);
+			}
+			else if (kind.Value is UserAssetKind.Material)
+			{
+				// 材质不能仅用名称判等：先读出 m_Name 与 m_Shader 的 guid，待全量扫描后再按 (名称, 着色器名) 建键。
+				if (!TryReadMaterialInfo(filePath, out string? materialName, out UnityGuid shaderGuid))
+				{
+					statistics.SkippedNoName++;
+					continue;
+				}
+				if (string.IsNullOrWhiteSpace(materialName))
+				{
+					materialName = name; // 兜底用文件名
+				}
+				materialName = materialName.Trim();
+				pendingMaterials.Add(new PendingMaterial(filePath, metaPath, guid, $"{relativeTargetPrefix}/{relativePath}", materialName, shaderGuid));
+			}
+			else
+			{
+				AddEntry(kind.Value, name, null, entry);
 			}
 		}
 	}
@@ -222,6 +254,10 @@ public sealed class UserAssetIndex
 	}
 
 	private static Regex ShaderNameRegex { get; } = new(@"^\s*Shader\s+""([^""]+)""", RegexOptions.Compiled);
+
+	// 材质文件解析：m_Name 可能在文件任意位置；m_Shader 为单行流程映射（含 32 位 guid）。
+	private static Regex MaterialNameRegex { get; } = new(@"^\s*m_Name:\s*(.*)$", RegexOptions.Compiled);
+	private static Regex MaterialShaderRegex { get; } = new(@"m_Shader:\s*\{[^}]*guid:\s*([0-9a-fA-F]{32})", RegexOptions.Compiled);
 
 	/// <summary>
 	/// 从 .meta 文件解析 guid 行。
@@ -315,21 +351,139 @@ public sealed class UserAssetIndex
 	}
 
 	/// <summary>
-	/// 索引键比较器：类别一致且名称不区分大小写相等。
+	/// 索引键：资产类别 + 名称 +（材质专用的）着色器名。
+	/// 非材质类别的 Shader 分量为 null；材质以 (名称, 着色器名) 区分"同一资源"。
+	/// 名称与着色器名比较均不区分大小写，与历史行为及跨侧来源的大小写差异兼容。
 	/// </summary>
-	private sealed class KeyComparer : IEqualityComparer<(UserAssetKind Kind, string Name)>
+	private readonly struct AssetKey : IEquatable<AssetKey>
 	{
-		public static KeyComparer Instance { get; } = new();
+		public UserAssetKind Kind { get; }
+		public string Name { get; }
+		public string? Shader { get; }
 
-		public bool Equals((UserAssetKind Kind, string Name) x, (UserAssetKind Kind, string Name) y)
+		public AssetKey(UserAssetKind kind, string name, string? shader)
 		{
-			return x.Kind == y.Kind && string.Equals(x.Name, y.Name, StringComparison.OrdinalIgnoreCase);
+			Kind = kind;
+			Name = name;
+			Shader = shader;
 		}
 
-		public int GetHashCode((UserAssetKind Kind, string Name) obj)
+		public bool Equals(AssetKey other) =>
+			Kind == other.Kind
+			&& string.Equals(Name, other.Name, StringComparison.OrdinalIgnoreCase)
+			&& string.Equals(Shader, other.Shader, StringComparison.OrdinalIgnoreCase);
+
+		public override bool Equals(object? obj) => obj is AssetKey other && Equals(other);
+
+		public override int GetHashCode() =>
+			HashCode.Combine(Kind, StringComparer.OrdinalIgnoreCase.GetHashCode(Name), StringComparer.OrdinalIgnoreCase.GetHashCode(Shader ?? string.Empty));
+	}
+
+	/// <summary>
+	/// 扫描阶段收集、待全量扫描后再建键的材质：其着色器名依赖 shaderNameByGuid 映射。
+	/// </summary>
+	/// <param name="SourceFilePath">材质源文件绝对路径。</param>
+	/// <param name="SourceMetaPath">材质 .meta 文件绝对路径。</param>
+	/// <param name="Guid">材质 GUID。</param>
+	/// <param name="RelativeTargetPath">导出项目内相对目标路径。</param>
+	/// <param name="Name">材质 m_Name（已裁剪空白）。</param>
+	/// <param name="ShaderGuid">材质 m_Shader 引用的着色器 guid（用于解析着色器名）。</param>
+	private sealed record PendingMaterial(string SourceFilePath, string SourceMetaPath, UnityGuid Guid, string RelativeTargetPath, string Name, UnityGuid ShaderGuid);
+
+	/// <summary>
+	/// 将一条资产加入索引；键冲突时仅保留首个并告警（同名不同文件视为同一资源，仅首个可用于替换）。
+	/// </summary>
+	private void AddEntry(UserAssetKind kind, string name, string? shader, UserAssetEntry entry)
+	{
+		AssetKey key = new(kind, name, shader);
+		if (!entries.TryAdd(key, entry))
 		{
-			return HashCode.Combine(obj.Kind, StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Name));
+			UserAssetEntry existing = entries[key];
+			Logger.Warning(LogCategory.Export, $"用户项目中存在重名资产 '{FormatLabel(kind, name, shader)}'：'{entry.SourceFilePath}' 与 '{existing.SourceFilePath}'，仅首个生效。");
 		}
+	}
+
+	/// <summary>
+	/// 扫描结束后，将待定材质按 (名称, 着色器名) 建键加入索引。
+	/// 着色器名由材质 m_Shader 的 guid 经已建立的映射解析；解析不到（如内置着色器）则着色器名为 null，退化为仅按名称匹配。
+	/// </summary>
+	private void ResolvePendingMaterials()
+	{
+		foreach (PendingMaterial pending in pendingMaterials)
+		{
+			shaderNameByGuid.TryGetValue(pending.ShaderGuid, out string? shaderName);
+			AssetKey key = new(UserAssetKind.Material, pending.Name, shaderName);
+			UserAssetEntry entry = new(pending.SourceFilePath, pending.SourceMetaPath, pending.Guid, pending.RelativeTargetPath);
+			if (!entries.TryAdd(key, entry))
+			{
+				UserAssetEntry existing = entries[key];
+				Logger.Warning(LogCategory.Export, $"用户项目中存在重名材质 '{FormatLabel(UserAssetKind.Material, pending.Name, shaderName)}'：'{pending.SourceFilePath}' 与 '{existing.SourceFilePath}'，仅首个生效。");
+			}
+		}
+	}
+
+	/// <summary>
+	/// 为人类可读的告警文本生成资产标签；材质附带着色器名，便于区分同名不同着色器的两个材质。
+	/// </summary>
+	private static string FormatLabel(UserAssetKind kind, string name, string? shader)
+	{
+		return kind is UserAssetKind.Material && shader is not null
+			? $"{name}（着色器：{shader}）"
+			: name;
+	}
+
+	/// <summary>
+	/// 从 .mat 文件解析材质 m_Name 与其 m_Shader 引用的着色器 guid。
+	/// m_Name 可能在文件任意位置，m_Shader 为单行流程映射（含 guid）。
+	/// </summary>
+	private static bool TryReadMaterialInfo(string filePath, out string? materialName, out UnityGuid shaderGuid)
+	{
+		materialName = null;
+		shaderGuid = default;
+		bool foundShader = false;
+		try
+		{
+			foreach (string line in File.ReadLines(filePath))
+			{
+				if (materialName is null)
+				{
+					Match nameMatch = MaterialNameRegex.Match(line);
+					if (nameMatch.Success)
+					{
+						string value = nameMatch.Groups[1].Value.Trim();
+						// YAML 中 m_Name 可能带引号，去掉首尾引号以得到纯名称
+						if (value.Length >= 2 && value[0] == '"' && value[value.Length - 1] == '"')
+						{
+							value = value.Substring(1, value.Length - 2);
+						}
+						materialName = value;
+					}
+				}
+
+				if (!foundShader)
+				{
+					Match shaderMatch = MaterialShaderRegex.Match(line);
+					if (shaderMatch.Success && TryParseGuid(shaderMatch.Groups[1].Value, out UnityGuid guid))
+					{
+						shaderGuid = guid;
+						foundShader = true;
+					}
+				}
+
+				if (materialName is not null && foundShader)
+				{
+					break;
+				}
+			}
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+		{
+			Logger.Warning(LogCategory.Export, $"无法读取材质文件 '{filePath}'：{ex.Message}");
+			return false;
+		}
+
+		// 有名称即可建键；着色器 guid 解析不到时退化为仅按名称匹配。
+		return materialName is not null;
 	}
 
 	/// <summary>
