@@ -48,7 +48,7 @@ public sealed class DummyShaderTextExporter : ShaderExporterBase
 
 	public static bool ExportShader(IShader shader, TextWriter writer)
 	{
-		// Technically, this outputs invalid shader code for Unity 5.5 because HLSLPROGRAM was not introduced until Unity 5.6.
+		// 从技术上讲，这会为 Unity 5.5 输出无效的着色器代码，因为 HLSLPROGRAM 直到 Unity 5.6 才被引入。
 		if (shader.Has_ParsedForm())
 		{
 			writer.Write($"Shader \"{shader.ParsedForm.Name}\" {{\n");

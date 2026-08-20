@@ -49,6 +49,7 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 					{
 						continue;
 					}
+
 					string originalPath = SetOriginalPaths(assetBundle, bundledAssetsExportMode);
 					switch (bundledAssetsExportMode)
 					{
@@ -86,6 +87,7 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 				{
 					continue;
 				}
+
 				string className = ((ClassIDType)meta.ClassID).ToString();
 				collection.SetOriginalDirectory(meta.PathID, Path.Join(AssetBundleFullPath, BundleName, className));
 			}
@@ -107,8 +109,11 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 				int count = collection.Count(asset => asset.GetBestName() != asset.ClassName);
 				if (count > 30)
 				{
-					// 移除扩展名
-					originalDirectory = originalPath[..originalPath.LastIndexOf('.')];
+					if (originalDirectory == null || !originalDirectory.EndsWith(Path.GetFileNameWithoutExtension(originalPath)))
+					{
+						// 移除扩展名
+						originalDirectory = originalPath[..originalPath.LastIndexOf('.')];
+					}
 				}
 
 				foreach (IUnityObjectBase asset in collection)

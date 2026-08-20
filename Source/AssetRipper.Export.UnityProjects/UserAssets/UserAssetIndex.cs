@@ -25,9 +25,7 @@ public sealed class UserAssetIndex
 	/// <summary>索引中的条目总数。</summary>
 	public int EntryCount => entries.Count;
 
-	private UserAssetIndex()
-	{
-	}
+	private UserAssetIndex() { }
 
 	/// <summary>
 	/// 尝试从给定路径构建索引。
@@ -180,6 +178,7 @@ public sealed class UserAssetIndex
 				statistics.SkippedNoName++;
 				continue;
 			}
+
 			name = name.Trim();
 
 			string relativePath = Path.GetRelativePath(directory, filePath).Replace('\\', '/');
@@ -199,10 +198,12 @@ public sealed class UserAssetIndex
 					statistics.SkippedNoName++;
 					continue;
 				}
+
 				if (string.IsNullOrWhiteSpace(materialName))
 				{
 					materialName = name; // 兜底用文件名
 				}
+
 				materialName = materialName.Trim();
 				pendingMaterials.Add(new PendingMaterial(filePath, metaPath, guid, $"{relativeTargetPrefix}/{relativePath}", materialName, shaderGuid));
 			}
@@ -250,6 +251,7 @@ public sealed class UserAssetIndex
 		{
 			Logger.Warning(LogCategory.Export, $"无法读取 shader 文件 '{filePath}'：{ex.Message}");
 		}
+
 		return null;
 	}
 
@@ -282,6 +284,7 @@ public sealed class UserAssetIndex
 		{
 			Logger.Warning(LogCategory.Export, $"无法读取 meta 文件 '{metaPath}'：{ex.Message}");
 		}
+
 		return false;
 	}
 
@@ -290,7 +293,7 @@ public sealed class UserAssetIndex
 	/// </summary>
 	/// <remarks>
 	/// <see cref="UnityGuid.Parse(string)"/> 走的是 System.Guid 标准格式，不适用于 .meta 的 32 位 hex 形式。
-/// 这里实现与 <see cref="UnityGuid.ToString()"/> 互逆的解析：ToString 对每个 uint 自低位起输出 8 个 nibble 字符。
+	/// 这里实现与 <see cref="UnityGuid.ToString()"/> 互逆的解析：ToString 对每个 uint 自低位起输出 8 个 nibble 字符。
 	/// </remarks>
 	private static bool TryParseGuid(ReadOnlySpan<char> text, out UnityGuid guid)
 	{
@@ -311,8 +314,10 @@ public sealed class UserAssetIndex
 				{
 					return false;
 				}
+
 				value |= (uint)nibble << (j * 4);
 			}
+
 			data[i] = value;
 		}
 
@@ -326,14 +331,17 @@ public sealed class UserAssetIndex
 		{
 			return c - '0';
 		}
+
 		if (c is >= 'a' and <= 'f')
 		{
 			return c - 'a' + 10;
 		}
+
 		if (c is >= 'A' and <= 'F')
 		{
 			return c - 'A' + 10;
 		}
+
 		return -1;
 	}
 
@@ -355,11 +363,11 @@ public sealed class UserAssetIndex
 	/// 非材质类别的 Shader 分量为 null；材质以 (名称, 着色器名) 区分"同一资源"。
 	/// 名称与着色器名比较均不区分大小写，与历史行为及跨侧来源的大小写差异兼容。
 	/// </summary>
-	private readonly struct AssetKey : IEquatable<AssetKey>
+	private struct AssetKey : IEquatable<AssetKey>
 	{
-		public UserAssetKind Kind { get; }
-		public string Name { get; }
-		public string? Shader { get; }
+		public UserAssetKind Kind { get; set; }
+		public string Name { get; set; }
+		public string? Shader { get; set; }
 
 		public AssetKey(UserAssetKind kind, string name, string? shader)
 		{
@@ -413,6 +421,26 @@ public sealed class UserAssetIndex
 		{
 			shaderNameByGuid.TryGetValue(pending.ShaderGuid, out string? shaderName);
 			AssetKey key = new(UserAssetKind.Material, pending.Name, shaderName);
+			switch (pending.Name)
+			{
+				case "UnlitBlendModeNormalOver":
+					key.Name = "Unlit";
+					key.Shader = "Live2D Cubism/Unlit";
+					break;
+				case "UnlitBlendModeMaskedNormalOver":
+					key.Name = "UnlitMasked";
+					key.Shader = "Live2D Cubism/Unlit";
+					break;
+				case "UnlitBlendModeInvertMaskedNormalOver":
+					key.Name = "UnlitMaskedInverted";
+					key.Shader = "Live2D Cubism/Unlit";
+					break;
+				case "UnlitBlendModeMultiply":
+					key.Name = "UnlitMultiply";
+					key.Shader = "Live2D Cubism/Unlit";
+					break;
+			}
+
 			UserAssetEntry entry = new(pending.SourceFilePath, pending.SourceMetaPath, pending.Guid, pending.RelativeTargetPath);
 			if (!entries.TryAdd(key, entry))
 			{
@@ -456,6 +484,7 @@ public sealed class UserAssetIndex
 						{
 							value = value.Substring(1, value.Length - 2);
 						}
+
 						materialName = value;
 					}
 				}

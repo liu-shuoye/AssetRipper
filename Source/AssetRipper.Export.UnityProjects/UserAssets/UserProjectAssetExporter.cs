@@ -88,7 +88,7 @@ public sealed class UserProjectAssetExporter : IAssetExporter
 		if (entry.Consumed)
 		{
 			Logger.Warning(LogCategory.Export, $"资产 '{name}' 匹配的用户文件 '{entry.SourceFilePath}' 已用于替换同名资产，该资产将正常导出。");
-			return false;
+			// return false;
 		}
 
 		entry.Consumed = true;
