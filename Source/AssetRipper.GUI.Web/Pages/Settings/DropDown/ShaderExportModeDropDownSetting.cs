@@ -12,6 +12,7 @@ public sealed class ShaderExportModeDropDownSetting : DropDownSetting<ShaderExpo
 	{
 		ShaderExportMode.Dummy => Localization.ShaderAssetFormatDummy,
 		ShaderExportMode.Yaml => Localization.ShaderAssetFormatYaml,
+		ShaderExportMode.Disassembly => Localization.ShaderAssetFormatDisassembly,
 		ShaderExportMode.Decompile => Localization.ShaderAssetFormatDecompile,
 		_ => base.GetDisplayName(value),
 	};
@@ -20,9 +21,8 @@ public sealed class ShaderExportModeDropDownSetting : DropDownSetting<ShaderExpo
 	{
 		ShaderExportMode.Dummy => Localization.ShaderAssetFormatDummyDescription,
 		ShaderExportMode.Yaml => Localization.ShaderAssetFormatYamlDescription,
-		ShaderExportMode.Decompile => GameFileLoader.Premium
-			? Localization.ShaderAssetFormatDecompileDescription
-			: Localization.NotAvailableInTheFreeEdition,
+		ShaderExportMode.Disassembly => Localization.ShaderAssetFormatDisassemblyDescription,
+		ShaderExportMode.Decompile => Localization.ShaderAssetFormatDecompileDescription,
 		_ => base.GetDescription(value),
 	};
 }
