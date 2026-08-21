@@ -216,8 +216,18 @@ public sealed partial class ProjectExporter
 			(Type, ulong) key = (primaryAsset.GetType(), hash);
 			if (keptByHash.TryGetValue(key, out IExportCollection? keptCollection))
 			{
-				skippedCollections.Add(collection);
-				redirectMap[primaryAsset] = keptCollection.Assets.FirstOrDefault()!;
+				// 决定保留哪个：优先保留目录名与文件主名匹配的资源，得分相同时回退到字典序更小者。
+				IExportCollection keep = IsCollectionPreferred(collection, keptCollection)
+					? collection
+					: keptCollection;
+				IExportCollection skip = object.ReferenceEquals(keep, collection) ? keptCollection : collection;
+				if (!object.ReferenceEquals(keep, keptCollection))
+				{
+					keptByHash[key] = keep;
+				}
+
+				skippedCollections.Add(skip);
+				redirectMap[skip.Assets.FirstOrDefault()!] = keep.Assets.FirstOrDefault()!;
 				Type t = primaryAsset.GetType();
 				skippedByType[t] = skippedByType.TryGetValue(t, out int v) ? v + 1 : 1;
 				skippedCount++;
@@ -249,5 +259,90 @@ public sealed partial class ProjectExporter
 
 			Logger.Info(LogCategory.ExportProgress, sb.ToString());
 		}
+	}
+
+	/// <summary>
+	/// 在两个内容相同的导出集合之间决定保留哪个。
+	/// 优先保留“目录名与文件主名相似度”更高的资源；相似度相同时回退到原始路径字典序更小者，保证结果确定性。
+	/// </summary>
+	/// <remarks>
+	/// 例如 cg15120101/CG15120101.png 中文件所在目录段 cg15120101 与主名 CG15120101 的最长公共子串
+	/// 归一化后为高分，因此它会优先于 cg16120101/CG15120101.png 被保留。
+	/// </remarks>
+	private static bool IsCollectionPreferred(IExportCollection candidate, IExportCollection current)
+	{
+		IUnityObjectBase? candidateAsset = candidate.Assets.FirstOrDefault();
+		double candidateScore = NameMatchScore(candidateAsset);
+		IUnityObjectBase? currentAsset = current.Assets.FirstOrDefault();
+		double currentScore = NameMatchScore(currentAsset);
+		// 两个得分均由同一确定性算法算出，可直接比较相等性。
+		Logger.Warning(LogCategory.ExportProgress, $"比较 {candidateAsset?.OriginalPath}/{candidateAsset?.GetBestName()} 得分 {candidateScore} , {currentAsset?.OriginalPath}/{currentAsset?.GetBestName()} 得分 {currentScore}");
+		if (candidateScore != currentScore)
+		{
+			return candidateScore > currentScore;
+		}
+
+		// 得分相同时，原始路径字典序更小者优先，保证同一批资源去重结果可复现。
+		string? candidatePath = candidateAsset?.OriginalPath;
+		string? currentPath = currentAsset?.OriginalPath;
+		return string.Compare(candidatePath, currentPath, StringComparison.OrdinalIgnoreCase) < 0;
+	}
+
+	/// <summary>
+	/// 计算资源“目录名与文件主名匹配”的相似度，取值 [0, 1]。
+	/// 目录段取 <see cref="IUnityObjectBase.OriginalPath"/>（目录路径）的最后一段，
+	/// 文件主名取 <see cref="IUnityObjectBase.GetBestName"/>，两者忽略大小写的最长公共连续子串长度
+	/// 除以较大长度。无法解析出目录段或名称时返回 0。
+	/// </summary>
+	private static double NameMatchScore(IUnityObjectBase? asset)
+	{
+		// OriginalPath 是不含文件名的目录路径，取其最后一段作为目录段。
+		string? originalPath = asset?.OriginalPath;
+		string? fileName = asset?.GetBestName();
+		if (originalPath is not { Length: > 0 } || fileName is not { Length: > 0 })
+		{
+			return 0;
+		}
+
+		// 统一分隔符以便用同一逻辑解析路径段。
+		string normalized = originalPath.Replace('\\', '/');
+		int slashIndex = normalized.LastIndexOf('/');
+		string dirSegment = slashIndex >= 0 ? normalized[(slashIndex + 1)..] : normalized;
+		int maxLength = Math.Max(dirSegment.Length, fileName.Length);
+		if (maxLength == 0)
+		{
+			return 0;
+		}
+
+		int commonLength = LongestCommonSubstringLength(dirSegment, fileName);
+		return (double)commonLength / maxLength;
+	}
+
+	/// <summary>
+	/// 计算两个字符串忽略大小写的最长公共连续子串长度（二维 DP）。
+	/// </summary>
+	private static int LongestCommonSubstringLength(string a, string b)
+	{
+		int n = a.Length;
+		int m = b.Length;
+		// dp[i, j] 表示以 a[..i-1] 与 b[..j-1] 结尾的公共连续子串长度。
+		int[,] dp = new int[n + 1, m + 1];
+		int best = 0;
+		for (int i = 1; i <= n; i++)
+		{
+			for (int j = 1; j <= m; j++)
+			{
+				if (char.ToLowerInvariant(a[i - 1]) == char.ToLowerInvariant(b[j - 1]))
+				{
+					dp[i, j] = dp[i - 1, j - 1] + 1;
+					if (dp[i, j] > best)
+					{
+						best = dp[i, j];
+					}
+				}
+			}
+		}
+
+		return best;
 	}
 }
