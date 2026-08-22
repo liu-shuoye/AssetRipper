@@ -183,6 +183,147 @@ internal class DeduplicationTests
 		});
 	}
 
+	/// <summary>
+	/// T1：两个"主资源与子资源内容完全相同"的多子资源集合 → 仅保留一个，且被跳过集合的
+	/// 主资源与子资源都被一对一重定向到保留集合的对应资源。
+	/// 用轻量化并可哈希的 MonoBehaviour 充当"主资源+子资源"，因为去重逻辑与资源类型无关，
+	/// 不依赖贴图/精灵的构造管线。这验证了修复：对被去重集合的子资源引用不再丢失。
+	/// </summary>
+	[Test]
+	public void Deduplication_FullyIdenticalMultiAssetCollections_RedirectsAllAssets()
+	{
+		GameBundle gameBundle = new();
+		ProcessedAssetCollection collection = gameBundle.AddNewProcessedCollection("DupFullTest", UnityVersion.V_2022);
+
+		IMonoBehaviour keepPrimary = collection.CreateMonoBehaviour();
+		keepPrimary.Name = "Primary";
+		IMonoBehaviour keepSub = collection.CreateMonoBehaviour();
+		keepSub.Name = "Sub";
+
+		IMonoBehaviour skipPrimary = collection.CreateMonoBehaviour();
+		skipPrimary.Name = "Primary";
+		IMonoBehaviour skipSub = collection.CreateMonoBehaviour();
+		skipSub.Name = "Sub";
+
+		ScriptableObjectExporter exporter = new();
+		StubAssetsCollection keep = new(exporter, keepPrimary);
+		keep.AddSubAsset(keepSub);
+		StubAssetsCollection skip = new(exporter, skipPrimary);
+		skip.AddSubAsset(skipSub);
+
+		(List<IExportCollection> collections,
+		 HashSet<IExportCollection> skipped,
+		 Dictionary<IUnityObjectBase, IUnityObjectBase> redirect) = RunApplyDeduplication(keep, skip);
+
+		IExportCollection keepCol = skipped.Contains(keep) ? skip : keep;
+		IExportCollection skipCol = keepCol == keep ? skip : keep;
+		IUnityObjectBase keepPrimaryAsset = keepCol.Assets.ElementAt(0);
+		IUnityObjectBase keepSubAsset = keepCol.Assets.ElementAt(1);
+		IUnityObjectBase skipPrimaryAsset = skipCol.Assets.ElementAt(0);
+		IUnityObjectBase skipSubAsset = skipCol.Assets.ElementAt(1);
+
+		Assert.Multiple(() =>
+		{
+			// 只保留一个集合（内容完全一致的重复集）。
+			Assert.That(skipped, Has.Count.EqualTo(1));
+			// 主资源与子资源都必须重定向到保留集合的对应资源（修复点）。
+			Assert.That(redirect[skipPrimaryAsset], Is.EqualTo(keepPrimaryAsset));
+			Assert.That(redirect[skipSubAsset], Is.EqualTo(keepSubAsset));
+		});
+
+		// 通过容器验证：对被跳过集合"子资源"的引用解析结果与直接引用保留集合子资源一致。
+		FullConfiguration settings = new();
+		settings.SetProjectSettings(UnityVersion.V_2022);
+		BaseManager assemblyManager = new(_ => { });
+		ProjectExporter projectExporter = new(settings, assemblyManager);
+		ProjectAssetContainer container = new(projectExporter, settings, gameBundle.FetchAssets(),
+			collections, skipped, redirect);
+		// 把当前集合设为第三方集合，使指针包含(guid, type)，从而同时校验 GUID 与 fileID 的一致性。
+		container.CurrentCollection = keepCol == keep ? skip : keep;
+
+		MetaPtr keptSubPointer = container.CreateExportPointer(keepSubAsset);
+		MetaPtr skippedSubPointer = container.CreateExportPointer(skipSubAsset);
+		MetaPtr keptPrimaryPointer = container.CreateExportPointer(keepPrimaryAsset);
+		MetaPtr skippedPrimaryPointer = container.CreateExportPointer(skipPrimaryAsset);
+
+		Assert.Multiple(() =>
+		{
+			Assert.That(skippedSubPointer, Is.EqualTo(keptSubPointer));
+			Assert.That(skippedPrimaryPointer, Is.EqualTo(keptPrimaryPointer));
+		});
+	}
+
+	/// <summary>
+	/// T2：两个集合主资源内容相同但子资源不同 → 不得合并删除，两个集合都应保留。
+	/// 这是为了避免"字节相同但子资源不同"的贴图被误判为重复而丢失不同子资源。
+	/// </summary>
+	[Test]
+	public void Deduplication_SamePrimaryButDifferentSubAsset_DoesNotDeduplicate()
+	{
+		GameBundle gameBundle = new();
+		ProcessedAssetCollection collection = gameBundle.AddNewProcessedCollection("DupDiffTest", UnityVersion.V_2022);
+
+		IMonoBehaviour keepPrimary = collection.CreateMonoBehaviour();
+		keepPrimary.Name = "Primary";
+		IMonoBehaviour keepSub = collection.CreateMonoBehaviour();
+		keepSub.Name = "Sub";
+
+		IMonoBehaviour skipPrimary = collection.CreateMonoBehaviour();
+		skipPrimary.Name = "Primary";
+		IMonoBehaviour skipSub = collection.CreateMonoBehaviour();
+		skipSub.Name = "DifferentSub";
+
+		ScriptableObjectExporter exporter = new();
+		StubAssetsCollection first = new(exporter, keepPrimary);
+		first.AddSubAsset(keepSub);
+		StubAssetsCollection second = new(exporter, skipPrimary);
+		second.AddSubAsset(skipSub);
+
+		(_, HashSet<IExportCollection> skipped, _) = RunApplyDeduplication(first, second);
+
+		Assert.That(skipped, Is.Empty, "主资源相同但子资源不同的集合不得被去重");
+	}
+
+	/// <summary>
+	/// 通过反射调用内部 ApplyDeduplication，返回去重决策结果。
+	/// </summary>
+	private static (List<IExportCollection> collections, HashSet<IExportCollection> skipped,
+		Dictionary<IUnityObjectBase, IUnityObjectBase> redirect) RunApplyDeduplication(params IExportCollection[] collectionsArray)
+	{
+		List<IExportCollection> collections = collectionsArray.ToList();
+
+		FullConfiguration settings = new();
+		settings.SetProjectSettings(UnityVersion.V_2022);
+		BaseManager assemblyManager = new(_ => { });
+		ProjectExporter projectExporter = new(settings, assemblyManager);
+
+		MethodInfo? method = typeof(ProjectExporter).GetMethod(
+			"ApplyDeduplication",
+			BindingFlags.NonPublic | BindingFlags.Instance);
+		Assert.That(method, Is.Not.Null);
+
+		object[] parameters = { collections, null!, null! };
+		method!.Invoke(projectExporter, parameters);
+		return (collections, (HashSet<IExportCollection>)parameters[1]!, (Dictionary<IUnityObjectBase, IUnityObjectBase>)parameters[2]!);
+	}
+
+	/// <summary>
+	/// 测试用多子资源集合桩：继承真实导出集合，通过 AddAsset 挂一个额外的子资源。
+	/// 用于在无需纹理/精灵物理管线的前提下验证去重对"子资源"的处理。
+	/// </summary>
+	private sealed class StubAssetsCollection : AssetsExportCollection<IMonoBehaviour>
+	{
+		public StubAssetsCollection(ScriptableObjectExporter exporter, IMonoBehaviour primary)
+			: base(exporter, primary)
+		{
+		}
+
+		public void AddSubAsset(IUnityObjectBase sub)
+		{
+			AddAsset(sub);
+		}
+	}
+
 	private static VirtualFileSystem ExportWithDeduplication(GameBundle gameBundle, UnityVersion version, bool enableDeduplication)
 	{
 		FullConfiguration settings = new();

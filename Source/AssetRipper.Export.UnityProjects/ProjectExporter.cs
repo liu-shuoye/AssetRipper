@@ -163,13 +163,18 @@ public sealed partial class ProjectExporter
 	}
 
 	/// <summary>
-	///  按主要资产（类型、内容哈希）对集合进行分组，并将具有相同哈希值的资产视为重复项。
+	///  按（类型、内容哈希）对集合进行分组，并将具有相同哈希值的资产视为重复项。
 	/// </summary>
 	/// <remarks>
 	/// 内容哈希由 <see cref="ContentHashWalker"/> 计算，该方法在遍历资源的序列化字段时不会解引用 PPtr 目标。
 	/// 这避免了 <see cref="AssetRipper.Assets.Cloning.AssetEqualityComparer"/> 所执行的无限制引用图遍历
 	/// （以及由此引发的 <see cref="OutOfMemoryException"/>）。
 	/// 通过将 64 位 XxHash 与桶键中的类型结合使用，假阳性几乎可以忽略不计。
+	///
+	/// 仅当两个集合的"完整集合内容指纹"完全一致时才判为重复，即集合内每个资源（含主资源与子资源）
+	/// 的 (ClassID, 内容哈希) 多重集合都相同。这样不会因主资源内容相同但子资源不同而误删集合。
+	/// 被跳过集合的每个资源都会一对一重定向到 keeper 中指纹相同的对应资源，从而让场景/对象对任意
+	/// 被跳过资源的引用 (guid, fileID) 都指向 keeper 导出的真实资源，避免引用丢失。
 	/// </remarks>
 	private void ApplyDeduplication(List<IExportCollection> collections,
 		out HashSet<IExportCollection> skippedCollections, out Dictionary<IUnityObjectBase, IUnityObjectBase> redirectMap)
@@ -177,15 +182,12 @@ public sealed partial class ProjectExporter
 		skippedCollections = new();
 		redirectMap = new();
 
-		// 按（类型、内容哈希）对每个集合和存储桶缓存主要资源。
-		// 内容哈希为 ContentHashWalker.Unhashable 的资源将被完全保留。
-		Dictionary<(Type, ulong), IExportCollection> keptByHash = new();
+		// 为每个集合算一次"完整集合内容指纹"，并对每个资源缓存哈希值，供分组与配对重用。
 		Dictionary<IUnityObjectBase, ulong> hashCache = new();
 		HashSet<IUnityObjectBase> visiting = new();
-		Dictionary<Type, int> skippedByType = new();
-		int comparedCount = 0;
-		int skippedCount = 0;
+		Dictionary<IExportCollection, List<(int, ulong)>> fingerprintByCollection = new();
 
+		int comparedCount = 0;
 		foreach (IExportCollection collection in collections)
 		{
 			if (collection is SceneExportCollection)
@@ -198,43 +200,58 @@ public sealed partial class ProjectExporter
 				continue;
 			}
 
-			IUnityObjectBase? primaryAsset = collection.Assets.FirstOrDefault();
-			if (primaryAsset is null)
+			List<IUnityObjectBase> assets = collection.Assets.ToList();
+			if (assets.Count == 0)
 			{
+				continue;
+			}
+
+			if (!TryComputeCollectionFingerprint(assets, hashCache, visiting, out List<(int, ulong)> fingerprint))
+			{
+				// 集合内存在无法哈希的资源（如未加载的 MonoBehaviour 脚本数据），保守保留，不去重。
 				continue;
 			}
 
 			comparedCount++;
+			fingerprintByCollection[collection] = fingerprint;
+		}
 
-			ulong hash = ContentHashWalker.ComputeHash(primaryAsset, hashCache, visiting);
-			if (hash == ContentHashWalker.Unhashable)
+		// 两遍式：先按指纹分组，再在组内决出 keeper，避免 keeper 变更后旧重定向指向新跳过集合的悬空问题。
+		Dictionary<string, List<IExportCollection>> groups = new();
+		foreach (KeyValuePair<IExportCollection, List<(int, ulong)>> pair in fingerprintByCollection)
+		{
+			string groupKey = BuildFingerprintKey(pair.Value);
+			if (!groups.TryGetValue(groupKey, out List<IExportCollection>? group))
 			{
-				// Asset cannot be hashed (e.g. unloaded MonoBehaviour script data). Keep it.
+				group = new();
+				groups[groupKey] = group;
+			}
+
+			group.Add(pair.Key);
+		}
+
+		Dictionary<Type, int> skippedByType = new();
+		int skippedCount = 0;
+		foreach (List<IExportCollection> group in groups.Values)
+		{
+			if (group.Count == 1)
+			{
 				continue;
 			}
 
-			(Type, ulong) key = (primaryAsset.GetType(), hash);
-			if (keptByHash.TryGetValue(key, out IExportCollection? keptCollection))
+			IExportCollection keep = SelectKeeper(group);
+			foreach (IExportCollection skip in group)
 			{
-				// 决定保留哪个：优先保留目录名与文件主名匹配的资源，得分相同时回退到字典序更小者。
-				IExportCollection keep = IsCollectionPreferred(collection, keptCollection)
-					? collection
-					: keptCollection;
-				IExportCollection skip = object.ReferenceEquals(keep, collection) ? keptCollection : collection;
-				if (!object.ReferenceEquals(keep, keptCollection))
+				if (ReferenceEquals(skip, keep))
 				{
-					keptByHash[key] = keep;
+					continue;
 				}
 
 				skippedCollections.Add(skip);
-				redirectMap[skip.Assets.FirstOrDefault()!] = keep.Assets.FirstOrDefault()!;
-				Type t = primaryAsset.GetType();
+				BuildRedirectForSkipped(skip, keep, hashCache, visiting, redirectMap);
+				Type t = skip.Assets.First().GetType();
 				skippedByType[t] = skippedByType.TryGetValue(t, out int v) ? v + 1 : 1;
 				skippedCount++;
-			}
-			else
-			{
-				keptByHash[key] = collection;
 			}
 		}
 
@@ -258,6 +275,114 @@ public sealed partial class ProjectExporter
 			}
 
 			Logger.Info(LogCategory.ExportProgress, sb.ToString());
+		}
+	}
+
+	/// <summary>
+	/// 计算集合的"完整集合内容指纹"：对集合内每个资源求 (ClassID, 内容哈希)，随后整体排序。
+	/// 排序保证指纹与资源的枚举顺序无关，只要两个集合包含完全相同的内容，指纹就相同。
+	/// </summary>
+	/// <param name="assets">集合内的全部资源（含主资源与子资源）。</param>
+	/// <param name="hashCache">跨资源复用的哈希缓存，使共享的引用目标只哈希一次。</param>
+	/// <param name="visiting">遍历栈，用于检测循环引用。</param>
+	/// <param name="fingerprint">输出的指纹（已排序）。</param>
+	/// <returns>集合内任一资源无法哈希时返回 false，表示该集合不参与去重。</returns>
+	private static bool TryComputeCollectionFingerprint(List<IUnityObjectBase> assets,
+		Dictionary<IUnityObjectBase, ulong> hashCache, HashSet<IUnityObjectBase> visiting,
+		out List<(int, ulong)> fingerprint)
+	{
+		fingerprint = new();
+		foreach (IUnityObjectBase asset in assets)
+		{
+			ulong hash = ContentHashWalker.ComputeHash(asset, hashCache, visiting);
+			if (hash == ContentHashWalker.Unhashable)
+			{
+				return false;
+			}
+
+			fingerprint.Add((asset.ClassID, hash));
+		}
+
+		fingerprint.Sort();
+		return true;
+	}
+
+	/// <summary>
+	/// 把排序后的指纹序列化成唯一 key，用于按"完整集合内容"分组。
+	/// </summary>
+	private static string BuildFingerprintKey(List<(int ClassID, ulong hash)> fingerprint)
+	{
+		StringBuilder sb = new();
+		foreach ((int classID, ulong hash) in fingerprint)
+		{
+			sb.Append(classID).Append(':').Append(hash.ToString("X16")).Append(';');
+		}
+
+		return sb.ToString();
+	}
+
+	/// <summary>
+	/// 在同一重复组内按 <see cref="IsCollectionPreferred"/> 决出唯一 keeper。
+	/// 逐步把组内相对当前 keeper 更优的集合提升为 keeper，其余保持不变。
+	/// </summary>
+	private static IExportCollection SelectKeeper(List<IExportCollection> group)
+	{
+		IExportCollection keep = group[0];
+		for (int i = 1; i < group.Count; i++)
+		{
+			if (IsCollectionPreferred(group[i], keep))
+			{
+				keep = group[i];
+			}
+		}
+
+		return keep;
+	}
+
+	/// <summary>
+	/// 为被跳过的集合构建全资源重定向：把 skip 内每个资源映射到 keeper 中 (ClassID, 内容哈希) 相同的对应资源。
+	/// 这样场景/对象对 skip 内任意资源（含子资源）的引用都会解析为 keeper 的 GUID + 真实存在的 fileID。
+	/// </summary>
+	/// <param name="skip">被跳过的集合（不导出）。</param>
+	/// <param name="keep">保留导出的集合。</param>
+	/// <param name="hashCache">复用此前算过的哈希缓存，避免重复计算。</param>
+	/// <param name="visiting">遍历栈，用于检测循环引用。</param>
+	/// <param name="redirectMap">收集重定向结果。</param>
+	private static void BuildRedirectForSkipped(IExportCollection skip, IExportCollection keep,
+		Dictionary<IUnityObjectBase, ulong> hashCache, HashSet<IUnityObjectBase> visiting,
+		Dictionary<IUnityObjectBase, IUnityObjectBase> redirectMap)
+	{
+		// keeper 资源按指纹分组，仅消费与当前 skip 资源指纹相同的候选，保证同一指纹多资源时一对一配对。
+		// 用 Queue 保持所选集合的枚举顺序，使 skip 的（主资源优先的）顺序与 keeper 对齐。
+		Dictionary<(int, ulong), Queue<IUnityObjectBase>> keepByFingerprint = new();
+		foreach (IUnityObjectBase keepAsset in keep.Assets)
+		{
+			ulong hash = ContentHashWalker.ComputeHash(keepAsset, hashCache, visiting);
+			if (hash != ContentHashWalker.Unhashable)
+			{
+				(int, ulong) key = (keepAsset.ClassID, hash);
+				if (!keepByFingerprint.TryGetValue(key, out Queue<IUnityObjectBase>? queue))
+				{
+					queue = new();
+					keepByFingerprint[key] = queue;
+				}
+
+				queue.Enqueue(keepAsset);
+			}
+		}
+
+		foreach (IUnityObjectBase skipAsset in skip.Assets)
+		{
+			ulong hash = ContentHashWalker.ComputeHash(skipAsset, hashCache, visiting);
+			if (hash == ContentHashWalker.Unhashable
+				|| !keepByFingerprint.TryGetValue((skipAsset.ClassID, hash), out Queue<IUnityObjectBase>? queue)
+				|| queue.Count == 0)
+			{
+				// 无法找到对应资源，防御性跳过，交由容器既有 fallback 逻辑处理。
+				continue;
+			}
+
+			redirectMap[skipAsset] = queue.Dequeue();
 		}
 	}
 
