@@ -6,6 +6,7 @@ using AssetRipper.Import.Configuration;
 using AssetRipper.Import.Logging;
 using AssetRipper.Processing.Configuration;
 using AssetRipper.SourceGenerated;
+using AssetRipper.SourceGenerated.Classes.ClassID_48;
 using System.Text;
 
 namespace AssetRipper.Export.UnityProjects;
@@ -186,6 +187,8 @@ public sealed partial class ProjectExporter
 		Dictionary<IUnityObjectBase, ulong> hashCache = new();
 		HashSet<IUnityObjectBase> visiting = new();
 		Dictionary<IExportCollection, List<(int, ulong)>> fingerprintByCollection = new();
+		// Shader 特殊处理：按名称去重，而不是按序列化内容。见 AddShaderGroupKey 说明。
+		Dictionary<IExportCollection, string> shaderKeyByCollection = new();
 
 		int comparedCount = 0;
 		foreach (IExportCollection collection in collections)
@@ -203,6 +206,23 @@ public sealed partial class ProjectExporter
 			List<IUnityObjectBase> assets = collection.Assets.ToList();
 			if (assets.Count == 0)
 			{
+				continue;
+			}
+
+			// Shader：以名称作为去重依据。同一条资源集中 shader 名称一般唯一，
+			// 而编译二进制/ParsedForm 内细微差异会导致序列化内容哈希不同，无法识别重复，
+			// 因此这里不走内容指纹，改为直接按 shader 名称分组。
+			if (assets[0] is IShader)
+			{
+				string? shaderKey = GetShaderKey(assets);
+				if (shaderKey is null)
+				{
+					// 取不到稳定名称（如空名），保守保留，不去重。
+					continue;
+				}
+
+				comparedCount++;
+				shaderKeyByCollection[collection] = shaderKey;
 				continue;
 			}
 
@@ -230,6 +250,19 @@ public sealed partial class ProjectExporter
 			group.Add(pair.Key);
 		}
 
+		// Shader 分组：以"Shader|<名称>"作为分组键，与内容指纹键（形如"1:ABC;2:DEF;"）互不冲突。
+		foreach (KeyValuePair<IExportCollection, string> pair in shaderKeyByCollection)
+		{
+			string groupKey = AddShaderGroupKey(pair.Value);
+			if (!groups.TryGetValue(groupKey, out List<IExportCollection>? group))
+			{
+				group = new();
+				groups[groupKey] = group;
+			}
+
+			group.Add(pair.Key);
+		}
+
 		Dictionary<Type, int> skippedByType = new();
 		int skippedCount = 0;
 		foreach (List<IExportCollection> group in groups.Values)
@@ -248,7 +281,16 @@ public sealed partial class ProjectExporter
 				}
 
 				skippedCollections.Add(skip);
-				BuildRedirectForSkipped(skip, keep, hashCache, visiting, redirectMap);
+				if (shaderKeyByCollection.TryGetValue(skip, out string? _))
+				{
+					// Shader 按名称去重：把 skipped 集合的 shader 引用重定向到 keeper 中同名的 shader。
+					RedirectShaderCollection(skip, keep, redirectMap);
+				}
+				else
+				{
+					BuildRedirectForSkipped(skip, keep, hashCache, visiting, redirectMap);
+				}
+
 				Type t = skip.Assets.First().GetType();
 				skippedByType[t] = skippedByType.TryGetValue(t, out int v) ? v + 1 : 1;
 				skippedCount++;
@@ -275,6 +317,50 @@ public sealed partial class ProjectExporter
 			}
 
 			Logger.Info(LogCategory.ExportProgress, sb.ToString());
+		}
+	}
+
+	/// <summary>
+	/// 取 shader 服务集合的“去重键”，即 shader 名称。
+	/// </summary>
+	/// <param name="assets">shader 集合内的资源（首个为主 shader）。</param>
+	/// <returns>名称去除首尾空白后的非空字符串；取不到稳定名称时返回 null。</returns>
+	private static string? GetShaderKey(List<IUnityObjectBase> assets)
+	{
+		IUnityObjectBase? primary = assets.FirstOrDefault();
+		string name = primary?.GetBestName() ?? string.Empty;
+		return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+	}
+
+	/// <summary>
+	/// 给 shader 名称加上唯一前缀，作为去重分组键，避免与形如“1:ABC;2:DEF;”的内容指纹键冲突。
+	/// </summary>
+	private static string AddShaderGroupKey(string shaderName) => "Shader|" + shaderName;
+
+	/// <summary>
+	/// 为按名称去重的 shader 集合构建重定向：把 skip 中的每个 shader 映射到 keep 中名称相同的 shader。
+	/// shader 集合通常只有主资源自身，因此逐资源按名称配对即可满足所有引用解析。
+	/// </summary>
+	private static void RedirectShaderCollection(IExportCollection skip, IExportCollection keep,
+		Dictionary<IUnityObjectBase, IUnityObjectBase> redirectMap)
+	{
+		Dictionary<string, IUnityObjectBase> keepByName = new();
+		foreach (IUnityObjectBase asset in keep.Assets)
+		{
+			if (asset is IShader shader)
+			{
+				// 同一集合内理论上不会出现重名的 shader，这里取首个即可代表该名称的 keeper。
+				keepByName.TryAdd(shader.GetBestName(), asset);
+			}
+		}
+
+		foreach (IUnityObjectBase asset in skip.Assets)
+		{
+			if (asset is IShader shader
+				&& keepByName.TryGetValue(shader.GetBestName(), out IUnityObjectBase? target))
+			{
+				redirectMap[asset] = target;
+			}
 		}
 	}
 

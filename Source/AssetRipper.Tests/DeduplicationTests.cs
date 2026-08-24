@@ -4,12 +4,14 @@ using AssetRipper.Assets.Collections;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects;
 using AssetRipper.Export.UnityProjects.Project;
+using AssetRipper.Export.UnityProjects.Shaders;
 using AssetRipper.Import.Structure.Assembly.Managers;
 using AssetRipper.IO.Files;
 using AssetRipper.Primitives;
 using AssetRipper.Processing.Configuration;
 using AssetRipper.Processing.Prefabs;
 using AssetRipper.SourceGenerated.Classes.ClassID_114;
+using AssetRipper.SourceGenerated.Classes.ClassID_48;
 using AssetRipper.SourceGenerated.Extensions;
 using System.Reflection;
 
@@ -282,6 +284,71 @@ internal class DeduplicationTests
 		(_, HashSet<IExportCollection> skipped, _) = RunApplyDeduplication(first, second);
 
 		Assert.That(skipped, Is.Empty, "主资源相同但子资源不同的集合不得被去重");
+	}
+
+	/// <summary>
+	/// 同名 shader 按名称去重：即使两个 shader 的序列化内容不一致，只要名称相同，
+	/// 也会被识别为重复并只保留一个（避免由编译二进制差异引起的内容哈希不同而无法判重）。
+	/// </summary>
+	[Test]
+	public void Deduplication_ShadersWithSameName_DeduplicatesByName()
+	{
+		GameBundle gameBundle = new();
+		ProcessedAssetCollection collection = gameBundle.AddNewProcessedCollection("ShaderDupNameTest", UnityVersion.V_2022);
+
+		IShader shader1 = CreateShader(collection, "Amplify/build_shader");
+		IShader shader2 = CreateShader(collection, "Amplify/build_shader");
+
+		SimpleShaderExporter exporter = new();
+		ShaderExportCollection col1 = new(exporter, shader1);
+		ShaderExportCollection col2 = new(exporter, shader2);
+
+		(_, HashSet<IExportCollection> skipped, Dictionary<IUnityObjectBase, IUnityObjectBase> redirect) =
+			RunApplyDeduplication(col1, col2);
+
+		Assert.Multiple(() =>
+		{
+			// 两个同名 shader 应只保留一个。
+			Assert.That(skipped, Has.Count.EqualTo(1));
+			// 被跳过的 shader 必须重定向到保留的那个同名 shader，避免引用丢失。
+			Assert.That(redirect, Has.Count.EqualTo(1));
+		});
+	}
+
+	/// <summary>
+	/// 同名 shader 按名称去重时，不同名的 shader 不应被误合并。
+	/// </summary>
+	[Test]
+	public void Deduplication_ShadersWithDifferentNames_KeepsBoth()
+	{
+		GameBundle gameBundle = new();
+		ProcessedAssetCollection collection = gameBundle.AddNewProcessedCollection("ShaderDupDiffNameTest", UnityVersion.V_2022);
+
+		IShader shader1 = CreateShader(collection, "Amplify/A");
+		IShader shader2 = CreateShader(collection, "Amplify/B");
+
+		SimpleShaderExporter exporter = new();
+		ShaderExportCollection col1 = new(exporter, shader1);
+		ShaderExportCollection col2 = new(exporter, shader2);
+
+		(_, HashSet<IExportCollection> skipped, _) = RunApplyDeduplication(col1, col2);
+
+		Assert.That(skipped, Is.Empty, "不同名的 shader 不得被去重合并");
+	}
+
+	/// <summary>
+	/// 构造一个指定名称的 shader 实例。名称通过 <see cref="IUnityObjectBase.OverrideName"/> 控制，
+	/// 使去重测试不依赖特定的 shader 生成类型字段。
+	/// </summary>
+	private static IShader CreateShader(ProcessedAssetCollection collection, string name)
+	{
+		Type? shaderType = typeof(IShader).Assembly.GetTypes()
+			.FirstOrDefault(t => typeof(IShader).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
+		Assert.That(shaderType, Is.Not.Null);
+
+		IShader shader = collection.CreateAsset(-1, ai => (IShader)Activator.CreateInstance(shaderType!, ai)!);
+		shader.OverrideName = name;
+		return shader;
 	}
 
 	/// <summary>
