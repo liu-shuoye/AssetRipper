@@ -81,6 +81,7 @@
   "data": "Data",
   "default_version": "Version Mặc Định",
   "enable_asset_deduplication": "Bật Tính Năng Loại Bỏ Asset Trùng Lặp",
+  "enable_deterministic_guids": "Sử dụng GUID xác định (ổn định giữa các lần xuất theo lô)",
   "enable_prefab_outlining": "Bật Prefab Outlining",
   "enable_static_mesh_separation": "Bật tách Static Mesh",
   "enter_search_query": "Nhập .",

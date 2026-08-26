@@ -45,6 +45,7 @@
     "config_options": "配置選項",
     "config_screen_drag_drop_prompt": "請注意，更改某些設定可能會導致或避開錯誤。\n準備就緒後，將遊戲檔案或資料夾拖曳到此視窗，或使用左上角的選單手動打開某些內容。",
     "enable_prefab_outlining": "啟用預設大綱",
+    "enable_deterministic_guids": "使用確定性 GUID（分批匯出時保持穩定）",
     "enable_static_mesh_separation": "啟用靜態網格體分離",
     "error": "錯誤",
     "error_exporting_with_reason": "匯出此遊戲內容時發生錯誤： {0}",

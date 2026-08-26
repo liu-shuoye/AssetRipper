@@ -102,17 +102,18 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 			{
 				if (originalPath == null)
 				{
-					return;
+					continue;
 				}
 
 				string? originalDirectory = Path.GetDirectoryName(originalPath);
 				int count = collection.Count(asset => asset.GetBestName() != asset.ClassName);
-				if (count > 30)
+				if (count > 9)
 				{
 					if (originalDirectory == null || !originalDirectory.EndsWith(Path.GetFileNameWithoutExtension(originalPath)))
 					{
-						// 移除扩展名
-						originalDirectory = originalPath[..originalPath.LastIndexOf('.')];
+						// 用 ChangeExtension 移除末尾扩展名：不含 '.' 时安全返回原串，避免 LastIndexOf 返回 -1 触发 ArgumentOutOfRangeException；
+						// 并且只针对文件名末端的扩展名，不会误截目录名中出现的 '.'
+						originalDirectory = Path.ChangeExtension(originalPath, null);
 					}
 				}
 

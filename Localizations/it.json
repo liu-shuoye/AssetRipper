@@ -35,6 +35,7 @@
     "c_sharp_language_version_config_description": "La versione del linguaggio C# da utilizzare durante la decompilazione degli script.",
     "config_options": "Opzioni di configurazione",
     "enable_static_mesh_separation": "Attiva la separazione delle mesh statiche",
+    "enable_deterministic_guids": "Usa GUID deterministici (stabili tra esportazioni in lotti)",
     "ignore_engine_assets": "Ignora gli asset dell'engine",
     "image_export_title": "Formato di esportazione delle immagini",
     "image_format_description": "Si applica a tutte le immagini esportate",

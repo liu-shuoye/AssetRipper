@@ -1,4 +1,4 @@
-﻿using AssetRipper.HashAlgorithms;
+using AssetRipper.HashAlgorithms;
 using AssetRipper.Import.Structure.Assembly;
 using AssetRipper.SourceGenerated.Classes.ClassID_115;
 using System.Buffers.Binary;

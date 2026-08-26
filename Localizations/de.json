@@ -45,6 +45,7 @@
     "config_options": "Konfigurationsoptionen",
     "config_screen_drag_drop_prompt": "Bitte beachten: einige Einstellungsänderungen können Fehler verursachen oder verhindern.\nZum Fortfahren: Spiel-Datei bzw. -Ordner per Drag-and-Drop in dieses Fenster ziehen oder per Menü oben links manuell öffnen.",
     "enable_prefab_outlining": "Prefab-Gliederung aktivieren",
+    "enable_deterministic_guids": "Deterministische GUIDs verwenden (stabil über Batch-Exporte)",
     "enable_static_mesh_separation": "Aufteilung statischer Meshes aktivieren",
     "error": "Fehler",
     "error_exporting_with_reason": "Export von Spielinhalten fehlgeschlagen: {0}",

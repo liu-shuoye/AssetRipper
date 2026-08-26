@@ -221,6 +221,7 @@
     "commands": "命令",
     "asset_tab_model": "模型（Model）",
     "enable_asset_deduplication": "启用清除重复资源（Asset）",
+    "enable_deterministic_guids": "使用确定性 GUID（分批导出时保持稳定）",
     "experimental": "实验性",
     "menu_import": "导入",
     "menu_load": "载入",

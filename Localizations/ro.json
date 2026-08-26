@@ -171,6 +171,7 @@
     "default_version": "Versiune implicită",
     "tipping_message": "Dacă îți place AssetRipper, te rugăm să iei în considerare o donație:",
     "enable_asset_deduplication": "Activează deduplicarea resurselor",
+    "enable_deterministic_guids": "Folosește GUID-uri deterministe (stabile între exportările în loturi)",
     "enable_prefab_outlining": "Activează conturarea prefaburilor",
     "error": "Eroare",
     "error_exporting_with_reason": "Nu s-a reușit exportul conținutului jocului: {0}",

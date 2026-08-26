@@ -68,12 +68,21 @@ public sealed partial class ProjectExporter
 	}
 
 	/// <summary> 创建一个导出集合。 </summary>
-	private IExportCollection CreateCollection(IUnityObjectBase asset)
+	/// <param name="asset">主资源。</param>
+	/// <param name="useDeterministicGuid">是否用确定性 GUID 替换集合的随机 GUID。</param>
+	private IExportCollection CreateCollection(IUnityObjectBase asset, bool useDeterministicGuid)
 	{
 		foreach (IAssetExporter exporter in assetExporterStack.GetHandlerStack(asset.GetType()))
 		{
 			if (exporter.TryCreateCollection(asset, out IExportCollection? collection))
 			{
+				// 开启开关时，把普通资产集合的随机 GUID 替换为按稳定标识计算的值；
+				// 场景/脚本/用户资产等集合的 UseDeterministicGuid 为空操作，GUID 保持不变。
+				if (useDeterministicGuid && collection is ExportCollection exportCollection)
+				{
+					exportCollection.UseDeterministicGuid();
+				}
+
 				return collection;
 			}
 		}
@@ -89,8 +98,16 @@ public sealed partial class ProjectExporter
 			                           nameof(ProcessingSettings), out ProcessingSettings? ps)
 		                           && ps.EnableAssetDeduplication;
 
+		// 与去重开关同理：从 SingletonData 读取"确定性 GUID"开关（默认关闭，保持随机 GUID 的旧行为）。
+		bool enableDeterministicGuids = ps is not null && ps.EnableDeterministicGuids;
+		if (enableDeterministicGuids)
+		{
+			Logger.Info(LogCategory.Export, "已启用确定性 GUID：导出时基于资产稳定标识计算 GUID，跨批次导出保持稳定。");
+		}
+
 		EventExportPreparationStarted?.Invoke();
 		List<IExportCollection> collections = CreateCollections(fileCollection, enableDeduplication,
+			enableDeterministicGuids,
 			out HashSet<IExportCollection> skippedCollections,
 			out Dictionary<IUnityObjectBase, IUnityObjectBase> redirectMap);
 		EventExportPreparationFinished?.Invoke();
@@ -127,10 +144,12 @@ public sealed partial class ProjectExporter
 	/// </summary>
 	/// <param name="fileCollection">文件集合</param>
 	/// <param name="enableDeduplication"> 是否启用去重 </param>
+	/// <param name="enableDeterministicGuids"> 是否为每个集合应用确定性 GUID </param>
 	/// <param name="skippedCollections"> 跳过集合 </param>
 	/// <param name="redirectMap"> 重定向映射 </param>
 	/// <returns></returns>
 	private List<IExportCollection> CreateCollections(GameBundle fileCollection, bool enableDeduplication,
+		bool enableDeterministicGuids,
 		out HashSet<IExportCollection> skippedCollections, out Dictionary<IUnityObjectBase, IUnityObjectBase> redirectMap)
 	{
 		List<IExportCollection> collections = new();
@@ -140,7 +159,7 @@ public sealed partial class ProjectExporter
 		{
 			if (!queued.Contains(asset))
 			{
-				IExportCollection collection = CreateCollection(asset);
+				IExportCollection collection = CreateCollection(asset, enableDeterministicGuids);
 				foreach (IUnityObjectBase element in collection.Assets)
 				{
 					queued.Add(element);

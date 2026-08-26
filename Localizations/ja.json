@@ -45,6 +45,7 @@
     "config_options": "構成オプション",
     "config_screen_drag_drop_prompt": "設定の変更によってはエラーが発生する場合がありますのでご注意ください。\n準備ができたら、ゲームファイル/フォルダーをこのウィンドウにドラッグ&ドロップするか、左上のメニューを使用して手動で開いてください。",
     "enable_prefab_outlining": "Prefab Outlining を有効にする",
+    "enable_deterministic_guids": "決定論的 GUID を生成（バッチ間で安定）",
     "enable_static_mesh_separation": "Static Mesh Separation を有効にする",
     "error": "エラー",
     "error_exporting_with_reason": "ゲームコンテンツのエクスポートに失敗しました: {0}",

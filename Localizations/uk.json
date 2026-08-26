@@ -166,6 +166,7 @@
     "default_version": "Версія за замовчуванням",
     "tipping_message": "Якщо Вам сподобався AssetRipper, ви можете підтримати проект:",
     "enable_asset_deduplication": "Увімкнути дедублікацію активів",
+    "enable_deterministic_guids": "Використовувати детерміновані GUID (стабільні між пакетними експортами)",
     "enable_prefab_outlining": "Увімкнути Prefab Outlining",
     "format": "Формат",
     "frequency": "Частота",

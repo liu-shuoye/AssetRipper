@@ -60,6 +60,7 @@
     "default_version": "Standaardversie",
     "tipping_message": "Als u AssetRipper handig vondt of de ontwikkelaar wilt steunen, overweeg dan om te doneren:",
     "enable_prefab_outlining": "Prefab Outlining inschakelen",
+    "enable_deterministic_guids": "Deterministic GUID's gebruiken (stabiel tussen batch-exporten)",
     "audio_export_title": "Geluid Exportformaat",
     "c_sharp_langage_version_config_7_3": "C# 7.3",
     "config_options": "Configuratie Opties",

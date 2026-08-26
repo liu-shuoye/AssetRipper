@@ -219,6 +219,7 @@
     "size": "Tamaño",
     "asset_tab_model": "Modelo",
     "enable_asset_deduplication": "Activar deduplicación de Assets",
+    "enable_deterministic_guids": "Usar GUID deterministas (estables entre exportaciones por lotes)",
     "lightmap_texture_export_title": "Formato de exportación para texturas Lightmap",
     "lightmap_texture_format_description": "Esto afectará a todas las texturas lightmap exportadas.",
     "save_settings_to_disk": "Guardar configuración en el disco",

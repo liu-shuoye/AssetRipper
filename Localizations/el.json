@@ -133,5 +133,6 @@
     "game_object": "Αντικείμενο Παιχνιδιού (GameObject)",
     "namespace": "Namespace",
     "export_unity_project": "Εξαγωγή Unity Project",
-    "export_primary_content": "Εξαγωγή Πρωτεύοντος Περιεχομένου"
+    "export_primary_content": "Εξαγωγή Πρωτεύοντος Περιεχομένου",
+    "enable_deterministic_guids": "Χρήση ντετερμινιστικών GUID (σταθερό μεταξύ εξαγωγών παρτίδας)"
 }

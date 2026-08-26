@@ -224,6 +224,7 @@
     "swagger_documentation": "Documentação Swagger",
     "c_sharp_langage_version_config_12_0": "C# 12",
     "enable_asset_deduplication": "Ativar Desduplicação de Assets",
+    "enable_deterministic_guids": "Usar GUIDs determinísticos (estáveis entre exportações em lote)",
     "experimental": "Funcionalidade Experimental",
     "no_data_has_been_loaded_for_this_key": "Nenhum dado foi carregado para esta chave.",
     "appreciation_message": "Obrigado por apoiar o AssetRipper!",

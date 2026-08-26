@@ -224,6 +224,7 @@
     "class_id_type_number": "Numer Typu ID Klasy",
     "tipping_message": "Jeśli podoba Ci się AssetRipper, rozważ wsparcie projektu darowizną:",
     "enable_asset_deduplication": "Włącz Deduplikację Zasobów",
+    "enable_deterministic_guids": "Używaj deterministycznych GUID (stabilne między partiami eksportu)",
     "export_unreadable_assets": "Eksportuj Nieczytelne Zasoby",
     "filter": "Filtr",
     "class_name": "Nazwa Klasy",

@@ -82,6 +82,7 @@
     "data": "Data",
     "default_version": "Default Version",
     "enable_asset_deduplication": "Enable Asset Deduplication",
+    "enable_deterministic_guids": "Generate Deterministic GUIDs (stable across batch exports)",
     "enable_prefab_outlining": "Enable Prefab Outlining",
     "enable_static_mesh_separation": "Enable Static Mesh Separation",
     "enter_search_query": "Enter a search query to find assets.",

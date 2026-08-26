@@ -42,6 +42,7 @@
     "load": "โหลด",
     "loading_step_load_assemblies": "กำลังโหลดส่วนประกอบ",
     "menu_export": "ส่งออก",
+    "enable_deterministic_guids": "ใช้ GUID แบบกำหนดตายตัว (คงที่ระหว่างการส่งออกเป็นชุด)",
     "menu_file": "ไฟล์",
     "menu_file_exit": "ออก",
     "menu_file_open_file": "เปิดไฟล์",

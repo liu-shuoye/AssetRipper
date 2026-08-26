@@ -45,6 +45,7 @@
     "config_options": "Yapılandırma Seçenekleri",
     "config_screen_drag_drop_prompt": "Bazı ayar değişikliklerinin hatalara neden olabileceğini veya hataları önleyebileceğini lütfen unutmayın.\nHazır olduğunuzda, oyun dosyanızı/klasörünüzü bu pencereye sürükleyip bırakın veya manuel olarak açmak için sol üstteki menüyü kullanın.",
     "enable_prefab_outlining": "Prefab Taslağı Etkinleştir",
+    "enable_deterministic_guids": "Belirleyici GUID'ler kullan (toplu dışa aktarımlarda kararlı)",
     "enable_static_mesh_separation": "Sabit Mesh Ayırmayı Etkinleştir",
     "error": "Hata",
     "error_exporting_with_reason": "Oyun içeriği dışa aktarılamadı: {0}",

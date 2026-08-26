@@ -202,6 +202,7 @@
     "csharp_type": "Type C# ( CSHARP)",
     "data": "Donnée",
     "enable_asset_deduplication": "Activer la déduplication des Assets",
+    "enable_deterministic_guids": "Utiliser des GUID déterministes (stables entre les exports par lots)",
     "experimental": "Expérimentale",
     "format": "Format",
     "frequency": "Fréquence",

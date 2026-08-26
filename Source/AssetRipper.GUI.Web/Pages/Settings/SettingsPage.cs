@@ -97,6 +97,10 @@ public sealed partial class SettingsPage : DefaultPage
 								{
 									WriteCheckBoxForEnableAssetDeduplication(writer, Localization.EnableAssetDeduplication);
 								}
+								using (new Div(writer).WithClass("col").End())
+								{
+									WriteCheckBoxForEnableDeterministicGuids(writer, Localization.EnableDeterministicGuids);
+								}
 							}
 
 							using (new Div(writer).WithClass("row").End())

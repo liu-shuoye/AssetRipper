@@ -75,7 +75,20 @@ public class AssetExportCollection<T> : ExportCollection where T : IUnityObjectB
 		return importer;
 	}
 
-	public override UnityGuid GUID { get; } = UnityGuid.NewGuid();
+	/// <summary>
+	/// 本集合的导出 GUID。默认惰性生成随机值；启用"确定性 GUID"设置后由
+	/// <see cref="UseDeterministicGuid"/> 替换为按资产稳定标识计算的结果。
+	/// </summary>
+	private UnityGuid? m_guid;
+
+	public override UnityGuid GUID => m_guid ??= UnityGuid.NewGuid();
+
+	/// <inheritdoc/>
+	public override void UseDeterministicGuid()
+	{
+		m_guid = DeterministicGuidCalculator.Calculate(Asset);
+	}
+
 	public override IAssetExporter AssetExporter { get; }
 	public override AssetCollection File => Asset.Collection;
 	public override IEnumerable<IUnityObjectBase> Assets

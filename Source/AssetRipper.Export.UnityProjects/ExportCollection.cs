@@ -33,6 +33,17 @@ public abstract class ExportCollection : IExportCollection
 {
 	public virtual UnityGuid GUID => throw new NotSupportedException();
 
+	/// <summary>
+	/// 将本集合的 GUID 替换为按资产稳定标识计算的确定性 GUID。
+	/// </summary>
+	/// <remarks>
+	/// 默认空操作：场景（沿用原始 SceneGUID）、脚本（本就确定性哈希）、用户项目资产（使用真实 .meta GUID）
+	/// 等集合不需要也不应被覆盖；只有 <see cref="AssetExportCollection{T}"/> 系集合覆写本方法。
+	/// </remarks>
+	public virtual void UseDeterministicGuid()
+	{
+	}
+
 	protected static void ExportMeta(IExportContainer container, Meta meta, string filePath, FileSystem fileSystem)
 	{
 		string metaPath = $"{filePath}{MetaExtension}";
