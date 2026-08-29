@@ -1,4 +1,4 @@
-﻿using AssetRipper.Import.Logging;
+using AssetRipper.Import.Logging;
 using System.Text.Json.Serialization;
 
 namespace AssetRipper.Import.Configuration;
@@ -40,11 +40,17 @@ public sealed record class ImportSettings
 	[JsonConverter(typeof(UnityVersionJsonConverter))]
 	public UnityVersion TargetVersion { get; set; }
 
+	/// <summary>
+	/// 游戏类型，决定是否启用特定游戏的专属资产解析逻辑。默认使用通用 Unity 解析。
+	/// </summary>
+	public GameType GameType { get; set; } = GameType.Generic;
+
 	public void Log()
 	{
 		Logger.Info(LogCategory.General, $"{nameof(ScriptContentLevel)}: {ScriptContentLevel}");
 		Logger.Info(LogCategory.General, $"{nameof(StreamingAssetsMode)}: {StreamingAssetsMode}");
 		Logger.Info(LogCategory.General, $"{nameof(DefaultVersion)}: {DefaultVersion}");
 		Logger.Info(LogCategory.General, $"{nameof(TargetVersion)}: {TargetVersion}");
+		Logger.Info(LogCategory.General, $"{nameof(GameType)}: {GameType}");
 	}
 }

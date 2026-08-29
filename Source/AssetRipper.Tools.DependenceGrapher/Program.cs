@@ -1,8 +1,9 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Metadata;
 using AssetRipper.Import.AssetCreation;
+using AssetRipper.Import.Configuration;
 using AssetRipper.Import.Structure.Assembly.Managers;
 using AssetRipper.IO.Files;
 using AssetRipper.IO.Files.SerializedFiles;
@@ -85,7 +86,7 @@ internal static class Program
 
 	private static void LoadFiles(IEnumerable<string> files, TextWriter writer, List<IAssetFilter> filters, bool verbose, Dictionary<string, string> cabMap)
 	{
-		GameAssetFactory factory = new GameAssetFactory(new BaseManager(s => { }));
+		GameAssetFactory factory = new GameAssetFactory(new BaseManager(s => { }), GameType.Generic);
 		foreach (string file in files)
 		{
 			LoadFile(file, factory, writer, filters, verbose, cabMap);

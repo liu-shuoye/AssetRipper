@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets.Bundles;
 using AssetRipper.Import.AssetCreation;
 using AssetRipper.Import.Configuration;
 using AssetRipper.Import.Logging;
@@ -47,7 +47,7 @@ public sealed class GameStructure : IDisposable
 
 		Logger.SendStatusChange("loading_step_begin_scheme_processing");
 
-		InitializeGameCollection(configuration.ImportSettings.DefaultVersion, configuration.ImportSettings.TargetVersion);
+		InitializeGameCollection(configuration.ImportSettings.DefaultVersion, configuration.ImportSettings.TargetVersion, configuration.ImportSettings.GameType);
 
 		if (!FileCollection.HasAnyAssetCollections())
 		{
@@ -73,11 +73,11 @@ public sealed class GameStructure : IDisposable
 
 	/// <summary> 初始化游戏文件集合。 </summary>
 	[MemberNotNull(nameof(FileCollection))]
-	private void InitializeGameCollection(UnityVersion defaultVersion, UnityVersion targetVersion)
+	private void InitializeGameCollection(UnityVersion defaultVersion, UnityVersion targetVersion, GameType gameType)
 	{
 		Logger.SendStatusChange("loading_step_create_file_collection");
 
-		GameAssetFactory assetFactory = new(AssemblyManager);
+		GameAssetFactory assetFactory = new(AssemblyManager, gameType);
 
 		IEnumerable<string> filePaths;
 		if (PlatformStructure is null || MixedStructure is null)

@@ -60,20 +60,29 @@ public sealed partial class SettingsPage : DefaultPage
 								}
 							}
 
-							using (new Div(writer).WithClass("row").End())
+						using (new Div(writer).WithClass("row").End())
+						{
+							using (new Div(writer).WithClass("col").End())
 							{
-								using (new Div(writer).WithClass("col").End())
-								{
-									WriteTextAreaForDefaultVersion(writer);
-								}
+								WriteTextAreaForDefaultVersion(writer);
 							}
+						}
 
-							using (new Div(writer).WithClass("row").End())
+						// 游戏类型下拉选择，用于针对特定游戏启用专属解析方式
+						using (new Div(writer).WithClass("row").End())
+						{
+							using (new Div(writer).WithClass("col").End())
 							{
-								using (new Div(writer).WithClass("col").End())
-								{
-									WriteDropDownForBundledAssetsExportMode(writer);
-								}
+								WriteDropDownForGameType(writer);
+							}
+						}
+
+						using (new Div(writer).WithClass("row").End())
+						{
+							using (new Div(writer).WithClass("col").End())
+							{
+								WriteDropDownForBundledAssetsExportMode(writer);
+							}
 								using (new Div(writer).WithClass("col").End())
 								{
 									WriteDropDownForScriptContentLevel(writer);

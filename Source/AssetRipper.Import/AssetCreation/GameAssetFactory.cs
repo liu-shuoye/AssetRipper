@@ -1,8 +1,8 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Generics;
 using AssetRipper.Assets.IO;
 using AssetRipper.Assets.Metadata;
-using AssetRipper.Import.AssetCreation.Nikki4;
+using AssetRipper.Import.Configuration;
 using AssetRipper.Import.Logging;
 using AssetRipper.Import.Structure;
 using AssetRipper.Import.Structure.Assembly.Managers;
@@ -44,9 +44,15 @@ namespace AssetRipper.Import.AssetCreation;
 /// 游戏资源工厂
 /// </summary>
 /// <param name="assemblyManager"></param>
-public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFactoryBase
+/// <param name="gameType"></param>
+public sealed class GameAssetFactory(IAssemblyManager assemblyManager, GameType gameType) : AssetFactoryBase
 {
 	private IAssemblyManager AssemblyManager { get; } = assemblyManager ?? throw new ArgumentNullException(nameof(assemblyManager));
+
+	/// <summary>
+	/// 当前游戏类型的专属资产提供者；该游戏未注册专属解析时为 null，走默认解析。
+	/// </summary>
+	private IGameAssetProvider? GameProvider { get; } = GameAssetProviderRegistry.GetProvider(gameType);
 
 
 	public override IUnityObjectBase? ReadAsset(AssetInfo assetInfo, ReadOnlyArraySegment<byte> assetData, SerializedType? assetType)
@@ -105,7 +111,7 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 		return monoBehaviour;
 	}
 
-	private static IUnityObjectBase ReadNormalObject(AssetInfo assetInfo, ReadOnlyArraySegment<byte> assetData)
+	private IUnityObjectBase ReadNormalObject(AssetInfo assetInfo, ReadOnlyArraySegment<byte> assetData)
 	{
 		IUnityObjectBase asset = TryReadNormalObject(assetInfo, assetData, assetInfo.Collection.Version, out string? error);
 		if (error is null)
@@ -145,7 +151,7 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 	}
 
 
-	private static IUnityObjectBase TryReadNormalObject(AssetInfo assetInfo, ReadOnlySpan<byte> assetData, UnityVersion version, out string? error)
+	private IUnityObjectBase TryReadNormalObject(AssetInfo assetInfo, ReadOnlySpan<byte> assetData, UnityVersion version, out string? error)
 	{
 		IUnityObjectBase? asset = CreateAsset(assetInfo, version);
 		if (asset is null)
@@ -222,32 +228,13 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager) : AssetFa
 		}
 	}
 
-	private static IUnityObjectBase? CreateAsset(AssetInfo assetInfo, UnityVersion version)
+	private IUnityObjectBase? CreateAsset(AssetInfo assetInfo, UnityVersion version)
 	{
-		switch (assetInfo.ClassID)
+		// 优先尝试游戏专属解析；返回 null 表示该类型回退到默认解析
+		IUnityObjectBase? gameAsset = GameProvider?.TryCreateAsset(assetInfo, version);
+		if (gameAsset is not null)
 		{
-			case (int)ClassIDType.AnimationClip:
-				return new AnimationClip_Nikki4(assetInfo);
-			case (int)ClassIDType.Material:
-				return new Material_Nikki4(assetInfo);
-			case (int)ClassIDType.Shader:
-				return new Shader_Nikki4(assetInfo);
-			case (int)ClassIDType.SkinnedMeshRenderer:
-				return new SkinnedMeshRenderer_Nikki4(assetInfo);
-			case (int)ClassIDType.Mesh:
-				return new Mesh_Nikki4(assetInfo);
-			case (int)ClassIDType.AnimatorController:
-				return new AnimatorController_Nikki4(assetInfo);
-			case (int)ClassIDType.ParticleSystem:
-				return new ParticleSystem_Nikki4(assetInfo);
-			case (int)ClassIDType.ParticleSystemRenderer:
-				return new ParticleSystemRenderer_Nikki4(assetInfo);
-			case (int)ClassIDType.TrailRenderer:
-				return new TrailRenderer_Nikki4(assetInfo);
-			case (int)ClassIDType.SpriteRenderer:
-				return new SpriteRenderer_Nikki4(assetInfo);
-			case (int)ClassIDType.VisualEffect:
-				return new VisualEffect_Nikk4(assetInfo);
+			return gameAsset;
 		}
 
 		IUnityObjectBase? asset = AssetFactory.CreateSerialized(assetInfo, version);

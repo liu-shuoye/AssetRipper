@@ -27,6 +27,9 @@ partial class SettingsPage
 			case nameof(ImportSettings.TargetVersion):
 				Configuration.ImportSettings.TargetVersion = TryParseUnityVersion(value);
 				break;
+			case nameof(ImportSettings.GameType):
+				Configuration.ImportSettings.GameType = TryParseEnum<GameType>(value);
+				break;
 			case nameof(ProcessingSettings.BundledAssetsExportMode):
 				Configuration.ProcessingSettings.BundledAssetsExportMode = TryParseEnum<BundledAssetsExportMode>(value);
 				break;
@@ -180,5 +183,10 @@ partial class SettingsPage
 	private static void WriteCheckBoxForSaveSettingsToDisk(TextWriter writer, string label, bool disabled = false)
 	{
 		WriteCheckBox(writer, label, Configuration.ExportSettings.SaveSettingsToDisk, nameof(ExportSettings.SaveSettingsToDisk), disabled);
+	}
+
+	private static void WriteDropDownForGameType(TextWriter writer)
+	{
+		WriteDropDown(writer, GameTypeDropDownSetting.Instance, Configuration.ImportSettings.GameType, nameof(ImportSettings.GameType));
 	}
 }
