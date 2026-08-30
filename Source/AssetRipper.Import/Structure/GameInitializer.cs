@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.IO;
 using AssetRipper.Import.Structure.Platforms;
 using AssetRipper.IO.Files;
@@ -12,8 +12,9 @@ internal sealed partial record class GameInitializer : DefaultGameInitializer
 {
 	public UnityVersion TargetVersion { get; }
 
-	public GameInitializer(PlatformGameStructure? platformStructure, PlatformGameStructure? mixedStructure, FileSystem fileSystem, UnityVersion defaultVersion, UnityVersion targetVersion)
-		: base(new StructureDependencyProvider(platformStructure, mixedStructure, fileSystem), new CustomResourceProvider(platformStructure, mixedStructure, fileSystem), defaultVersion)
+	// dependencyMap 为可选参数，保持既有调用方兼容；仅在启用依赖关系映射时参与依赖解析
+	public GameInitializer(PlatformGameStructure? platformStructure, PlatformGameStructure? mixedStructure, FileSystem fileSystem, UnityVersion defaultVersion, UnityVersion targetVersion, DependencyMap? dependencyMap = null)
+		: base(new StructureDependencyProvider(platformStructure, mixedStructure, fileSystem, dependencyMap), new CustomResourceProvider(platformStructure, mixedStructure, fileSystem), defaultVersion)
 	{
 		TargetVersion = targetVersion;
 	}

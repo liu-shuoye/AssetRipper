@@ -1,4 +1,7 @@
-﻿using AssetRipper.NativeDialogs;
+using AssetRipper.Import.Logging;
+using AssetRipper.Import.Structure;
+using AssetRipper.IO.Files;
+using AssetRipper.NativeDialogs;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Primitives;
@@ -83,6 +86,42 @@ public static class Commands
 			{
 				GameFileLoader.LoadAndProcess(paths);
 			}
+			return null;
+		}
+	}
+
+	/// <summary>
+	/// 扫描指定文件夹生成依赖关系文件。命令仅负责生成文件，不改变 GameFileLoader 的已加载状态；
+	/// 扫描可能耗时较长，放到后台线程执行以免长时间占用 HTTP 请求线程导致超时。
+	/// </summary>
+	public readonly struct GenerateDependencyMap : ICommand
+	{
+		static async Task<string?> ICommand.Execute(HttpRequest request)
+		{
+			IFormCollection form = await request.ReadFormAsync();
+			// StringValues 到 string 是显式转换，直接与 null 组成三元表达式无法推断类型
+			string? path = form.TryGetValue("Path", out StringValues values) ? (string?)values : null;
+			string? outputPath = form.TryGetValue("OutputPath", out StringValues outputValues) ? (string?)outputValues : null;
+			if (string.IsNullOrEmpty(path))
+			{
+				return CommandsPath;
+			}
+
+			// 输出路径留空时由扫描器默认输出到被扫描的文件夹内
+			string? finalOutputPath = string.IsNullOrEmpty(outputPath) ? null : outputPath;
+			Logger.Info(LogCategory.General, $"开始扫描依赖关系：{path}");
+			_ = Task.Run(() =>
+			{
+				try
+				{
+					DependencyMapScanner.ScanToFile(path, finalOutputPath, LocalFileSystem.Instance);
+					Logger.Info(LogCategory.General, $"依赖关系扫描完成：{path}");
+				}
+				catch (Exception ex)
+				{
+					Logger.Error(LogCategory.General, $"依赖关系扫描失败：{ex}");
+				}
+			});
 			return null;
 		}
 	}

@@ -1,0 +1,22 @@
+# Checklist
+
+- [x] DependencyMap 模型实现：Load/Save/TryResolve 正常工作，JSON 格式为 `{"Version":1,"Entries":{...}}`
+- [x] DependencyMap 使用源生成 JSON 序列化（AOT 兼容，无反射式 System.Text.Json）
+- [x] DependencyMap.Load 对不存在的文件返回 null 并记录警告，不抛异常
+- [x] DependencyMapScanner 递归扫描文件夹，识别 SerializedFile/Bundle/压缩文件并记录四类名称键（文件名、bundle 名、NameFixed、相对路径）
+- [x] 扫描器逐文件处理后 Dispose，不同时持有全部文件
+- [x] 无法识别的文件被跳过并记录警告，扫描不中断
+- [x] 扫描输出默认路径为 `<扫描文件夹>/AssetRipper.DependencyMap.json`，可被 OutputPath 参数覆盖
+- [x] ImportSettings 新增 LoadDependencyMap（默认 false）与 DependencyMapPath，Log() 输出新设置
+- [x] SettingsPage.g.cs 已重新生成，包含新设置项的绑定与 WriteCheckBoxForLoadDependencyMap
+- [x] 设置页显示"加载依赖关系文件"复选框与依赖关系文件路径输入框（带选择文件按钮）
+- [x] 设置持久化遵循 SaveSettingsToDisk 机制（开关状态重启后保留）
+- [x] StructureDependencyProvider.FindDependency 优先现有结构查找，失败后回退到 DependencyMap 查找
+- [x] 后备查找命中时通过 SchemeReader.LoadFile 加载绝对路径文件（文件夹外文件）
+- [x] GameStructure 按设置加载 DependencyMap 并传递给 GameInitializer；开关关闭时不加载、行为与现状一致
+- [x] GameBundle.FromPaths.cs:90 的递归依赖加载机制对通过 DependencyMap 加载的文件同样生效（传递闭包）
+- [x] GUI 命令 POST /Commands/GenerateDependencyMap 可触发扫描并生成文件
+- [x] 命令页（未加载文件时）显示扫描表单入口
+- [x] en_US.json 与 zh_Hans.json 均包含新增本地化键
+- [x] 整个解决方案 dotnet build 编译通过
+- [x] 开关默认关闭时，现有加载流程（不使用依赖关系文件）行为无任何变化

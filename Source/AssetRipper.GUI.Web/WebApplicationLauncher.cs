@@ -268,6 +268,9 @@ public static class WebApplicationLauncher
 			.AcceptsFormDataContainingPath()
 			.Produces(StatusCodes.Status302Found);
 		app.MapPost("/Reset", Commands.HandleCommand<Commands.Reset>);
+		app.MapPost("/Commands/GenerateDependencyMap", Commands.HandleCommand<Commands.GenerateDependencyMap>)
+			.AcceptsFormDataContainingPath()
+			.Produces(StatusCodes.Status302Found);
 
 		//Dialogs
 		app.MapGet("/Dialogs/SaveFile", Dialogs.SaveFile.HandleGetRequest).Produces<string>();

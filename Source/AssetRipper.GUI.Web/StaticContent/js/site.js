@@ -1,4 +1,4 @@
-﻿// For enabling and disabling descriptions based on the selected option in a select element
+// For enabling and disabling descriptions based on the selected option in a select element
 document.addEventListener('DOMContentLoaded', function () {
 	// Get all select elements on the page
 	var selects = document.querySelectorAll('select');
@@ -60,5 +60,18 @@ async function browseForFolder(inputId) {
 		}
 	} catch (error) {
 		console.error('Error fetching the folder path:', error);
+	}
+}
+
+// 选择的是单个文件而非文件夹，因此使用 /Dialogs/OpenFile 接口
+async function browseForFile(inputId) {
+	try {
+		const response = await fetch('/Dialogs/OpenFile');
+		const path = await response.json();
+		if (path) {
+			document.getElementById(inputId).value = path;
+		}
+	} catch (error) {
+		console.error('Error fetching the file path:', error);
 	}
 }

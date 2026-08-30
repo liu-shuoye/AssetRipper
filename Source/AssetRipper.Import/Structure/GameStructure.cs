@@ -47,7 +47,10 @@ public sealed class GameStructure : IDisposable
 
 		Logger.SendStatusChange("loading_step_begin_scheme_processing");
 
-		InitializeGameCollection(configuration.ImportSettings.DefaultVersion, configuration.ImportSettings.TargetVersion, configuration.ImportSettings.GameType);
+		// 依赖关系映射：打开游戏子文件夹时用于解析不在打开范围内的依赖文件
+		DependencyMap? dependencyMap = LoadDependencyMap(configuration.ImportSettings);
+
+		InitializeGameCollection(configuration.ImportSettings.DefaultVersion, configuration.ImportSettings.TargetVersion, configuration.ImportSettings.GameType, dependencyMap);
 
 		if (!FileCollection.HasAnyAssetCollections())
 		{
@@ -73,7 +76,7 @@ public sealed class GameStructure : IDisposable
 
 	/// <summary> 初始化游戏文件集合。 </summary>
 	[MemberNotNull(nameof(FileCollection))]
-	private void InitializeGameCollection(UnityVersion defaultVersion, UnityVersion targetVersion, GameType gameType)
+	private void InitializeGameCollection(UnityVersion defaultVersion, UnityVersion targetVersion, GameType gameType, DependencyMap? dependencyMap)
 	{
 		Logger.SendStatusChange("loading_step_create_file_collection");
 
@@ -93,7 +96,25 @@ public sealed class GameStructure : IDisposable
 			filePaths,
 			assetFactory,
 			FileSystem,
-			new GameInitializer(PlatformStructure, MixedStructure, FileSystem, defaultVersion, targetVersion));
+			new GameInitializer(PlatformStructure, MixedStructure, FileSystem, defaultVersion, targetVersion, dependencyMap));
+	}
+
+	/// <summary>
+	/// 按导入设置加载依赖关系映射。启用且配置了映射文件路径时从磁盘加载，否则返回 null。
+	/// </summary>
+	private static DependencyMap? LoadDependencyMap(ImportSettings settings)
+	{
+		if (!settings.LoadDependencyMap || string.IsNullOrEmpty(settings.DependencyMapPath))
+		{
+			return null;
+		}
+
+		DependencyMap? dependencyMap = DependencyMap.Load(settings.DependencyMapPath);
+		if (dependencyMap is not null)
+		{
+			Logger.Info(LogCategory.Import, $"已加载依赖关系映射：{dependencyMap.Entries.Count} 个条目。");
+		}
+		return dependencyMap;
 	}
 
 	/// <summary> 初始化程序集管理器。 </summary>

@@ -1,4 +1,4 @@
-﻿using AssetRipper.Export.Configuration;
+using AssetRipper.Export.Configuration;
 using AssetRipper.GUI.Web.Paths;
 using System.Text.Json;
 
@@ -29,6 +29,20 @@ public sealed class CommandsPage : VuePage
 				{
 					new Button(writer).WithCustomAttribute("@click", "handleSelectLoadFile").WithClass("btn btn-success").Close(Localization.SelectFile);
 					new Button(writer).WithCustomAttribute("@click", "handleSelectLoadFolder").WithClass("btn btn-success").Close(Localization.SelectFolder);
+				}
+			}
+
+			// 依赖关系扫描表单：只负责生成依赖关系文件，不加载文件；
+			// 输出路径不提供输入框，留空时由扫描器默认写到被扫描的文件夹内
+			using (new P(writer).End())
+			{
+				using (new Form(writer).WithAction("/Commands/GenerateDependencyMap").WithMethod("post").End())
+				{
+					new Input(writer).WithClass("form-control").WithType("text").WithName("Path")
+						.WithCustomAttribute("v-model", "scan_path").Close();
+					// 路径为空时禁用提交，避免对空路径发起无意义的后台扫描
+					new Input(writer).WithCustomAttribute("v-if", "scan_path !== ''").WithType("submit").WithClass("btn btn-primary").WithValue(Localization.GenerateDependencyMap).Close();
+					new Button(writer).WithCustomAttribute("v-else").WithClass("btn btn-primary").WithCustomAttribute("disabled").Close(Localization.GenerateDependencyMap);
 				}
 			}
 		}

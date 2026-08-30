@@ -45,6 +45,16 @@ public sealed record class ImportSettings
 	/// </summary>
 	public GameType GameType { get; set; } = GameType.Generic;
 
+	/// <summary>
+	/// 是否在加载文件时使用依赖关系文件解析不在打开文件夹内的依赖文件。
+	/// </summary>
+	public bool LoadDependencyMap { get; set; }
+
+	/// <summary>
+	/// 依赖关系文件路径。由"扫描依赖关系"命令生成，需配合 <see cref="LoadDependencyMap"/> 使用。
+	/// </summary>
+	public string? DependencyMapPath { get; set; }
+
 	public void Log()
 	{
 		Logger.Info(LogCategory.General, $"{nameof(ScriptContentLevel)}: {ScriptContentLevel}");
@@ -52,5 +62,7 @@ public sealed record class ImportSettings
 		Logger.Info(LogCategory.General, $"{nameof(DefaultVersion)}: {DefaultVersion}");
 		Logger.Info(LogCategory.General, $"{nameof(TargetVersion)}: {TargetVersion}");
 		Logger.Info(LogCategory.General, $"{nameof(GameType)}: {GameType}");
+		Logger.Info(LogCategory.General, $"{nameof(LoadDependencyMap)}: {LoadDependencyMap}");
+		Logger.Info(LogCategory.General, $"{nameof(DependencyMapPath)}: {DependencyMapPath}");
 	}
 }

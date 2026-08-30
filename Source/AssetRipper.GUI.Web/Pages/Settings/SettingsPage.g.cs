@@ -30,6 +30,9 @@ partial class SettingsPage
 			case nameof(ImportSettings.GameType):
 				Configuration.ImportSettings.GameType = TryParseEnum<GameType>(value);
 				break;
+			case nameof(ImportSettings.DependencyMapPath):
+				Configuration.ImportSettings.DependencyMapPath = value;
+				break;
 			case nameof(ProcessingSettings.BundledAssetsExportMode):
 				Configuration.ProcessingSettings.BundledAssetsExportMode = TryParseEnum<BundledAssetsExportMode>(value);
 				break;
@@ -69,6 +72,7 @@ partial class SettingsPage
 	private static readonly Dictionary<string, Action<bool>> booleanProperties = new()
 	{
 		{ nameof(ImportSettings.IgnoreStreamingAssets), (value) => { Configuration.ImportSettings.IgnoreStreamingAssets = value; } },
+		{ nameof(ImportSettings.LoadDependencyMap), (value) => { Configuration.ImportSettings.LoadDependencyMap = value; } },
 		{ nameof(ProcessingSettings.EnablePrefabOutlining), (value) => { Configuration.ProcessingSettings.EnablePrefabOutlining = value; } },
 		{ nameof(ProcessingSettings.EnableStaticMeshSeparation), (value) => { Configuration.ProcessingSettings.EnableStaticMeshSeparation = value; } },
 		{ nameof(ProcessingSettings.EnableAssetDeduplication), (value) => { Configuration.ProcessingSettings.EnableAssetDeduplication = value; } },
@@ -93,6 +97,16 @@ partial class SettingsPage
 	private static void WriteDropDownForStreamingAssetsMode(TextWriter writer)
 	{
 		WriteDropDown(writer, StreamingAssetsModeDropDownSetting.Instance, Configuration.ImportSettings.StreamingAssetsMode, nameof(ImportSettings.StreamingAssetsMode));
+	}
+
+	private static void WriteDropDownForGameType(TextWriter writer)
+	{
+		WriteDropDown(writer, GameTypeDropDownSetting.Instance, Configuration.ImportSettings.GameType, nameof(ImportSettings.GameType));
+	}
+
+	private static void WriteCheckBoxForLoadDependencyMap(TextWriter writer, string label, bool disabled = false)
+	{
+		WriteCheckBox(writer, label, Configuration.ImportSettings.LoadDependencyMap, nameof(ImportSettings.LoadDependencyMap), disabled);
 	}
 
 	private static void WriteCheckBoxForEnablePrefabOutlining(TextWriter writer, string label, bool disabled = false)
@@ -183,10 +197,5 @@ partial class SettingsPage
 	private static void WriteCheckBoxForSaveSettingsToDisk(TextWriter writer, string label, bool disabled = false)
 	{
 		WriteCheckBox(writer, label, Configuration.ExportSettings.SaveSettingsToDisk, nameof(ExportSettings.SaveSettingsToDisk), disabled);
-	}
-
-	private static void WriteDropDownForGameType(TextWriter writer)
-	{
-		WriteDropDown(writer, GameTypeDropDownSetting.Instance, Configuration.ImportSettings.GameType, nameof(ImportSettings.GameType));
 	}
 }

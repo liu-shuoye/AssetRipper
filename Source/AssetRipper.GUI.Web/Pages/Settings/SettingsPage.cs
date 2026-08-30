@@ -77,6 +77,23 @@ public sealed partial class SettingsPage : DefaultPage
 							}
 						}
 
+						// 依赖关系文件：勾选后加载时解析打开文件夹之外的依赖，路径指向扫描命令生成的文件
+						using (new Div(writer).WithClass("row").End())
+						{
+							using (new Div(writer).WithClass("col").End())
+							{
+								WriteCheckBoxForLoadDependencyMap(writer, Localization.LoadDependencyMap);
+							}
+						}
+
+						using (new Div(writer).WithClass("row").End())
+						{
+							using (new Div(writer).WithClass("col").End())
+							{
+								WriteTextInputForDependencyMapPath(writer);
+							}
+						}
+
 						using (new Div(writer).WithClass("row").End())
 						{
 							using (new Div(writer).WithClass("col").End())
@@ -255,6 +272,30 @@ public sealed partial class SettingsPage : DefaultPage
 				.WithClass("btn btn-outline-secondary")
 				.WithCustomAttribute("onclick", $"browseForFolder('{id}')")
 				.Close(Localization.SelectFolder);
+		}
+	}
+
+	/// <summary>
+	/// 依赖关系文件路径的文本输入框，附带"选择文件"按钮（调用全局 JS 打开本机文件选择对话框）。
+	/// </summary>
+	private static void WriteTextInputForDependencyMapPath(TextWriter writer)
+	{
+		string id = nameof(Configuration.ImportSettings.DependencyMapPath);
+		new Label(writer).WithClass("form-label").WithFor(id).Close(Localization.DependencyMapPath);
+		using (new Div(writer).WithClass("input-group").End())
+		{
+			new Input(writer)
+				.WithType("text")
+				.WithClass("form-control")
+				.WithId(id)
+				.WithName(id)
+				.WithValue(Configuration.ImportSettings.DependencyMapPath ?? "")
+				.Close();
+			new Button(writer)
+				.WithType("button")
+				.WithClass("btn btn-outline-secondary")
+				.WithCustomAttribute("onclick", $"browseForFile('{id}')")
+				.Close(Localization.SelectFile);
 		}
 	}
 
