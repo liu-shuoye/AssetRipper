@@ -28,6 +28,8 @@ Import : Files use the 'Unknown' scripting backend.
 
 For IL2Cpp games, use [Cpp2IL](https://github.com/SamboyCoding/Cpp2IL) to generate assemblies. [Il2CppInterop assemblies](https://github.com/BepInEx/Il2CppInterop) used in modding will not work.
 
+If Cpp2IL cannot process the game (for example, encrypted `global-metadata.dat` or protected binaries), you can dump the assemblies externally with [Il2CppDumper](https://github.com/Perfare/Il2CppDumper) (or a fork/memory-dump tool such as [Zygisk-Il2CppDumper](https://github.com/Perfare/Zygisk-Il2CppDumper) that can bypass the protection), and then set `Il2CppDumpPath` in the import settings to the dump output directory. AssetRipper will load the exported `DummyDll` assemblies instead of running Cpp2IL.
+
 ## Duplicate Assemblies
 
 This has a signature error in the log file.

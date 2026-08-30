@@ -33,6 +33,9 @@ partial class SettingsPage
 			case nameof(ImportSettings.DependencyMapPath):
 				Configuration.ImportSettings.DependencyMapPath = value;
 				break;
+			case nameof(ImportSettings.Il2CppDumpPath):
+				Configuration.ImportSettings.Il2CppDumpPath = value;
+				break;
 			case nameof(ProcessingSettings.BundledAssetsExportMode):
 				Configuration.ProcessingSettings.BundledAssetsExportMode = TryParseEnum<BundledAssetsExportMode>(value);
 				break;

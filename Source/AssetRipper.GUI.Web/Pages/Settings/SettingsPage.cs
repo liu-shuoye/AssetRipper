@@ -94,6 +94,15 @@ public sealed partial class SettingsPage : DefaultPage
 							}
 						}
 
+						// IL2Cpp dump 目录：Cpp2IL 无法解析（如加密游戏）时，改为加载外部工具导出的 DummyDll
+						using (new Div(writer).WithClass("row").End())
+						{
+							using (new Div(writer).WithClass("col").End())
+							{
+								WriteTextInputForIl2CppDumpPath(writer);
+							}
+						}
+
 						using (new Div(writer).WithClass("row").End())
 						{
 							using (new Div(writer).WithClass("col").End())
@@ -296,6 +305,31 @@ public sealed partial class SettingsPage : DefaultPage
 				.WithClass("btn btn-outline-secondary")
 				.WithCustomAttribute("onclick", $"browseForFile('{id}')")
 				.Close(Localization.SelectFile);
+		}
+	}
+
+	/// <summary>
+	/// IL2Cpp dump 目录的文本输入框，附带"选择文件夹"按钮（调用全局 JS 打开本机目录选择对话框）。
+	/// 指向 Il2CppDumper 输出目录（自动识别其中的 DummyDll 子目录），用于加密游戏等 Cpp2IL 无法解析的场景。
+	/// </summary>
+	private static void WriteTextInputForIl2CppDumpPath(TextWriter writer)
+	{
+		string id = nameof(Configuration.ImportSettings.Il2CppDumpPath);
+		new Label(writer).WithClass("form-label").WithFor(id).Close(Localization.Il2cppDumpPath);
+		using (new Div(writer).WithClass("input-group").End())
+		{
+			new Input(writer)
+				.WithType("text")
+				.WithClass("form-control")
+				.WithId(id)
+				.WithName(id)
+				.WithValue(Configuration.ImportSettings.Il2CppDumpPath ?? "")
+				.Close();
+			new Button(writer)
+				.WithType("button")
+				.WithClass("btn btn-outline-secondary")
+				.WithCustomAttribute("onclick", $"browseForFolder('{id}')")
+				.Close(Localization.SelectFolder);
 		}
 	}
 

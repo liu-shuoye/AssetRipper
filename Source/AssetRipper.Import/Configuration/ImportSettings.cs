@@ -55,6 +55,13 @@ public sealed record class ImportSettings
 	/// </summary>
 	public string? DependencyMapPath { get; set; }
 
+	/// <summary>
+	/// IL2Cpp dump 目录路径。指向 Il2CppDumper 的输出目录（自动识别其中的 DummyDll 子目录），
+	/// 或直接指向包含 dump 程序集的目录。用于 Cpp2IL 无法解析的游戏（如元数据加密），
+	/// 由用户在外部工具完成解析后直接加载导出的托管程序集。
+	/// </summary>
+	public string? Il2CppDumpPath { get; set; }
+
 	public void Log()
 	{
 		Logger.Info(LogCategory.General, $"{nameof(ScriptContentLevel)}: {ScriptContentLevel}");
@@ -64,5 +71,6 @@ public sealed record class ImportSettings
 		Logger.Info(LogCategory.General, $"{nameof(GameType)}: {GameType}");
 		Logger.Info(LogCategory.General, $"{nameof(LoadDependencyMap)}: {LoadDependencyMap}");
 		Logger.Info(LogCategory.General, $"{nameof(DependencyMapPath)}: {DependencyMapPath}");
+		Logger.Info(LogCategory.General, $"{nameof(Il2CppDumpPath)}: {Il2CppDumpPath}");
 	}
 }

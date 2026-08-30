@@ -115,6 +115,7 @@
     "guid": "GUID",
     "height": "Height",
     "home": "Home",
+    "il2cpp_dump_path": "IL2Cpp Dump Directory (Il2CppDumper DummyDll output)",
     "image_export_title": "Image Export Format",
     "image_format_description": "This affects all exported images.",
     "install_unity_editor": "Install Unity Editor",

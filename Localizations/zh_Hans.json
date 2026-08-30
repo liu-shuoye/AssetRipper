@@ -277,5 +277,6 @@
     "no_results_found": "未找到结果。",
     "generate_dependency_map": "扫描依赖关系",
     "dependency_map_path": "依赖关系文件路径",
-    "load_dependency_map": "加载依赖关系文件（解析加载文件夹之外的依赖文件）"
+    "load_dependency_map": "加载依赖关系文件（解析加载文件夹之外的依赖文件）",
+    "il2cpp_dump_path": "IL2Cpp dump 目录（Il2CppDumper 导出的 DummyDll，用于加密游戏等 Cpp2IL 无法解析的场景）"
 }

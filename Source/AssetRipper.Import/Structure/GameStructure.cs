@@ -127,7 +127,7 @@ public sealed class GameStructure : IDisposable
 		AssemblyManager = scriptBackend switch
 		{
 			ScriptingBackend.Mono => new MonoManager(OnRequestAssembly),
-			ScriptingBackend.IL2Cpp => new IL2CppManager(OnRequestAssembly, configuration.ImportSettings.ScriptContentLevel),
+			ScriptingBackend.IL2Cpp => CreateIl2CppManager(configuration),
 			_ => new BaseManager(OnRequestAssembly),
 		};
 
@@ -144,6 +144,28 @@ public sealed class GameStructure : IDisposable
 			Logger.Error(ex);
 			AssemblyManager = new BaseManager(OnRequestAssembly);
 		}
+	}
+
+	/// <summary>
+	/// 创建 IL2Cpp 程序集管理器：配置了有效的外部 dump 目录时直接加载导出程序集，
+	/// 否则使用 Cpp2IL 解析。加密游戏等 Cpp2IL 无法处理的场景依赖外部 dump。
+	/// </summary>
+	private BaseManager CreateIl2CppManager(CoreConfiguration configuration)
+	{
+		string? dumpPath = configuration.ImportSettings.Il2CppDumpPath;
+		if (!string.IsNullOrWhiteSpace(dumpPath))
+		{
+			if (Il2CppDumpManager.TryGetAssemblyDirectory(dumpPath, out string? assemblyDirectory))
+			{
+				Logger.Info(LogCategory.Import, $"检测到有效的 IL2Cpp dump 目录，跳过 Cpp2IL 解析：{assemblyDirectory}");
+				return new Il2CppDumpManager(OnRequestAssembly, assemblyDirectory);
+			}
+
+			// 配置了路径但无效时仅警告并回退，避免配置错误导致无法导入
+			Logger.Log(LogType.Warning, LogCategory.Import, $"IL2Cpp dump 路径无效（目录不存在或不含程序集），回退到 Cpp2IL 解析：{dumpPath}");
+		}
+
+		return new IL2CppManager(OnRequestAssembly, configuration.ImportSettings.ScriptContentLevel);
 	}
 
 	/// <summary> 获取脚本后端。 </summary>
