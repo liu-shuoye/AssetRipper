@@ -1,4 +1,5 @@
-﻿using AssetRipper.Assets.Cloning;
+using System.Buffers.Binary;
+using AssetRipper.Assets.Cloning;
 using AssetRipper.Assets.Generics;
 using AssetRipper.Assets.IO.Writing;
 using AssetRipper.Assets.Metadata;
@@ -9,6 +10,9 @@ using AssetRipper.SourceGenerated.Classes.ClassID_130;
 using AssetRipper.SourceGenerated.Classes.ClassID_18;
 using AssetRipper.SourceGenerated.Classes.ClassID_48;
 using AssetRipper.SourceGenerated.Enums;
+using AssetRipper.SourceGenerated.Extensions;
+using AssetRipper.SourceGenerated.Extensions.Enums.Shader;
+using AssetRipper.SourceGenerated.Extensions.Enums.Shader.GpuProgramType;
 using AssetRipper.SourceGenerated.MarkerInterfaces;
 using AssetRipper.SourceGenerated.Subclasses.GUID;
 using AssetRipper.SourceGenerated.Subclasses.PPtr_EditorExtension;
@@ -17,11 +21,14 @@ using AssetRipper.SourceGenerated.Subclasses.PPtr_PrefabInstance;
 using AssetRipper.SourceGenerated.Subclasses.PPtr_Shader;
 using AssetRipper.SourceGenerated.Subclasses.PPtr_Texture;
 using AssetRipper.SourceGenerated.Subclasses.SerializedPass;
+using AssetRipper.SourceGenerated.Subclasses.SerializedProgram;
 using AssetRipper.SourceGenerated.Subclasses.SerializedProperty;
 using AssetRipper.SourceGenerated.Subclasses.SerializedShader;
+using AssetRipper.SourceGenerated.Subclasses.SerializedSubProgram;
 using AssetRipper.SourceGenerated.Subclasses.SerializedSubShader;
 using AssetRipper.SourceGenerated.Subclasses.ShaderCompilationInfo;
 using AssetRipper.SourceGenerated.Subclasses.ShaderError;
+using K4os.Compression.LZ4;
 
 namespace AssetRipper.Import.AssetCreation.Nikki4;
 
@@ -48,7 +55,9 @@ public class Shader_Nikki4 : NamedObject_2018_3, IShader
 	{
 		m_Shader.Name = reader.ReadRelease_Utf8StringAlign();
 
-		// m_Shader.ParsedForm.ReadRelease(ref reader);
+		// Nikki4 的子程序 blob entry 以 CodeHash 关联（而非标准格式的 BlobIndex 索引），
+		// 读取阶段按顺序收集每个子程序的哈希，读取完成后用于重映射
+		ReadReleaseMethods.SubProgramHashCollector.Begin();
 		ReadReleaseParsedForm(m_Shader.ParsedForm, ref reader);
 
 		m_Shader.Platforms.ReadRelease_ArrayAlign_UInt32(ref reader);
@@ -69,6 +78,291 @@ public class Shader_Nikki4 : NamedObject_2018_3, IShader
 		m_PapeFallbackShader.ReadRelease(ref reader);
 
 		m_Shader.Name = m_Shader.ParsedForm.Name;
+
+		// Nikki4 把真实的子程序数据放在独立的 Code Blob 中，标准字段只是空占位，
+		// 先把 Code Blob 回填到标准字段，导出流程（ShaderExtensions.ReadBlobs）才能取到数据
+		FillStandardBlobFromCodeBlob();
+
+		// Nikki4 的 blob 布局与标准格式不同，回填后重建为标准布局并重映射 BlobIndex，
+		// 否则导出流程（ShaderExtensions.ReadBlobs / GetSubProgram）会因索引无效而失败
+		RemapSubProgramBlobs(ReadReleaseMethods.SubProgramHashCollector.End());
+	}
+
+	/// <summary>
+	/// 把 Nikki4 的 Code Blob（m_Code* 字段）回填到标准 blob 字段。
+	/// 标准字段为空占位而 Code 字段携带真实数据时才执行，避免覆盖有效数据。
+	/// </summary>
+	private void FillStandardBlobFromCodeBlob()
+	{
+		if (m_CodeCompressedBlob.Length == 0 || (m_Shader.CompressedBlob is { Length: > 0 }))
+		{
+			return;
+		}
+
+		m_Shader.CompressedBlob = m_CodeCompressedBlob;
+		CopyNestedList(m_Shader.Offsets_AssetList_AssetList_UInt32, m_CodeOffsets);
+		CopyNestedList(m_Shader.CompressedLengths_AssetList_AssetList_UInt32, m_CodeCompressedLengths);
+		CopyNestedList(m_Shader.DecompressedLengths_AssetList_AssetList_UInt32, m_CodeDecompressedLengths);
+	}
+
+	/// <summary>
+	/// 把源嵌套列表的内容复制到目标嵌套列表。
+	/// 内层逐个复制，避免两个字段共享同一批可变列表对象。
+	/// </summary>
+	private static void CopyNestedList(AssetList<AssetList<uint>> target, AssetList<AssetList<uint>> source)
+	{
+		target.Clear();
+		for (int i = 0; i < source.Count; i++)
+		{
+			target.AddNew().AddRange(source[i]);
+		}
+	}
+
+	/// <summary>
+	/// Nikki4 的子程序数据 blob 与标准格式有三处差异：
+	/// 1. entry 布局为 (Hash128, Offset, Length)，子程序通过 CodeHash 关联 entry，
+	///    而标准格式是 (Offset, Length, Segment) 且用 BlobIndex 数组索引；
+	/// 2. 子程序的 BlobIndex 字段恒为 0xFFFFFFFE（无效占位）；
+	/// 3. entry 数据带 8 字节定制前缀，且 ProgramData（GLSL 源码）被挪到数据末尾，
+	///    格式为 "Pape" + 9 字节定制头 + 源码文本。
+	/// 该方法把 blob 重建为标准布局，并按 CodeHash 重映射每个子程序的 BlobIndex，
+	/// 使通用导出流程无需感知 Nikki4 差异。
+	/// 匹配不到 entry 的子程序（未编译的变体，CodeHash 为全 FF）会被移除。
+	/// </summary>
+	private void RemapSubProgramBlobs(List<byte[]> subProgramHashes)
+	{
+		AssetList<AssetList<uint>> offsets = m_Shader.Offsets_AssetList_AssetList_UInt32;
+		AssetList<AssetList<uint>> compressedLengths = m_Shader.CompressedLengths_AssetList_AssetList_UInt32;
+		AssetList<AssetList<uint>> decompressedLengths = m_Shader.DecompressedLengths_AssetList_AssetList_UInt32;
+		byte[] compressedBlob = m_Shader.CompressedBlob ?? [];
+		if (offsets.Count == 0 || compressedBlob.Length == 0 || subProgramHashes.Count == 0)
+		{
+			return;
+		}
+
+		// 每平台的 hash → 新 entry 索引，以及重建后的数据
+		List<Dictionary<Hash128Key, int>> platformHashMaps = [];
+		List<byte[]> platformCompressed = [];
+		List<byte[]> platformDecompressed = [];
+
+		for (int platform = 0; platform < offsets.Count; platform++)
+		{
+			List<byte[]> programDataList = [];
+			Dictionary<Hash128Key, int> hashMap = [];
+			for (int segment = 0; segment < offsets[platform].Count; segment++)
+			{
+				uint segOffset = offsets[platform][segment];
+				uint segCompressedLength = compressedLengths[platform][segment];
+				uint segDecompressedLength = decompressedLengths[platform][segment];
+				byte[] decompressed = new byte[segDecompressedLength];
+				int written = LZ4Codec.Decode(compressedBlob, (int)segOffset, (int)segCompressedLength, decompressed, 0, (int)segDecompressedLength);
+				if (written != (int)segDecompressedLength)
+				{
+					throw new Exception($"Blob 解压失败：读取 {written} 字节，期望 {segDecompressedLength} 字节");
+				}
+
+				// 解析 Nikki4 entry 表：(Hash128, Offset, Length)
+				int pos = 0;
+				int count = BitConverter.ToInt32(decompressed, pos);
+				pos += 4;
+				for (int e = 0; e < count; e++)
+				{
+					byte[] hash = decompressed[pos..(pos + 16)];
+					pos += 16;
+					int dataOffset = BitConverter.ToInt32(decompressed, pos);
+					pos += 4;
+					int dataLength = BitConverter.ToInt32(decompressed, pos);
+					pos += 4;
+
+					// 跨分段连续编号，重建后合并为单分段
+					hashMap[new Hash128Key(hash)] = programDataList.Count;
+					programDataList.Add(StandardizeSubProgramData(decompressed[dataOffset..(dataOffset + dataLength)]));
+				}
+			}
+			platformHashMaps.Add(hashMap);
+
+			// 重建为标准布局：count + (Offset, Length, Segment) * n + 数据
+			byte[] rebuilt = new byte[4 + programDataList.Count * 12 + programDataList.Sum(d => d.Length)];
+			BinaryPrimitives.WriteInt32LittleEndian(rebuilt, programDataList.Count);
+			int entryPos = 4;
+			int dataPos = 4 + programDataList.Count * 12;
+			for (int e = 0; e < programDataList.Count; e++)
+			{
+				BinaryPrimitives.WriteInt32LittleEndian(rebuilt.AsSpan(entryPos), dataPos);
+				BinaryPrimitives.WriteInt32LittleEndian(rebuilt.AsSpan(entryPos + 4), programDataList[e].Length);
+				BinaryPrimitives.WriteInt32LittleEndian(rebuilt.AsSpan(entryPos + 8), 0);
+				entryPos += 12;
+				programDataList[e].CopyTo(rebuilt.AsSpan(dataPos));
+				dataPos += programDataList[e].Length;
+			}
+			platformDecompressed.Add(rebuilt);
+
+			// 重新压缩，写入标准 blob 字段
+			byte[] target = new byte[rebuilt.Length];
+			int encoded = LZ4Codec.Encode(rebuilt, target, LZ4Level.L00_FAST);
+			platformCompressed.Add(target[..encoded]);
+		}
+
+		// 更新标准 blob 字段：各平台合并为单分段顺序拼接
+		List<byte> newBlob = [];
+		for (int platform = 0; platform < platformCompressed.Count; platform++)
+		{
+			offsets[platform].Clear();
+			offsets[platform].Add((uint)newBlob.Count);
+			compressedLengths[platform].Clear();
+			compressedLengths[platform].Add((uint)platformCompressed[platform].Length);
+			decompressedLengths[platform].Clear();
+			decompressedLengths[platform].Add((uint)platformDecompressed[platform].Length);
+			newBlob.AddRange(platformCompressed[platform]);
+		}
+		m_Shader.CompressedBlob = newBlob.ToArray();
+
+		// 按读取顺序把哈希应用到各子程序并重映射 BlobIndex；
+		// 遍历顺序必须与 ReadReleasePass 的读取顺序一致（Vertex→Fragment→Geometry→Hull→Domain→RayTracing）
+		Queue<byte[]> hashQueue = new(subProgramHashes);
+		foreach (ISerializedSubShader subShader in m_Shader.ParsedForm.SubShaders)
+		{
+			foreach (ISerializedPass pass in subShader.Passes)
+			{
+				RemapProgram(pass.ProgVertex, hashQueue, platformHashMaps);
+				RemapProgram(pass.ProgFragment, hashQueue, platformHashMaps);
+				RemapProgram(pass.ProgGeometry, hashQueue, platformHashMaps);
+				RemapProgram(pass.ProgHull, hashQueue, platformHashMaps);
+				RemapProgram(pass.ProgDomain, hashQueue, platformHashMaps);
+				RemapProgram(pass.ProgRayTracing, hashQueue, platformHashMaps);
+			}
+		}
+	}
+
+	/// <summary>
+	/// 按平台推导（与导出逻辑一致）匹配子程序的 CodeHash，
+	/// 匹配成功则把 BlobIndex 指向重建后的 entry；匹配失败则标记移除。
+	/// </summary>
+	private void RemapProgram(ISerializedProgram? program, Queue<byte[]> hashQueue, List<Dictionary<Hash128Key, int>> platformHashMaps)
+	{
+		if (program is null)
+		{
+			return;
+		}
+
+		AccessListBase<ISerializedSubProgram> subPrograms = program.SubPrograms;
+		List<int> toRemove = [];
+		for (int i = 0; i < subPrograms.Count && hashQueue.Count > 0; i++)
+		{
+			ISerializedSubProgram sub = subPrograms[i];
+			byte[] hash = hashQueue.Dequeue();
+
+			// 与导出时相同的平台推导：GpuProgramType → GPUPlatform → Platforms 索引
+			ShaderGpuProgramType programType = sub.GetProgramType(Collection.Version);
+			GPUPlatform graphicApi = programType.ToGPUPlatform(Collection.Platform);
+			int platformIndex = m_Shader.Platforms.IndexOf((uint)graphicApi);
+
+			if (platformIndex >= 0 && platformIndex < platformHashMaps.Count
+				&& platformHashMaps[platformIndex].TryGetValue(new Hash128Key(hash), out int entryIndex))
+			{
+				sub.BlobIndex = (uint)entryIndex;
+			}
+			else
+			{
+				// 无对应程序数据（未编译变体），收集待移除
+				toRemove.Add(i);
+			}
+		}
+
+		// 倒序移除，避免索引位移
+		for (int r = toRemove.Count - 1; r >= 0; r--)
+		{
+			subPrograms.RemoveAt(toRemove[r]);
+		}
+	}
+
+	/// <summary>
+	/// 把 Nikki4 的 entry 数据转换为标准 ShaderSubProgram 布局：
+	/// 1. 跳过开头的 8 字节定制前缀；
+	/// 2. Nikki4 把 ProgramData 挪到了数据末尾，格式为定制头
+	///    "Pape" + 9 字节 + GLSL 源码（持续到 entry 结束）；
+	/// 3. 转换时把源码部分作为 ProgramData 移回标准位置（keywords 之后），
+	///    sourceMap、绑定通道、参数表等其余字段原样保留。
+	/// </summary>
+	private static byte[] StandardizeSubProgramData(byte[] raw)
+	{
+		int pos = 8; // 跳过 8 字节前缀
+		pos += 4 + 4 + 4 * 4; // version + ProgramType + 4 个 stats
+
+		// 跳过 GlobalKeywords / LocalKeywords 两组字符串数组
+		for (int g = 0; g < 2; g++)
+		{
+			int strCount = BitConverter.ToInt32(raw, pos);
+			pos += 4;
+			for (int i = 0; i < strCount; i++)
+			{
+				int len = BitConverter.ToInt32(raw, pos);
+				pos += 4 + len;
+				pos = (pos + 3) & ~3;
+			}
+		}
+		int keywordsEnd = pos;
+
+		// 搜索 "Pape" magic：Nikki4 定制 ProgramData 的起点
+		int papePos = IndexOf(raw, [0x50, 0x61, 0x70, 0x65], keywordsEnd);
+		if (papePos < 0)
+		{
+			// 找不到定制头时按无字节码处理：在 keywords 后插入空 ProgramData
+			byte[] empty = new byte[raw.Length - 8 + 4];
+			raw[8..keywordsEnd].CopyTo(empty, 0);
+			BinaryPrimitives.WriteInt32LittleEndian(empty.AsSpan(keywordsEnd - 8), 0);
+			raw[keywordsEnd..].CopyTo(empty.AsSpan(keywordsEnd - 8 + 4));
+			return empty;
+		}
+
+		// 源码部分：跳过 "Pape" + 9 字节定制头（1 字节标志 + 2 个 int）
+		byte[] programData = raw[(papePos + 13)..];
+		int align = (4 - (programData.Length & 3)) & 3;
+
+		// 拼接标准布局：[头+keywords] [int 长度 + 源码 + 对齐] [sourceMap..Pape 前的参数表]
+		byte[] result = new byte[(keywordsEnd - 8) + 4 + programData.Length + align + (papePos - keywordsEnd)];
+		raw[8..keywordsEnd].CopyTo(result, 0);
+		BinaryPrimitives.WriteInt32LittleEndian(result.AsSpan(keywordsEnd - 8), programData.Length);
+		programData.CopyTo(result.AsSpan(keywordsEnd - 8 + 4));
+		raw[keywordsEnd..papePos].CopyTo(result.AsSpan(keywordsEnd - 8 + 4 + programData.Length + align));
+		return result;
+	}
+
+	private static int IndexOf(byte[] data, byte[] pattern, int start)
+	{
+		for (int i = start; i <= data.Length - pattern.Length; i++)
+		{
+			bool match = true;
+			for (int j = 0; j < pattern.Length; j++)
+			{
+				if (data[i + j] != pattern[j])
+				{
+					match = false;
+					break;
+				}
+			}
+			if (match)
+			{
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	/// <summary>
+	/// 以值语义比较 16 字节 CodeHash，用于子程序与 blob entry 的哈希匹配。
+	/// </summary>
+	private readonly struct Hash128Key(byte[] hash) : IEquatable<Hash128Key>
+	{
+		private readonly byte[] hash = hash;
+
+		public bool Equals(Hash128Key other) => hash.AsSpan().SequenceEqual(other.hash);
+
+		public override int GetHashCode() => HashCode.Combine(
+			BitConverter.ToInt32(hash, 0),
+			BitConverter.ToInt32(hash, 4),
+			BitConverter.ToInt32(hash, 8),
+			BitConverter.ToInt32(hash, 12));
 	}
 
 	public void ReadReleaseParsedForm(ISerializedShader parsedForm, ref EndianSpanReader reader)

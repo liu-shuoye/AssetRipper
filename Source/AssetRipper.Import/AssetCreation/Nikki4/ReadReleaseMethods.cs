@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Generics;
 using AssetRipper.IO.Endian;
 using AssetRipper.SourceGenerated.Subclasses.AnimationEvent;
@@ -50,6 +50,29 @@ namespace AssetRipper.Import.AssetCreation.Nikki4;
 
 static class ReadReleaseMethods
 {
+	/// <summary>
+	/// Nikki4 格式的子程序 blob entry 以 CodeHash 关联（标准格式用的是 BlobIndex 数组索引），
+	/// 读取阶段按顺序收集每个子程序的 16 字节 CodeHash，
+	/// 供 <see cref="Shader_Nikki4"/> 读取完成后做 hash 与 entry 的重映射。
+	/// 使用线程静态存储，避免多线程加载时互相干扰。
+	/// </summary>
+	internal static class SubProgramHashCollector
+	{
+		[ThreadStatic]
+		private static List<byte[]>? t_hashes;
+
+		public static void Begin() => t_hashes = [];
+
+		public static void Add(byte[] hash) => t_hashes?.Add(hash);
+
+		public static List<byte[]> End()
+		{
+			List<byte[]> result = t_hashes ?? [];
+			t_hashes = null;
+			return result;
+		}
+	}
+
 	public static void ReadRelease_AssetAlign<T>(this T value, ref EndianSpanReader reader) where T : UnityAssetBase
 	{
 		value.ReadRelease(ref reader);
@@ -338,8 +361,9 @@ static class ReadReleaseMethods
 
 	public static void ReadReleaseProgram(this SerializedSubProgram_2019 program, ref EndianSpanReader reader)
 	{
-		var m_CodeHash = new Hash128_5();
-		m_CodeHash.ReadRelease(ref reader);
+		// Nikki4 用 CodeHash 而非 BlobIndex 关联 blob entry（数据中 BlobIndex 恒为 0xFFFFFFFE），
+		// 按读取顺序收集 16 字节哈希，读取完成后由 Shader_Nikki4 重映射
+		SubProgramHashCollector.Add(reader.ReadBytesExact(16).ToArray());
 		program.BlobIndex = reader.ReadUInt32();
 		((UnityAssetBase)program.Channels).ReadRelease(ref reader);
 		program.GlobalKeywordIndices.ReadRelease_ArrayAlign_UInt16(ref reader);
