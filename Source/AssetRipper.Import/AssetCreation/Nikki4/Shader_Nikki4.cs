@@ -1,9 +1,12 @@
+using AssetRipper.Assets;
 using System.Buffers.Binary;
 using AssetRipper.Assets.Cloning;
 using AssetRipper.Assets.Generics;
+using AssetRipper.Assets.Traversal;
 using AssetRipper.Assets.IO.Writing;
 using AssetRipper.Assets.Metadata;
 using AssetRipper.IO.Endian;
+using AssetRipper.SourceGenerated.Classes.ClassID_0;
 using AssetRipper.SourceGenerated.Classes.ClassID_1001;
 using AssetRipper.SourceGenerated.Classes.ClassID_1001480554;
 using AssetRipper.SourceGenerated.Classes.ClassID_130;
@@ -32,7 +35,21 @@ using K4os.Compression.LZ4;
 
 namespace AssetRipper.Import.AssetCreation.Nikki4;
 
-public class Shader_Nikki4 : NamedObject_2018_3, IShader
+public class Shader_Nikki4 : 
+	NamedObject_2018_3,
+	IShader,
+	IUnityObjectBase,
+	IUnityAssetBase,
+	IEndianSpanReadable,
+	IAssetWritable,
+	IShaderMarker,
+	INamed,
+	INamedObject,
+	INamedObjectMarker,
+	IEditorExtension,
+	IEditorExtensionMarker,
+	IObject,
+	IObjectMarker
 {
 	private Shader_2019_3_0_b0 m_Shader;
 	readonly AssetList<AssetList<uint>> m_CodeOffsets;
@@ -50,6 +67,15 @@ public class Shader_Nikki4 : NamedObject_2018_3, IShader
 		m_CodeCompressedBlob = System.Array.Empty<byte>();
 		m_PapeFallbackShader = new PPtr_Shader_5();
 	}
+
+	/// <summary>
+	/// 恢复正确的 Unity 类名。
+	/// 生成类（如 <see cref="Shader_2019_3_0_b0"/>）由 AssemblyDumper 统一注入
+	/// <c>ClassName =&gt; "Shader"</c> 的 override；而 Shader_Nikki4 是手写类，基类
+	/// <see cref="NamedObject_2018_3"/> 的 <see cref="UnityObjectBase.ClassName"/> 固定返回
+	/// "NamedObject"，若不在此复写，GUI/搜索/导出会把 ClassID 48 的 Shader 识别成 NamedObject。
+	/// </summary>
+	public override string ClassName => "Shader";
 
 	public override void ReadRelease(ref EndianSpanReader reader)
 	{
@@ -79,6 +105,12 @@ public class Shader_Nikki4 : NamedObject_2018_3, IShader
 
 		m_Shader.Name = m_Shader.ParsedForm.Name;
 
+		// 名字同步：Nikki4 的 Shader 对象级名字为空，真实名字在 ParsedForm.Name 里。
+		// 上面已写入 m_Shader.Name，这里再同步到 Name_R 与基类（NamedObject_2018_3）的名字存储，
+		// 使 GetBestName()/INamed.Name 与 YAML 的 m_Name 能取到 "Spine/Skeleton" 而不是空值回退到类名。
+		m_Shader.Name_R = m_Shader.ParsedForm.Name;
+		base.Name = m_Shader.ParsedForm.Name;
+
 		// Nikki4 把真实的子程序数据放在独立的 Code Blob 中，标准字段只是空占位，
 		// 先把 Code Blob 回填到标准字段，导出流程（ShaderExtensions.ReadBlobs）才能取到数据
 		FillStandardBlobFromCodeBlob();
@@ -87,6 +119,19 @@ public class Shader_Nikki4 : NamedObject_2018_3, IShader
 		// 否则导出流程（ShaderExtensions.ReadBlobs / GetSubProgram）会因索引无效而失败
 		RemapSubProgramBlobs(ReadReleaseMethods.SubProgramHashCollector.End());
 	}
+
+	/// <summary>
+	/// 字段遍历委托给内部 <see cref="Shader_2019_3_0_b0"/>（m_Shader）。
+	/// 本类承载真实数据的字段全部存放在 m_Shader 中；基类 NamedObject_2018_3 只认识
+	/// m_Name/m_HideFlags 等几个 NamedObject 字段，若不委托，YAML/JSON/依赖导出会把该对象
+	/// 当成空壳 NamedObject 输出（无 m_ParsedForm/Blob 字段）。委托后与直接导出标准 Shader
+	/// 等价（YamlWalker 的根节点名取 <see cref="ClassName"/>，已由上面的 override 修正为 "Shader"）。
+	/// </summary>
+	public override void WalkStandard(AssetWalker walker) => m_Shader.WalkStandard(walker);
+
+	public override void WalkEditor(AssetWalker walker) => m_Shader.WalkEditor(walker);
+
+	public override void WalkRelease(AssetWalker walker) => m_Shader.WalkRelease(walker);
 
 	/// <summary>
 	/// 把 Nikki4 的 Code Blob（m_Code* 字段）回填到标准 blob 字段。
@@ -179,6 +224,7 @@ public class Shader_Nikki4 : NamedObject_2018_3, IShader
 					programDataList.Add(StandardizeSubProgramData(decompressed[dataOffset..(dataOffset + dataLength)]));
 				}
 			}
+
 			platformHashMaps.Add(hashMap);
 
 			// 重建为标准布局：count + (Offset, Length, Segment) * n + 数据
@@ -195,6 +241,7 @@ public class Shader_Nikki4 : NamedObject_2018_3, IShader
 				programDataList[e].CopyTo(rebuilt.AsSpan(dataPos));
 				dataPos += programDataList[e].Length;
 			}
+
 			platformDecompressed.Add(rebuilt);
 
 			// 重新压缩，写入标准 blob 字段
@@ -215,6 +262,7 @@ public class Shader_Nikki4 : NamedObject_2018_3, IShader
 			decompressedLengths[platform].Add((uint)platformDecompressed[platform].Length);
 			newBlob.AddRange(platformCompressed[platform]);
 		}
+
 		m_Shader.CompressedBlob = newBlob.ToArray();
 
 		// 按读取顺序把哈希应用到各子程序并重映射 BlobIndex；
@@ -258,7 +306,7 @@ public class Shader_Nikki4 : NamedObject_2018_3, IShader
 			int platformIndex = m_Shader.Platforms.IndexOf((uint)graphicApi);
 
 			if (platformIndex >= 0 && platformIndex < platformHashMaps.Count
-				&& platformHashMaps[platformIndex].TryGetValue(new Hash128Key(hash), out int entryIndex))
+			                       && platformHashMaps[platformIndex].TryGetValue(new Hash128Key(hash), out int entryIndex))
 			{
 				sub.BlobIndex = (uint)entryIndex;
 			}
@@ -301,6 +349,7 @@ public class Shader_Nikki4 : NamedObject_2018_3, IShader
 				pos = (pos + 3) & ~3;
 			}
 		}
+
 		int keywordsEnd = pos;
 
 		// 搜索 "Pape" magic：Nikki4 定制 ProgramData 的起点
@@ -341,11 +390,13 @@ public class Shader_Nikki4 : NamedObject_2018_3, IShader
 					break;
 				}
 			}
+
 			if (match)
 			{
 				return i;
 			}
 		}
+
 		return -1;
 	}
 
@@ -369,17 +420,17 @@ public class Shader_Nikki4 : NamedObject_2018_3, IShader
 	{
 		parsedForm.PropInfo.ReadRelease(ref reader);
 		// parsedForm.PropInfo.Props.ReadRelease_ArrayAlign_Asset<SerializedProperty_2017>(ref reader);
-		
+
 		parsedForm.SubShaders.ReadRelease_ArrayAlign_Asset<SerializedSubShader_2019_3_0_a7>(ref reader);
-		
+
 		parsedForm.Name = reader.ReadRelease_Utf8StringAlign();
 		parsedForm.CustomEditorName = reader.ReadRelease_Utf8StringAlign();
 		parsedForm.FallbackName = reader.ReadRelease_Utf8StringAlign();
-		var m_PapeFallbackName= reader.ReadRelease_Utf8StringAlign();
+		var m_PapeFallbackName = reader.ReadRelease_Utf8StringAlign();
 		parsedForm.Dependencies.ReadRelease_ArrayAlign_Asset<AssetRipper.SourceGenerated.Subclasses.SerializedShaderDependency.SerializedShaderDependency>(ref reader);
 		parsedForm.DisableNoSubshadersMessage = reader.ReadRelease_BooleanAlign();
 	}
-	
+
 
 	public bool Has_AssetGUID() => m_Shader.Has_AssetGUID();
 
@@ -517,7 +568,21 @@ public class Shader_Nikki4 : NamedObject_2018_3, IShader
 	}
 
 	public PPtrAccessList<IPPtr_Shader, IShader> DependenciesP => m_Shader.DependenciesP;
-	public IPrefab? PrefabAssetP { get; set; }
-	public IPrefabInstance? PrefabInstanceP { get; set; }
-	public IPrefabMarker? PrefabInternalP { get; set; }
+	public IPrefab? PrefabAssetP
+	{
+		get => m_Shader.PrefabAssetP;
+		set => m_Shader.PrefabAssetP = value;
+	}
+
+	public IPrefabInstance? PrefabInstanceP
+	{
+		get => m_Shader.PrefabInstanceP;
+		set => m_Shader.PrefabInstanceP = value;
+	}
+
+	public IPrefabMarker? PrefabInternalP
+	{
+		get => m_Shader.PrefabInternalP;
+		set => m_Shader.PrefabInternalP = value;
+	}
 }
