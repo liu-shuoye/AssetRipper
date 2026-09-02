@@ -30,6 +30,7 @@ public abstract partial class PlatformGameStructure
 
 	/// <summary>Name : FullName</summary>
 	public List<KeyValuePair<string, string>> Files { get; } = [];
+
 	/// <summary>AssemblyName : AssemblyPath</summary>
 	public Dictionary<string, string> Assemblies { get; } = [];
 
@@ -70,20 +71,22 @@ public abstract partial class PlatformGameStructure
 		{
 			throw new DirectoryNotFoundException($"Root directory '{rootPath}' doesn't exist");
 		}
+
 		RootPath = rootPath;
 	}
 
 	public static bool IsPrimaryEngineFile(string fileName)
 	{
 		if (fileName == MainDataName ||
-			fileName == GlobalGameManagersName ||
-			fileName == GlobalGameManagerAssetsName ||
-			fileName == ResourcesAssetsName ||
-			LevelTemplateRegex.IsMatch(fileName) ||
-			SharedAssetTemplateRegex.IsMatch(fileName))
+		    fileName == GlobalGameManagersName ||
+		    fileName == GlobalGameManagerAssetsName ||
+		    fileName == ResourcesAssetsName ||
+		    LevelTemplateRegex.IsMatch(fileName) ||
+		    SharedAssetTemplateRegex.IsMatch(fileName))
 		{
 			return true;
 		}
+
 		return false;
 	}
 
@@ -107,14 +110,15 @@ public abstract partial class PlatformGameStructure
 			if (SpecialFileNames.IsDefaultResource(dependency))
 			{
 				return FindEngineDependency(dataPath, SpecialFileNames.DefaultResourceName1) ??
-					FindEngineDependency(dataPath, SpecialFileNames.DefaultResourceName2);
+				       FindEngineDependency(dataPath, SpecialFileNames.DefaultResourceName2);
 			}
 			else if (SpecialFileNames.IsBuiltinExtra(dependency))
 			{
 				return FindEngineDependency(dataPath, SpecialFileNames.BuiltinExtraName1) ??
-					FindEngineDependency(dataPath, SpecialFileNames.BuiltinExtraName2);
+				       FindEngineDependency(dataPath, SpecialFileNames.BuiltinExtraName2);
 			}
 		}
+
 		return null;
 	}
 
@@ -125,6 +129,7 @@ public abstract partial class PlatformGameStructure
 		{
 			return assemblyPath;
 		}
+
 		return null;
 	}
 
@@ -138,6 +143,7 @@ public abstract partial class PlatformGameStructure
 				return path;
 			}
 		}
+
 		return null;
 	}
 
@@ -152,6 +158,7 @@ public abstract partial class PlatformGameStructure
 		{
 			CollectGameFiles(dataPath, Files);
 		}
+
 		CollectMainAssemblies();
 		if (!skipStreamingAssets)
 		{
@@ -161,7 +168,7 @@ public abstract partial class PlatformGameStructure
 
 	protected void CollectGameFiles(string root, List<KeyValuePair<string, string>> files)
 	{
-		Logger.Info(LogCategory.Import, "Collecting game files...");
+		Logger.Info(LogCategory.Import, "正在收集游戏文件...");
 		CollectCompressedGameFiles(root, files);
 		CollectDefaultSerializedFiles(root, files);
 	}
@@ -260,7 +267,7 @@ public abstract partial class PlatformGameStructure
 	}
 
 	/// <summary>
-	/// Collect asset bundles only from this directory
+	/// 仅从该目录收集资产包
 	/// </summary>
 	protected void CollectAssetBundles(string root, List<KeyValuePair<string, string>> files)
 	{
@@ -275,10 +282,23 @@ public abstract partial class PlatformGameStructure
 	}
 
 	/// <summary>
-	/// Collect asset bundles from this directory and all subdirectories
+	/// 从该目录及其所有子目录中收集资源包
 	/// </summary>
 	protected void CollectAssetBundlesRecursively(string root, List<KeyValuePair<string, string>> files)
 	{
+		if (root.EndsWith(@"art\audio")
+		    || root.EndsWith(@"art\ui")
+		    || root.EndsWith(@"art\dye")
+		    || root.EndsWith(@"art\fx")
+		    || root.EndsWith(@"art\public")
+		    || root.EndsWith(@"art\minicharacter")
+		    || root.EndsWith(@"art\nailbeauty")
+		    || root.EndsWith(@"art\character"))
+		{
+			
+			Logger.Info(LogCategory.Import, $"跳过文件夹 '{root}'");
+			return;
+		}
 		CollectAssetBundles(root, files);
 		foreach (string directory in FileSystem.Directory.EnumerateDirectories(root))
 		{
@@ -385,11 +405,13 @@ public abstract partial class PlatformGameStructure
 		{
 			return GetUnityVersionFromSerializedFile(globalGameManagersPath);
 		}
+
 		string dataBundlePath = FileSystem.Path.Join(dataDirectoryPath, DataBundleName);
 		if (FileSystem.File.Exists(dataBundlePath))
 		{
 			return GetUnityVersionFromBundleFile(dataBundlePath);
 		}
+
 		return null;
 	}
 
@@ -406,9 +428,9 @@ public abstract partial class PlatformGameStructure
 	protected bool HasIl2CppFiles()
 	{
 		return Il2CppGameAssemblyPath != null &&
-			Il2CppMetaDataPath != null &&
-			FileSystem.File.Exists(Il2CppGameAssemblyPath) &&
-			FileSystem.File.Exists(Il2CppMetaDataPath);
+		       Il2CppMetaDataPath != null &&
+		       FileSystem.File.Exists(Il2CppGameAssemblyPath) &&
+		       FileSystem.File.Exists(Il2CppMetaDataPath);
 	}
 
 	[GeneratedRegex("^level(?:0|[1-9][0-9]*)(?:\\.split0)?$", RegexOptions.Compiled)]

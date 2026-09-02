@@ -28,6 +28,7 @@ internal sealed partial record class GameInitializer
 			{
 				try
 				{
+					Logger.Info(LogCategory.Import, $"依赖关系映射解析 '{identifier.PathNameOrigin}' -> '{mapPath}'");
 					return SchemeReader.LoadFile(mapPath, FileSystem);
 				}
 				catch (Exception ex) // 映射指向的文件可能已被移动或损坏，失败时按未找到处理
