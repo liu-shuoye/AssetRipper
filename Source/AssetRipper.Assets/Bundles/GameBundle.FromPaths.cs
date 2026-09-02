@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Collections;
+using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.IO;
 using AssetRipper.IO.Files;
 using AssetRipper.IO.Files.CompressedFiles;
@@ -93,6 +93,7 @@ partial class GameBundle
 		HashSet<string> serializedFileNames = new(); //包含缺失的依赖项
 		foreach (string path in paths)
 		{
+
 			FileBase? file;
 			try
 			{
@@ -156,10 +157,22 @@ partial class GameBundle
 		foreach (FileIdentifier fileIdentifier in serializedFile.Dependencies)
 		{
 			string name = fileIdentifier.GetFilePath();
-			if (serializedFileNames.Add(name) && dependencyProvider?.FindDependency(fileIdentifier) is { } dependency)
+			if (!serializedFileNames.Add(name))
 			{
-				files.Add(dependency);
+				continue;
 			}
+			if (dependencyProvider?.FindDependency(fileIdentifier) is not { } dependency)
+			{
+				continue;
+			}
+			// 与主路径一致：依赖可能被压缩，先逐层解包，否则主循环无法识别其类型
+			while (dependency is CompressedFile compressedFile)
+			{
+				dependency = compressedFile.UncompressedFile ?? dependency;
+			}
+			// 集合文件（bundle）需展开内部内容，内部的 SerializedFile 才会被后续解析；普通文件此调用为空操作
+			dependency.ReadContentsRecursively();
+			files.Add(dependency);
 		}
 	}
 }
