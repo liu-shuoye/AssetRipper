@@ -1,6 +1,7 @@
 ﻿using AssetRipper.Assets.Cloning;
 using AssetRipper.Assets.Generics;
 using AssetRipper.Assets.Metadata;
+using AssetRipper.Assets.Traversal;
 using AssetRipper.IO.Endian;
 using AssetRipper.SourceGenerated.Classes.ClassID_1001;
 using AssetRipper.SourceGenerated.Classes.ClassID_1001480554;
@@ -36,9 +37,28 @@ public class AnimatorController_Nikki4 : RuntimeAnimatorController_2018_3,
 		m_animatorController = new AnimatorController_2018_3(info);
 	}
 
+	/// <summary>
+	/// 恢复正确的 Unity 类名：基类 RuntimeAnimatorController_2018_3 的 ClassName 固定返回
+	/// "RuntimeAnimatorController"，本类真实数据字段都在内部 m_animatorController，
+	/// 必须复写，否则 GUI/搜索会把 ClassID 91 的 AnimatorController 显示成 RuntimeAnimatorController。
+	/// </summary>
+	public override string ClassName => "AnimatorController";
+
+	/// <summary>
+	/// 字段遍历委托给内部 m_animatorController，否则 YAML/JSON 只输出基类的空壳字段。
+	/// </summary>
+	public override void WalkStandard(AssetWalker walker) => m_animatorController.WalkStandard(walker);
+
+	public override void WalkEditor(AssetWalker walker) => m_animatorController.WalkEditor(walker);
+
+	public override void WalkRelease(AssetWalker walker) => m_animatorController.WalkRelease(walker);
+
 	public override void ReadRelease(ref EndianSpanReader reader)
 	{
 		m_animatorController.Name = reader.ReadRelease_Utf8StringAlign();
+
+		// 名字同步到基类（RuntimeAnimatorController_2018_3 → NamedObject_2018_3）的名字存储
+		base.Name = m_animatorController.Name;
 		m_animatorController.ControllerSize = reader.ReadUInt32();
 		// m_animatorController.Controller.ReadRelease(ref reader);
 		var controller = (ControllerConstant_2018_2)m_animatorController.Controller;

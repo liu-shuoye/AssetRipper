@@ -1,5 +1,6 @@
 ﻿using AssetRipper.Assets.Cloning;
 using AssetRipper.Assets.Generics;
+using AssetRipper.Assets.Traversal;
 using AssetRipper.Assets.Metadata;
 using AssetRipper.IO.Endian;
 using AssetRipper.SourceGenerated.Classes.ClassID_1001;
@@ -38,9 +39,28 @@ public class Mesh_Nikki4 : NamedObject_2018_3, IMesh
 		VarintVertices = new AssetList<float>();
 	}
 
+	/// <summary>
+	/// 恢复正确的 Unity 类名：基类 NamedObject_2018_3 的 ClassName 固定返回 "NamedObject"，
+	/// 本类承载真实数据的字段都在内部 m_mesh（Mesh_2019，sealed 无法继承），必须复写，
+	/// 否则 GUI/搜索会把 ClassID 43 的 Mesh 显示成 NamedObject。
+	/// </summary>
+	public override string ClassName => "Mesh";
+
+	/// <summary>
+	/// 字段遍历委托给内部 m_mesh（Mesh_2019），否则 YAML/JSON 只输出基类 NamedObject 的空壳字段。
+	/// </summary>
+	public override void WalkStandard(AssetWalker walker) => m_mesh.WalkStandard(walker);
+
+	public override void WalkEditor(AssetWalker walker) => m_mesh.WalkEditor(walker);
+
+	public override void WalkRelease(AssetWalker walker) => m_mesh.WalkRelease(walker);
+
 	public override void ReadRelease(ref EndianSpanReader reader)
 	{
 		m_mesh.Name = reader.ReadRelease_Utf8StringAlign();
+
+		// 名字同步到基类（NamedObject_2018_3）的名字存储，使 GetBestName()/INamed.Name 能取到真实名字
+		base.Name = m_mesh.Name;
 		m_mesh.SubMeshes.ReadRelease_ArrayAlign_Asset<SubMesh_2017_3>(ref reader);
 		
 		// m_mesh.Shapes.ReadRelease(ref reader);

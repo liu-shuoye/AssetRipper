@@ -1,6 +1,7 @@
 ﻿using AssetRipper.Assets.Cloning;
 using AssetRipper.Assets.Generics;
 using AssetRipper.Assets.Metadata;
+using AssetRipper.Assets.Traversal;
 using AssetRipper.IO.Endian;
 using AssetRipper.SourceGenerated.Classes.ClassID_1;
 using AssetRipper.SourceGenerated.Classes.ClassID_1001;
@@ -38,6 +39,22 @@ public class TrailRenderer_Nikki4 :
 	{
 		m_base = new TrailRenderer_2019_3_0_a6(info);
 	}
+
+	/// <summary>
+	/// 恢复正确的 Unity 类名：基类 Renderer_2019_3_0_a6 的 ClassName 固定返回 "Renderer"，
+	/// 本类真实数据字段都在内部 m_base，必须复写，否则 GUI/搜索会把 ClassID 96 的
+	/// TrailRenderer 显示成 Renderer。
+	/// </summary>
+	public override string ClassName => "TrailRenderer";
+
+	/// <summary>
+	/// 字段遍历委托给内部 m_base，否则 YAML/JSON 只输出基类 Renderer 的空壳字段。
+	/// </summary>
+	public override void WalkStandard(AssetWalker walker) => m_base.WalkStandard(walker);
+
+	public override void WalkEditor(AssetWalker walker) => m_base.WalkEditor(walker);
+
+	public override void WalkRelease(AssetWalker walker) => m_base.WalkRelease(walker);
 
 	public override void ReadRelease(ref EndianSpanReader reader)
 	{

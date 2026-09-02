@@ -1,5 +1,6 @@
 using AssetRipper.Assets.Cloning;
 using AssetRipper.Assets.Metadata;
+using AssetRipper.Assets.Traversal;
 using AssetRipper.Import.Logging;
 using AssetRipper.IO.Endian;
 using AssetRipper.SourceGenerated.Classes.ClassID_1;
@@ -57,6 +58,22 @@ public class ParticleSystem_Nikki4 : Component_2018_3,
 	{
 		m_base = new ParticleSystem_2019_2_0_a9(info);
 	}
+
+	/// <summary>
+	/// 恢复正确的 Unity 类名：基类 Component_2018_3 的 ClassName 固定返回 "Component"，
+	/// 本类真实数据字段都在内部 m_base（ParticleSystem_2019_2_0_a9，sealed 无法继承），
+	/// 必须复写，否则 GUI/搜索会把 ClassID 198 的 ParticleSystem 显示成 Component。
+	/// </summary>
+	public override string ClassName => "ParticleSystem";
+
+	/// <summary>
+	/// 字段遍历委托给内部 m_base，否则 YAML/JSON 只输出基类 Component 的空壳字段。
+	/// </summary>
+	public override void WalkStandard(AssetWalker walker) => m_base.WalkStandard(walker);
+
+	public override void WalkEditor(AssetWalker walker) => m_base.WalkEditor(walker);
+
+	public override void WalkRelease(AssetWalker walker) => m_base.WalkRelease(walker);
 
 	public override void ReadRelease(ref EndianSpanReader reader)
 	{
