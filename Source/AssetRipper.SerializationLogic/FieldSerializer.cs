@@ -36,8 +36,10 @@ public readonly partial struct FieldSerializer
 		{
 			return TryCreateSerializableType(genericInstanceType, typeCache, typeStack, out result, out failureReason);
 		}
-		TypeDefinition? typeDefinition = typeSignature.Resolve(runtimeContext);
-		if (typeDefinition is null)
+		// AsmResolver 6.0.0 的 Resolve 在无法定位声明程序集（如缺失的核心库）时会抛出 ResolutionException，
+		// 而非返回 null。本方法设计为优雅降级（返回 false 并附带 failureReason），因此改用 TryResolve，
+		// 避免未解析成功的类型导致整个导出崩溃。
+		if (!typeSignature.TryResolve(runtimeContext, out TypeDefinition? typeDefinition) || typeDefinition is null)
 		{
 			result = null;
 			failureReason = $"Failed to resolve type signature {typeSignature.FullName}.";
@@ -273,7 +275,13 @@ public readonly partial struct FieldSerializer
 		switch (typeSignature)
 		{
 			case TypeDefOrRefSignature typeDefOrRefSignature:
-				TypeDefinition typeDefinition = typeDefOrRefSignature.Type.CheckedResolve(runtimeContext);
+				// 与上方一致：用 TryResolve 替代会抛异常的 CheckedResolve，保证本 Try 方法在类型无法解析时优雅降级。
+				if (!typeDefOrRefSignature.Type.TryResolve(runtimeContext, out TypeDefinition? typeDefinition) || typeDefinition is null)
+				{
+					result = default;
+					failureReason = $"Failed to resolve field type {typeDefOrRefSignature.Type.FullName}.";
+					return false;
+				}
 				SerializableType fieldType;
 				if (typeDefinition.IsEnum)
 				{

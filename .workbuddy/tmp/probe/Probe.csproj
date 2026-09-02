@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Probe</AssemblyName>
+    <RootNamespace>Probe</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CS0618</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 直接引用本机已有的 NuGet 包产物，避免在线还原 -->
+    <Reference Include="ICSharpCode.Decompiler">
+      <HintPath>C:\Users\Administrator\.nuget\packages\assetripper.icsharpcode.decompiler\10.1.0.8388\lib\netstandard2.0\ICSharpCode.Decompiler.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

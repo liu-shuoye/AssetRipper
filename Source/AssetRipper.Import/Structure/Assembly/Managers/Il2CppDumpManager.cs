@@ -75,27 +75,46 @@ public sealed class Il2CppDumpManager : BaseManager
 	{
 		Logger.Info(LogCategory.Import, $"正在从外部 IL2Cpp dump 目录加载程序集：{AssemblyDirectory}");
 
-		// 与 Mono 流程一致：先确保 mscorlib 可用并以此建立运行时上下文，
-		// 否则跨程序集的类型引用（如游戏类型继承 MonoBehaviour）无法解析。
+		// 现代 Il2CppDumper（.NET 6+）生成的 DummyDll 以 System.Private.CoreLib 而非 mscorlib
+		// 作为核心库作用域。若运行时上下文中缺少该名称的程序集，解析 System.Object 等基础类型时会
+		// 回退到磁盘查找并抛出 FileNotFoundException，导致序列化类型计算（FieldSerializer）崩溃。
+		// 因此始终用 Net100 参考程序集伪装出一个 System.Private.CoreLib 注册到运行时上下文；
+		// 同时保留 mscorlib 以兼容仍引用 mscorlib 的旧版 dump。
+		AssemblyDefinition privateCoreLib = CreateCorLib("System.Private.CoreLib", "System.Private.CoreLib.dll", new Version(10, 0, 0, 0));
+		// 在 RuntimeContext 建立前先登记到 m_assemblies：此时 Add 仅写入字典、不会注册到运行时上下文，
+		// 避免后续 AddAssembly 造成重复注册并抛出异常。
+		Add(privateCoreLib);
+
+		// mscorlib：优先使用 dump 自带，否则用参考程序集伪装
 		AssemblyDefinition mscorlib;
 		if (TryGetMscorlibPath(out string? mscorlibPath))
 		{
-			mscorlib = TryLoad(mscorlibPath) ?? LoadSystemRuntimeAsMscorlib();
+			mscorlib = TryLoad(mscorlibPath) ?? CreateCorLib("mscorlib", "mscorlib.dll", new Version(4, 0, 0, 0));
 		}
 		else
 		{
-			mscorlib = LoadSystemRuntimeAsMscorlib();
+			mscorlib = CreateCorLib("mscorlib", "mscorlib.dll", new Version(4, 0, 0, 0));
 		}
+		Add(mscorlib);
 
 		// 运行时信息本身无关紧要（dump 程序集仅用于类型与字段解析），但 AsmResolver 要求指定一个。
-		RuntimeContext runtimeContext = new(DotNetRuntimeInfo.NetCoreApp(10, 0), (bool?)null, mscorlib);
+		// 以 System.Private.CoreLib 作为主核心库，使 CorLibTypeFactory 与 dump 的引用保持一致。
+		RuntimeContext runtimeContext = new(DotNetRuntimeInfo.NetCoreApp(10, 0), (bool?)null, privateCoreLib);
+		runtimeContext.AddAssembly(privateCoreLib);
 		runtimeContext.AddAssembly(mscorlib);
 
-		int loadedCount = 1;// mscorlib 已计入
+		int loadedCount = 2;// System.Private.CoreLib 与 mscorlib 已计入
+
 		foreach (string assemblyPath in DumpFileSystem.Directory.EnumerateFiles(AssemblyDirectory, "*.dll"))
 		{
 			// 文件名统一按大小写不敏感比较，兼容 Windows 下实际路径大小写与配置不一致的情况
 			if (mscorlibPath is not null && string.Equals(assemblyPath, mscorlibPath, StringComparison.OrdinalIgnoreCase))
+			{
+				continue;
+			}
+
+			// 跳过 dump 若自带的 System.Private.CoreLib（极少见），避免与上方伪装版重复注册
+			if (string.Equals(DumpFileSystem.Path.GetFileName(assemblyPath), "System.Private.CoreLib.dll", StringComparison.OrdinalIgnoreCase))
 			{
 				continue;
 			}
@@ -251,16 +270,17 @@ public sealed class Il2CppDumpManager : BaseManager
 	}
 
 	/// <summary>
-	/// dump 中缺少 mscorlib 时的兜底：用系统运行时程序集伪装成 mscorlib，
-	/// 保证运行时上下文有可用的核心库。
+	/// 用 Net100 系统运行时参考程序集伪装出一个核心库程序集。
+	/// Il2CppDumper 的 .NET 6+ DummyDll 以 System.Private.CoreLib 作为核心库作用域，
+	/// 旧版则使用 mscorlib，因此两者都需注册到运行时上下文，否则解析 System.Object 等
+	/// 基础类型会回退到磁盘查找并抛出 FileNotFoundException。
 	/// </summary>
-	private AssemblyDefinition LoadSystemRuntimeAsMscorlib()
+	private static AssemblyDefinition CreateCorLib(string name, string moduleName, Version version)
 	{
 		AssemblyDefinition assembly = AssemblyDefinition.FromBytes(Basic.Reference.Assemblies.Net100.ReferenceInfos.SystemRuntime.ImageBytes, createRuntimeContext: false);
-		assembly.Name = "mscorlib";
-		assembly.ManifestModule!.Name = "mscorlib.dll";
-		assembly.Version = new Version(4, 0, 0, 0);
-		Add(assembly);
+		assembly.Name = name;
+		assembly.ManifestModule!.Name = moduleName;
+		assembly.Version = version;
 		return assembly;
 	}
 

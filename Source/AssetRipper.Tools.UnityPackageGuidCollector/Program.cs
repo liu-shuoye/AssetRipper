@@ -12,11 +12,7 @@ internal static class Program
 	private const string GuidPrefix = "guid:";
 
 	// 采集逻辑用到的 JSON 宽松选项：Unity 部分 .asmdef / package.json 含注释或尾随逗号
-	private static readonly JsonDocumentOptions s_jsonOptions = new()
-	{
-		AllowTrailingCommas = true,
-		CommentHandling = JsonCommentHandling.Skip,
-	};
+	private static readonly JsonDocumentOptions s_jsonOptions = new() { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip, };
 
 	// 仅在字符串含特殊字符时才走 StringBuilder 转义，避免无谓分配
 	private static readonly char[] s_charsNeedingEscape = ['\\', '"'];
@@ -111,7 +107,9 @@ internal static class Program
 		if (string.IsNullOrEmpty(packageName) || string.IsNullOrEmpty(version))
 		{
 			Console.Error.WriteLine($"警告: 缺少 package.json 或 name/version 字段，跳过: {asmdefPath}");
-			return;
+			// return;
+			packageName = assemblyName;
+			version = "1.0";
 		}
 
 		Entry entry = new(assemblyName, packageName, guid, version, source);
@@ -149,6 +147,7 @@ internal static class Program
 				return IsValidHexGuid(guid) ? guid.ToLowerInvariant() : null;
 			}
 		}
+
 		return null;
 	}
 
@@ -158,6 +157,7 @@ internal static class Program
 		{
 			return false;
 		}
+
 		foreach (char c in value)
 		{
 			if (!IsHexDigit(c))
@@ -165,13 +165,14 @@ internal static class Program
 				return false;
 			}
 		}
+
 		return true;
 	}
 
 	private static bool IsHexDigit(char c)
 		=> (uint)(c - '0') <= 9u
-			|| (uint)(c - 'a') <= 5u
-			|| (uint)(c - 'A') <= 5u;
+		   || (uint)(c - 'a') <= 5u
+		   || (uint)(c - 'A') <= 5u;
 
 	private static string? ReadAssemblyNameFromAsmdef(string asmdefPath)
 	{
@@ -199,8 +200,10 @@ internal static class Program
 			{
 				break;
 			}
+
 			dir = dir.Parent;
 		}
+
 		return (null, null);
 	}
 
@@ -238,6 +241,7 @@ internal static class Program
 				.Append(e.Guid).Append('|')
 				.Append(e.Version).Append('\n');
 		}
+
 		HashSet<(string Assembly, string Namespace, string Class)> seenScriptKeys = new();
 		foreach (ScriptEntry s in sortedScripts)
 		{
@@ -246,6 +250,7 @@ internal static class Program
 				Console.Error.WriteLine($"警告: 脚本类型 ('{s.AssemblyName}', '{s.Namespace}', '{s.ClassName}') 重复出现，保留首个 GUID，忽略后续。");
 				continue;
 			}
+
 			data.Append("S|").Append(s.AssemblyName).Append('|')
 				.Append(s.Namespace).Append('|')
 				.Append(s.ClassName).Append('|')
@@ -305,6 +310,7 @@ internal static class Program
 		{
 			Directory.CreateDirectory(dir);
 		}
+
 		File.WriteAllText(outputPath, sb.ToString());
 	}
 
@@ -323,6 +329,7 @@ internal static class Program
 		{
 			return value;
 		}
+
 		StringBuilder sb = new(value.Length + 2);
 		foreach (char c in value)
 		{
@@ -339,6 +346,7 @@ internal static class Program
 					break;
 			}
 		}
+
 		return sb.ToString();
 	}
 
@@ -419,6 +427,7 @@ internal static class Program
 				return true;
 			}
 		}
+
 		return false;
 	}
 
@@ -435,6 +444,7 @@ internal static class Program
 		{
 			names.Add(m.Groups[1].Value);
 		}
+
 		return names;
 	}
 

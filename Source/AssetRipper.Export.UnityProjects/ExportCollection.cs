@@ -94,10 +94,16 @@ public abstract class ExportCollection : IExportCollection
 			fileName = FileSystem.FixInvalidFileNameCharacters(fileName);
 		}
 
-		string ex = asset.GetBestExtension() ?? GetExportExtension(asset);
+		// 导出扩展名以导出集合/导出器指定的格式为准（GetExportExtension）。
+		// 不能优先沿用资产原始扩展名（GetBestExtension）：YAML 序列化导出的资产
+		// （Mesh、prefab 等）内容与原始扩展名无关，若 bundle 中资产名恰好带模型扩展名
+		// （如 .fbx/.obj），Unity 会按扩展名用 FBX 等导入器解析 YAML 文本而报
+		// "Couldn't read file"。需要保留原始扩展名的集合（如 TextAsset）已在
+		// 各自的 GetExportExtension 覆写内部自行处理 GetBestExtension。
+		string ex = GetExportExtension(asset);
 		if (string.IsNullOrEmpty(ex))
 		{
-			ex = GetExportExtension(asset);
+			ex = asset.GetBestExtension() ?? AssetExtension;
 		}
 
 		fileName = $"{fileName}.{ex}";
