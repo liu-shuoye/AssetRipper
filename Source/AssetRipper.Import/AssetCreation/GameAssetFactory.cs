@@ -194,21 +194,8 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager, GameType 
 
 		if (error is not null)
 		{
-			reader.Position = 0;
-			// 保存失败数据
-			FileStream fileStream = File.Create($"D:/UserData/errorData/{asset.GetBestName()}.{asset.GetType().Name}.bytes");
-			fileStream.Write(assetData);
-			fileStream.Flush();
-			fileStream.Close();
-			try
-			{
-				reader.Position = 0;
-				asset.Read(ref reader);
-			}
-			catch (Exception e)
-			{
-				// ignored
-			}
+			// 调试用：把解析失败的原始字节落盘，便于离线分析。
+			SaveFailedAssetData(asset, assetData);
 		}
 
 		return asset;
@@ -225,6 +212,83 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager, GameType 
 
 			return true;
 		}
+	}
+
+	/// <summary>
+	/// 调试用的失败数据落盘目录；解析失败的资产原始字节会写到这里。
+	/// </summary>
+	private const string FailedAssetDataDirectory = "D:/UserData/errorData";
+
+	/// <summary>
+	/// 将解析失败的资产原始字节写入 <see cref="FailedAssetDataDirectory"/>。
+	/// </summary>
+	/// <param name="asset">读取失败的资产。</param>
+	/// <param name="assetData">资产的原始字节。</param>
+	/// <remarks>
+	/// 资产名称可能包含 'Hidden/xxx' 这类路径分隔符，也可能包含操作系统不允许的字符，
+	/// 若直接拼进路径会抛出 <see cref="DirectoryNotFoundException"/> 并中断整个导入流程。
+	/// 因此这里先清洗名称，再自动创建缺失的目录，且任何 IO 异常都只记录日志，绝不影响主流程。
+	/// </remarks>
+	private static void SaveFailedAssetData(IUnityObjectBase asset, ReadOnlySpan<byte> assetData)
+	{
+		try
+		{
+			string relativePath = MakeSafeRelativePath($"{asset.GetBestName()}.{asset.GetType().Name}.bytes");
+			string fullPath = Path.Combine(FailedAssetDataDirectory, relativePath);
+
+			string? directory = Path.GetDirectoryName(fullPath);
+			if (!string.IsNullOrEmpty(directory))
+			{
+				Directory.CreateDirectory(directory);
+			}
+
+			using FileStream stream = File.Create(fullPath);
+			stream.Write(assetData);
+		}
+		catch (Exception ex)
+		{
+			Logger.Warning(LogCategory.Import, $"保存失败资产数据到 {FailedAssetDataDirectory} 时出错：{ex.Message}");
+		}
+	}
+
+	/// <summary>
+	/// 把可能含路径分隔符与非法字符的资产名称，转换成一个安全的相对路径。
+	/// </summary>
+	/// <param name="name">原始名称（可含 '/' 或 '\'）。</param>
+	/// <returns>清洗后的相对路径，保证非空。</returns>
+	private static string MakeSafeRelativePath(string name)
+	{
+		char[] invalidChars = Path.GetInvalidFileNameChars();
+		string[] segments = name.Split('/', '\\');
+		List<string> safeSegments = new(segments.Length);
+
+		foreach (string segment in segments)
+		{
+			// 丢弃空的相对目录段，避免名称中的 '..' 越过调试目录
+			if (string.IsNullOrWhiteSpace(segment) || segment is "." or "..")
+			{
+				continue;
+			}
+
+			char[] buffer = segment.ToCharArray();
+			for (int i = 0; i < buffer.Length; i++)
+			{
+				if (Array.IndexOf(invalidChars, buffer[i]) >= 0)
+				{
+					buffer[i] = '_';
+				}
+			}
+
+			safeSegments.Add(new string(buffer).Trim());
+		}
+
+		// 名称全被清洗掉时，退化成一个固定文件名，保证仍然能落盘
+		if (safeSegments.Count == 0)
+		{
+			safeSegments.Add("Unnamed");
+		}
+
+		return Path.Combine(safeSegments.ToArray());
 	}
 
 	private IUnityObjectBase? CreateAsset(AssetInfo assetInfo, UnityVersion version)
