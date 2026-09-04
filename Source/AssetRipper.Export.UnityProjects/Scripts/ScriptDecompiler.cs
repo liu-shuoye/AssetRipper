@@ -1,4 +1,4 @@
-﻿using AsmResolver.DotNet;
+using AsmResolver.DotNet;
 using AssetRipper.Import.Configuration;
 using AssetRipper.Import.Logging;
 using AssetRipper.Import.Structure.Assembly;
@@ -6,6 +6,7 @@ using AssetRipper.Import.Structure.Assembly.Managers;
 using ICSharpCode.Decompiler;
 using ICSharpCode.Decompiler.CSharp;
 using ICSharpCode.Decompiler.CSharp.ProjectDecompiler;
+using ICSharpCode.Decompiler.Metadata;
 
 namespace AssetRipper.Export.UnityProjects.Scripts;
 
@@ -16,6 +17,12 @@ internal class ScriptDecompiler
 	public ScriptContentLevel ScriptContentLevel { get; set; } = ScriptContentLevel.Level2;
 	public ScriptingBackend ScriptingBackend { get; set; } = ScriptingBackend.Unknown;
 	public bool FullyQualifiedTypeNames { get; set; } = false;
+
+	/// <summary>
+	/// 是否过滤编译器生成的隐藏类型（异步状态机 / 迭代器 / 闭包类等）。
+	/// 仅 Il2Cpp dump 场景启用：DummyDll 方法体为空，这些类型无法被还原为源码而会原样导出，属无效噪音。
+	/// </summary>
+	public bool FilterCompilerGeneratedTypes { get; set; } = false;
 
 	public ScriptDecompiler(IAssemblyManager assemblyManager) : this(new CecilAssemblyResolver(assemblyManager), assemblyManager.ScriptingBackend) { }
 	private ScriptDecompiler(CecilAssemblyResolver cecilAssemblyResolver, ScriptingBackend scriptingBackend)
@@ -41,7 +48,7 @@ internal class ScriptDecompiler
 			settings.UsingDeclarations = false;
 		}
 
-		CustomWholeProjectDecompiler decompiler = new(settings, assemblyResolver, fileSystem);
+		CustomWholeProjectDecompiler decompiler = new(settings, assemblyResolver, fileSystem, FilterCompilerGeneratedTypes);
 
 		DecompileWholeProject(decompiler, assembly, outputFolder);
 	}
@@ -58,8 +65,27 @@ internal class ScriptDecompiler
 		}
 	}
 
-	private sealed class CustomWholeProjectDecompiler(DecompilerSettings settings, CecilAssemblyResolver assemblyResolver, FileSystem fileSystem) : WholeProjectDecompiler(settings, assemblyResolver, null, null, null)
+	private sealed class CustomWholeProjectDecompiler(DecompilerSettings settings, CecilAssemblyResolver assemblyResolver, FileSystem fileSystem, bool filterCompilerGeneratedTypes) : WholeProjectDecompiler(settings, assemblyResolver, null, null, null)
 	{
+		protected override bool IncludeTypeWhenDecompilingProject(MetadataFile module, System.Reflection.Metadata.TypeDefinitionHandle type)
+		{
+			if (!base.IncludeTypeWhenDecompilingProject(module, type))
+			{
+				return false;
+			}
+
+			// dump 的 DummyDll 无方法体，编译器生成的隐藏类（如 <MethodName>d__N、<>c、<>c__DisplayClass）
+			// 无法被还原成 async/await 或 lambda 而会原样导出，属无效噪音。C# 不允许 '<' 开头的标识符，
+			// 因此名称以 '<' 开头的顶层类型必然是编译器生成的，可安全过滤。
+			// 引用这些类的状态机特性已在 Il2CppDumpManager 加载阶段移除，不会产生悬挂引用。
+			if (filterCompilerGeneratedTypes && module.Metadata.GetString(module.Metadata.GetTypeDefinition(type).Name).StartsWith("<", StringComparison.Ordinal))
+			{
+				return false;
+			}
+
+			return true;
+		}
+
 		protected override void CreateDirectory(string path)
 		{
 			try
