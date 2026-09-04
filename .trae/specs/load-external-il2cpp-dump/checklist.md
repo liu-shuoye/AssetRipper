@@ -13,3 +13,5 @@
 - [x] `docs/articles/CommonIssues.md` 已补充外部 dump 方案说明
 - [x] `AssetRipper.Import` 与 `AssetRipper.GUI.Web` 构建零错误
 - [x] 场景验证：配置含 `DummyDll` 的输出根目录（`C:\Unity\output`，106 个程序集）后加载 IL2Cpp 游戏，程序集数量 > 0 且全部加载成功（Assembly-CSharp/mscorlib/UnityEngine.CoreModule/System 均在列），不调用 Cpp2IL（`Il2CppDumpManager.Initialize` 不涉及 Cpp2IlApi）
+- [x] dump 特性清理覆盖 `Il2CppDummyDll` 命名空间全部特性（Token/FieldOffset/Address），真实 DummyDll 加载后字段与方法残留均为 0
+- [x] 接口方法完整性已用真实 DummyDll 验证：13175 项接口方法需求缺失 0；ilspy 反编译确认显式/隐式接口实现均可见

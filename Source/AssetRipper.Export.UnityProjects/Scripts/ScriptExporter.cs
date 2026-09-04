@@ -19,6 +19,8 @@ public class ScriptExporter : IAssetExporter
 			LanguageVersion = configuration.ExportSettings.ScriptLanguageVersion.ToCSharpLanguageVersion(configuration.Version),
 			ScriptContentLevel = configuration.ImportSettings.ScriptContentLevel,
 			FullyQualifiedTypeNames = configuration.ExportSettings.ScriptTypesFullyQualified,
+			// dump 场景的 DummyDll 无方法体，编译器生成的隐藏类无法还原，导出时直接过滤
+			FilterCompilerGeneratedTypes = AssemblyManager is Il2CppDumpManager,
 		};
 		ExportMode = configuration.ExportSettings.ScriptExportMode;
 		ReferenceAssemblyDictionary = ReferenceAssemblies.GetReferenceAssemblies(AssemblyManager, configuration.Version);
