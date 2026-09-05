@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Cloning;
+using AssetRipper.Assets.Cloning;
 using AssetRipper.Assets.Generics;
 using AssetRipper.Assets.Traversal;
 using AssetRipper.Assets.Metadata;
@@ -9,6 +9,7 @@ using AssetRipper.SourceGenerated.Classes.ClassID_130;
 using AssetRipper.SourceGenerated.Classes.ClassID_18;
 using AssetRipper.SourceGenerated.Classes.ClassID_43;
 using AssetRipper.SourceGenerated.Enums;
+using AssetRipper.SourceGenerated.Extensions;
 using AssetRipper.SourceGenerated.MarkerInterfaces;
 using AssetRipper.SourceGenerated.Subclasses.AABB;
 using AssetRipper.SourceGenerated.Subclasses.BlendShapeData;
@@ -90,6 +91,10 @@ public class Mesh_Nikki4 : NamedObject_2018_3, IMesh
 		m_mesh.MeshMetrics_0_ = reader.ReadSingle();
 		m_mesh.MeshMetrics_1_ = reader.ReadRelease_SingleAlign();
 		m_mesh.StreamData.ReadRelease(ref reader);
+
+		// 魔改引擎允许 Mesh 使用 5 个及以上的顶点流，标准 Unity 导入器最多支持 4 个流（0-3），
+		// 越界流会导致导入时 "Vertex stream out of range" 崩溃，必须在导出前压缩
+		m_mesh.VertexData.NormalizeStreams(Collection.Version);
 	}
 	public bool Has_BakedConvexCollisionMesh() => m_mesh.Has_BakedConvexCollisionMesh();
 
