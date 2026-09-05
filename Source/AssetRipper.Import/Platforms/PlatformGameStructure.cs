@@ -293,6 +293,7 @@ public abstract partial class PlatformGameStructure
 		    || root.EndsWith(@"art\public")
 		    || root.EndsWith(@"art\minicharacter")
 		    || root.EndsWith(@"art\nailbeauty")
+		    || root.EndsWith(@"art\nikkiroom")
 		    || root.EndsWith(@"art\character"))
 		{
 			

@@ -43,7 +43,7 @@ public sealed record class ImportSettings
 	/// <summary>
 	/// 游戏类型，决定是否启用特定游戏的专属资产解析逻辑。默认使用通用 Unity 解析。
 	/// </summary>
-	public GameType GameType { get; set; } = GameType.Generic;
+	public GameType GameType { get; set; } = GameType.Nikki4;
 
 	/// <summary>
 	/// 是否在加载文件时使用依赖关系文件解析不在打开文件夹内的依赖文件。
