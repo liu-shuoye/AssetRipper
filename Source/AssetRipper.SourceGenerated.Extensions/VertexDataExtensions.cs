@@ -1,4 +1,4 @@
-﻿using AssetRipper.Numerics;
+using AssetRipper.Numerics;
 using AssetRipper.SourceGenerated.Extensions;
 using AssetRipper.SourceGenerated.Extensions.Enums.Shader.ShaderChannel;
 using AssetRipper.SourceGenerated.Extensions.Enums.Shader.VertexFormat;
@@ -14,6 +14,11 @@ namespace AssetRipper.SourceGenerated.Extensions;
 public static class VertexDataExtensions
 {
 	private const int VertexStreamAlign = 16;
+
+	/// <summary>
+	/// 标准 Unity 导入器允许的顶点流上限（stream 索引 0-3）
+	/// </summary>
+	private const int MaxVertexStreams = 4;
 
 	public static bool IsSet(this IVertexData instance, IStreamingInfo? streamingInfo)
 	{
@@ -226,6 +231,134 @@ public static class VertexDataExtensions
 		else
 		{
 			return Array.Empty<IStreamInfo>();
+		}
+	}
+
+	/// <summary>
+	/// 将顶点流数量压缩到标准 Unity 支持的上限（stream 0-3）。
+	/// 闪耀暖暖（Nikki4）的魔改引擎序列化 Mesh 时允许写出 5 个及以上的顶点流，
+	/// 而标准 Unity 导入器遇到 stream &gt;= 4 的通道会直接抛出
+	/// "Vertex stream out of range: 4 (max 3)" 崩溃。因此把 stream 3 之后的全部
+	/// 通道合并进 stream 3（按流号、流内偏移升序紧凑排列），并按 16 字节对齐规则
+	/// 重建顶点数据缓冲，使导出的 .asset 可以被 Unity 正常解析。
+	/// 布局合法时不做任何修改，仅当存在越界流（stream &gt;= 4）时才执行重建。
+	/// </summary>
+	public static void NormalizeStreams(this IVertexData instance, UnityVersion version)
+	{
+		if (instance.Channels is not { Count: > 0 } channels)
+		{
+			return;
+		}
+
+		// 没有任何通道引用第 5 个及以后的流时，布局本就是标准 Unity 兼容的，直接返回
+		bool needsNormalize = false;
+		foreach (ChannelInfo channel in channels)
+		{
+			if (channel.IsSet() && channel.Stream >= MaxVertexStreams)
+			{
+				needsNormalize = true;
+				break;
+			}
+		}
+		if (!needsNormalize)
+		{
+			return;
+		}
+
+		int vertexCount = (int)instance.VertexCount;
+		if (vertexCount == 0)
+		{
+			return;
+		}
+
+		// ---- 旧布局：流内 stride 与各流的全局偏移（相邻流之间 16 字节对齐） ----
+		int oldStreamCount = channels.Where(c => c.IsSet()).Max(c => (int)c.Stream) + 1;
+		int[] oldStreamStride = new int[oldStreamCount];
+		foreach (ChannelInfo channel in channels)
+		{
+			if (channel.IsSet())
+			{
+				oldStreamStride[channel.Stream] += channel.GetStride(version);
+			}
+		}
+		int[] oldStreamOffset = new int[oldStreamCount];
+		ComputeStreamOffsets(vertexCount, oldStreamStride, oldStreamOffset);
+
+		// ---- 新布局：stream 0..2 原样保留，stream 3 及以后的通道紧凑合并进新 stream 3 ----
+		// 合并组按 (原始流号, 流内偏移) 升序，保证源数据拷贝时定位正确
+		List<(ChannelInfo Channel, byte OldStream, byte OldOffset)> merged = new();
+		for (int stream = 3; stream < oldStreamCount; stream++)
+		{
+			foreach (ChannelInfo channel in channels)
+			{
+				if (channel.IsSet() && channel.Stream == stream)
+				{
+					merged.Add((channel, (byte)stream, channel.Offset));
+				}
+			}
+		}
+		merged.Sort(static (a, b) => a.OldStream != b.OldStream
+			? a.OldStream - b.OldStream
+			: a.OldOffset - b.OldOffset);
+
+		int newStream3Stride = 0;
+		foreach ((ChannelInfo channel, _, _) in merged)
+		{
+			newStream3Stride += channel.GetStride(version);
+		}
+
+		int[] newStreamStride = new[] { oldStreamStride[0], oldStreamStride[1], oldStreamStride[2], newStream3Stride };
+		int[] newStreamOffset = new int[4];
+		ComputeStreamOffsets(vertexCount, newStreamStride, newStreamOffset);
+
+		// 更新通道的流归属与流内偏移：stream < 3 的通道保持不变
+		int newStream3LocalOffset = 0;
+		foreach ((ChannelInfo channel, _, _) in merged)
+		{
+			channel.Stream = 3;
+			channel.Offset = (byte)newStream3LocalOffset;
+			newStream3LocalOffset += channel.GetStride(version);
+		}
+
+		byte[] oldData = instance.Data;
+		byte[] newData = new byte[newStreamOffset[3] + vertexCount * newStream3Stride];
+		for (int v = 0; v < vertexCount; v++)
+		{
+			// stream 0..2 的通道：新旧布局一致，原位搬运
+			foreach (ChannelInfo channel in channels)
+			{
+				if (channel.IsSet() && channel.Stream < 3)
+				{
+					int stride = channel.GetStride(version);
+					int src = oldStreamOffset[channel.Stream] + v * oldStreamStride[channel.Stream] + channel.Offset;
+					int dst = newStreamOffset[channel.Stream] + v * newStreamStride[channel.Stream] + channel.Offset;
+					Array.Copy(oldData, src, newData, dst, stride);
+				}
+			}
+
+			// 合并到新 stream 3 的通道：从旧流位置读取，写入紧凑后的新 offset
+			foreach ((ChannelInfo channel, byte oldStream, byte oldOffset) in merged)
+			{
+				int stride = channel.GetStride(version);
+				int src = oldStreamOffset[oldStream] + v * oldStreamStride[oldStream] + oldOffset;
+				int dst = newStreamOffset[3] + v * newStream3Stride + channel.Offset;
+				Array.Copy(oldData, src, newData, dst, stride);
+			}
+		}
+		instance.Data = newData;
+	}
+
+	/// <summary>
+	/// 按 Unity 规则计算每个流的全局偏移：前一个流结束后对齐到 16 字节再排下一个流
+	/// </summary>
+	private static void ComputeStreamOffsets(int vertexCount, int[] streamStrides, int[] streamOffsets)
+	{
+		int offset = 0;
+		for (int i = 0; i < streamOffsets.Length; i++)
+		{
+			streamOffsets[i] = offset;
+			offset += streamStrides[i] * vertexCount;
+			offset = offset + (VertexStreamAlign - 1) & ~(VertexStreamAlign - 1);
 		}
 	}
 }
