@@ -12,7 +12,7 @@ public sealed record class ExportSettings
 	/// <summary>
 	/// The file format that images (like textures) get exported in.
 	/// </summary>
-	public ImageExportFormat ImageExportFormat { get; set; } = ImageExportFormat.Png;
+	public ImageExportFormat ImageExportFormat { get; set; } = ImageExportFormat.Original;
 
 	/// <summary>
 	/// The file format that images (like textures) get exported in.
@@ -37,7 +37,7 @@ public sealed record class ExportSettings
 	/// <summary>
 	/// How to export shaders?
 	/// </summary>
-	public ShaderExportMode ShaderExportMode { get; set; } = ShaderExportMode.Dummy;
+	public ShaderExportMode ShaderExportMode { get; set; } = ShaderExportMode.Disassembly;
 
 	/// <summary>
 	/// Should sprites be exported as a texture? Recommended: Native

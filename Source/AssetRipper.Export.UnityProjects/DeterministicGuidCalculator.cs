@@ -20,7 +20,7 @@ public static class DeterministicGuidCalculator
 	/// <returns>基于稳定标识的 <see cref="UnityGuid"/>，与 `.meta` 的 32 位小写十六进制格式一致。</returns>
 	public static UnityGuid Calculate(IUnityObjectBase asset)
 	{
-		string key = $"{asset.ClassName}|{asset.GetBestDirectory()}|{asset.GetBestName()}|{asset.Collection.Name}|{asset.PathID}";
+		string key = $"{asset.ClassName}|{asset.GetBestDirectory()}|{asset.GetBestName()}|{asset.GetBestExtension()}";
 		return UnityGuid.Md5Hash(key);
 	}
 }
