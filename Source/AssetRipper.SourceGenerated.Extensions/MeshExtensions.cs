@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Generics;
+using AssetRipper.Assets.Generics;
 using AssetRipper.IO.Endian;
 using AssetRipper.Numerics;
 using AssetRipper.SourceGenerated.Classes.ClassID_43;

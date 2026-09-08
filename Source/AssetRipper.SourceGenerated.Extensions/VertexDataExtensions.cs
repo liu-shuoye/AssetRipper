@@ -320,6 +320,13 @@ public static class VertexDataExtensions
 			newStream3LocalOffset += channel.GetStride(version);
 		}
 
+		// Nikki4 引擎对部分网格不序列化内联顶点数据（Data 为空，顶点缓冲被剥离或存于 GPU），
+		// 没有源字节可搬运，直接跳过缓冲重建；上面的越界流重映射已完成，布局在导出后依然合法
+		if (instance.Data.Length == 0)
+		{
+			return;
+		}
+
 		byte[] oldData = instance.Data;
 		byte[] newData = new byte[newStreamOffset[3] + vertexCount * newStream3Stride];
 		for (int v = 0; v < vertexCount; v++)
