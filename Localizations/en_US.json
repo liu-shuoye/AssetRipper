@@ -251,6 +251,7 @@
     "sprite_format_yaml_description": "Export as yaml assets which can be viewed in the editor. This is the only mode that ensures a precise recovery of all metadata of sprites.",
     "stack_trace": "Stack Trace",
     "static_mesh_separation": "Static Mesh Separation",
+    "strip_texture_2d_data": "Skip Texture2D Export (Generate White Placeholder Images)",
     "submesh_count": "Submesh Count",
     "success": "Success!",
     "supported": "Supported",

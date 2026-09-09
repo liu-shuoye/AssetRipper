@@ -221,6 +221,14 @@ public sealed partial class SettingsPage : DefaultPage
 							{
 								using (new Div(writer).WithClass("col").End())
 								{
+									WriteCheckBoxForStripTexture2DData(writer, Localization.StripTexture2dData);
+								}
+							}
+
+							using (new Div(writer).WithClass("row").End())
+							{
+								using (new Div(writer).WithClass("col").End())
+								{
 									WriteTextInputForCustomProjectPath(writer);
 								}
 							}

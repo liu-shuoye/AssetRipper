@@ -16,6 +16,7 @@ using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Classes.ClassID_114;
 using AssetRipper.SourceGenerated.Classes.ClassID_28;
 using AssetRipper.SourceGenerated.Classes.ClassID_48;
+using AssetRipper.SourceGenerated.Extensions;
 using AssetRipper.SourceGenerated.Subclasses.AABB;
 using AssetRipper.SourceGenerated.Subclasses.AABBInt;
 using AssetRipper.SourceGenerated.Subclasses.AnimationCurve_Single;
@@ -45,9 +46,16 @@ namespace AssetRipper.Import.AssetCreation;
 /// </summary>
 /// <param name="assemblyManager"></param>
 /// <param name="gameType"></param>
-public sealed class GameAssetFactory(IAssemblyManager assemblyManager, GameType gameType) : AssetFactoryBase
+/// <param name="stripTexture2DData">占位模式：加载时剥离 Texture2D 图像数据，配合导出阶段的白色占位图以降低内存占用。</param>
+public sealed class GameAssetFactory(IAssemblyManager assemblyManager, GameType gameType, bool stripTexture2DData = false) : AssetFactoryBase
 {
 	private IAssemblyManager AssemblyManager { get; } = assemblyManager ?? throw new ArgumentNullException(nameof(assemblyManager));
+
+	/// <summary>
+	/// 占位模式开关；由 <see cref="Configuration.ImportSettings.StripTexture2DData"/> 驱动。
+	/// 默认参数值保持旧调用点（如独立工具）无需感知该选项。
+	/// </summary>
+	private bool StripTexture2DData { get; } = stripTexture2DData;
 
 	/// <summary>
 	/// 当前游戏类型的专属资产提供者；该游戏未注册专属解析时为 null，走默认解析。
@@ -164,6 +172,16 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager, GameType 
 		try
 		{
 			asset.Read(ref reader);
+			if (StripTexture2DData && asset is ITexture2D texture2D)
+			{
+				// 占位模式：内嵌图像数据与流引用一并清除，二者缺一不可——
+				// 只清 ImageData_C28 时 GetImageData() 会回退读取 StreamData 指向的 .resS 流，
+				// 导出阶段仍会把全部流数据读回内存（OOM 复现）并解码出真实图片而非占位图。
+				// 生成的 StreamData_C28 是只读属性（内部持有固定实例），故用 ClearValues 清空其 Path/Offset/Size；
+				// 清空后 IsSet()=false，GetImageData() 返回空数组，导出阶段据此生成白色占位图。
+				texture2D.ImageData_C28 = [];
+				texture2D.StreamData_C28?.ClearValues();
+			}
 			if (reader.Position != reader.Length)
 			{
 				if (IsAllZero(assetData[reader.Position..]))

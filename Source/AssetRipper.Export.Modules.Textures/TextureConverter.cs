@@ -180,6 +180,28 @@ public static class TextureConverter
 		return true;
 	}
 
+	/// <summary>
+	/// 生成与原纹理同宽高的纯白不透明位图，用作占位图。
+	/// 占位模式下 Texture2D 的图像数据已在加载阶段剥离，无法正常解码，
+	/// 导出时以此占位图保持文件名与引用不丢失；纯色图经 PNG 压缩后仅几 KB。
+	/// </summary>
+	public static bool TryCreatePlaceholderBitmap(ITexture2D texture, out DirectBitmap bitmap)
+	{
+		int width = texture.Width_C28;
+		int height = texture.Height_C28;
+		if (width <= 0 || height <= 0)
+		{
+			bitmap = DirectBitmap.Empty;
+			return false;
+		}
+
+		// depth 恒取 1：占位图无需多层；RGBA 四通道全填 0xFF 即纯白不透明
+		DirectBitmap<ColorRGBA<byte>, byte> white = new(width, height, 1);
+		white.Bits.Fill(byte.MaxValue);
+		bitmap = white;
+		return true;
+	}
+
 	private static bool TryConvertToBitmap(Options options, byte[] data, out DirectBitmap bitmap) => options.UsesTextureFormat
 		? options.TextureFormat switch
 		{

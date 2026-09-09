@@ -115,7 +115,7 @@ public sealed class PrimaryContentExporter
 
 		RegisterHandler<IAudioClip>(new AudioContentExtractor());
 
-		RegisterHandler<IImageTexture>(new TextureExporter(settings.ExportSettings.ImageExportFormat));
+		RegisterHandler<IImageTexture>(new TextureExporter(settings.ExportSettings.ImageExportFormat, settings.ImportSettings.StripTexture2DData));
 
 		RegisterHandler<IMonoScript>(new ScriptContentExtractor(gameData.AssemblyManager, settings.ExportSettings.ScriptLanguageVersion.ToCSharpLanguageVersion(gameData.ProjectVersion)));
 

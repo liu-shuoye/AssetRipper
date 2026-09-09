@@ -12,9 +12,15 @@ public class LightmapTextureAssetExporter : BinaryAssetExporter
 {
 	public ImageExportFormat ImageExportFormat { get; private set; }
 
-	public LightmapTextureAssetExporter(ImageExportFormat imageExportFormat)
+	/// <summary>
+	/// 占位模式：Texture2D 数据已在加载阶段剥离，导出时生成白色同尺寸占位图以保持引用。
+	/// </summary>
+	private bool PlaceholderMode { get; }
+
+	public LightmapTextureAssetExporter(ImageExportFormat imageExportFormat, bool placeholderMode = false)
 	{
 		ImageExportFormat = imageExportFormat;
+		PlaceholderMode = placeholderMode;
 	}
 
 	public override bool TryCreateCollection(IUnityObjectBase asset, [NotNullWhen(true)] out IExportCollection? exportCollection)
@@ -34,6 +40,18 @@ public class LightmapTextureAssetExporter : BinaryAssetExporter
 	public override bool Export(IExportContainer container, IUnityObjectBase asset, string path, FileSystem fileSystem)
 	{
 		ITexture2D texture = (ITexture2D)asset;
+		if (PlaceholderMode)
+		{
+			// 数据已在加载阶段剥离，跳过完整性与解码检查直接生成占位图
+			if (TextureConverter.TryCreatePlaceholderBitmap(texture, out DirectBitmap placeholder))
+			{
+				using Stream stream = fileSystem.File.Create(path);
+				placeholder.Save(stream, ImageExportFormat, path);
+				return true;
+			}
+			return false;
+		}
+
 		if (!texture.CheckAssetIntegrity())
 		{
 			Logger.Log(LogType.Warning, LogCategory.Export, $"Can't export '{texture.Name}' because resources file '{texture.StreamData_C28?.Path}' hasn't been found");

@@ -122,7 +122,7 @@ partial class ProjectExporter
 		{
 			OverrideExporter<ITexture2D>(new LightmapTextureAssetExporter(settings.ExportSettings.LightmapTextureExportFormat is LightmapTextureExportFormat.Exr
 				? ImageExportFormat.Exr
-				: settings.ExportSettings.ImageExportFormat));
+				: settings.ExportSettings.ImageExportFormat, settings.ImportSettings.StripTexture2DData));
 		}
 
 		//Texture Array exporters

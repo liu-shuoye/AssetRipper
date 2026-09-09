@@ -259,6 +259,7 @@
     "c_sharp_langage_version_config_14_0": "C# 14",
     "export_directory_delete_user_confirmation": "所选导出目录已存在，将会删除其中所有内容。要继续吗？",
     "export_unreadable_assets": "导出无法读取的资源（Asset）",
+    "strip_texture_2d_data": "不导出 Texture2D（生成白色占位图）",
     "filter": "筛选",
     "install_unity_editor": "安装 Unity 编辑器",
     "install_unity_hub": "安装 Unity Hub",

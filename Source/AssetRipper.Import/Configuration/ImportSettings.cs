@@ -62,6 +62,13 @@ public sealed record class ImportSettings
 	/// </summary>
 	public string? Il2CppDumpPath { get; set; }
 
+	/// <summary>
+	/// 加载时剥离 Texture2D 的图像数据（内嵌 m_ImageData 与 m_StreamData 流引用），
+	/// 大幅降低批量加载全部资源时的内存占用；导出时为每个 Texture2D 生成白色同尺寸占位图，
+	/// 保持文件名与 .meta 引用不丢失。更改此选项后需重新加载资源文件才能生效。
+	/// </summary>
+	public bool StripTexture2DData { get; set; } = false;
+
 	public void Log()
 	{
 		Logger.Info(LogCategory.General, $"{nameof(ScriptContentLevel)}: {ScriptContentLevel}");
@@ -72,5 +79,6 @@ public sealed record class ImportSettings
 		Logger.Info(LogCategory.General, $"{nameof(LoadDependencyMap)}: {LoadDependencyMap}");
 		Logger.Info(LogCategory.General, $"{nameof(DependencyMapPath)}: {DependencyMapPath}");
 		Logger.Info(LogCategory.General, $"{nameof(Il2CppDumpPath)}: {Il2CppDumpPath}");
+		Logger.Info(LogCategory.General, $"{nameof(StripTexture2DData)}: {StripTexture2DData}");
 	}
 }

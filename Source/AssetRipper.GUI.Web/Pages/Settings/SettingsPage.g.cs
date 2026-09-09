@@ -76,6 +76,7 @@ partial class SettingsPage
 	{
 		{ nameof(ImportSettings.IgnoreStreamingAssets), (value) => { Configuration.ImportSettings.IgnoreStreamingAssets = value; } },
 		{ nameof(ImportSettings.LoadDependencyMap), (value) => { Configuration.ImportSettings.LoadDependencyMap = value; } },
+		{ nameof(ImportSettings.StripTexture2DData), (value) => { Configuration.ImportSettings.StripTexture2DData = value; } },
 		{ nameof(ProcessingSettings.EnablePrefabOutlining), (value) => { Configuration.ProcessingSettings.EnablePrefabOutlining = value; } },
 		{ nameof(ProcessingSettings.EnableStaticMeshSeparation), (value) => { Configuration.ProcessingSettings.EnableStaticMeshSeparation = value; } },
 		{ nameof(ProcessingSettings.EnableAssetDeduplication), (value) => { Configuration.ProcessingSettings.EnableAssetDeduplication = value; } },
@@ -110,6 +111,11 @@ partial class SettingsPage
 	private static void WriteCheckBoxForLoadDependencyMap(TextWriter writer, string label, bool disabled = false)
 	{
 		WriteCheckBox(writer, label, Configuration.ImportSettings.LoadDependencyMap, nameof(ImportSettings.LoadDependencyMap), disabled);
+	}
+
+	private static void WriteCheckBoxForStripTexture2DData(TextWriter writer, string label, bool disabled = false)
+	{
+		WriteCheckBox(writer, label, Configuration.ImportSettings.StripTexture2DData, nameof(ImportSettings.StripTexture2DData), disabled);
 	}
 
 	private static void WriteCheckBoxForEnablePrefabOutlining(TextWriter writer, string label, bool disabled = false)
