@@ -21,6 +21,7 @@ AssetRipper 每次导出时，[AssetExportCollection.cs](file:///d:/Project/Asse
   - 开关传入 `CreateCollections` → `CreateCollection`，在集合创建完成后，若集合是 `ExportCollection` 且开关开启，则调用 `UseDeterministicGuid()`。
   - 开启时输出一条日志说明已启用确定性 GUID。
 - **GUI**：设置页新增复选框 `EnableDeterministicGuids`（放于 Experimental 分组，紧邻去重复选框），并对所有语言新增本地化键 `enable_deterministic_guids`；重新生成 `SettingsPage.g.cs`。
+- **SpriteID 确定性**：纹理导出的 `SpriteMetaData.SpriteID` 原本每次 `Guid.NewGuid()` 随机生成。开启开关后改用 `SpriteMetaDataExtensions.CalculateSpriteId`（与导出 GUID 一致的稳定标识 MD5，32 位小写 hex）；开关通过 `IExportContainer.UseDeterministicGuids`（默认接口成员，`ProjectAssetContainer` 从 `CoreConfiguration` 读取）向下传递到 `TextureExportCollection`。关闭时保持原随机行为。
 - **不改默认行为**：开关默认关闭，导出行为与现状完全一致（随机 GUID）。
 
 ## Impact
@@ -33,6 +34,9 @@ AssetRipper 每次导出时，[AssetExportCollection.cs](file:///d:/Project/Asse
   - [AssetExportCollection.cs](file:///d:/Project/AssetRipper/Source/AssetRipper.Export.UnityProjects/AssetExportCollection.cs) — GUID 惰性化 + 覆写。
   - 新增 [DeterministicGuidCalculator.cs](file:///d:/Project/AssetRipper/Source/AssetRipper.Export.UnityProjects/DeterministicGuidCalculator.cs)。
   - [SettingsPage.cs](file:///d:/Project/AssetRipper/Source/AssetRipper.GUI.Web/Pages/Settings/SettingsPage.cs) + [SettingsPage.g.cs](file:///d:/Project/AssetRipper/Source/AssetRipper.GUI.Web/Pages/Settings/SettingsPage.g.cs)（重新生成）+ `Localizations/*.json`。
+  - [IExportContainer.cs](file:///d:/Project/AssetRipper/Source/AssetRipper.Export.UnityProjects/IExportContainer.cs) + [ProjectAssetContainer.cs](file:///d:/Project/AssetRipper/Source/AssetRipper.Export.UnityProjects/ProjectAssetContainer.cs) — 增加 `UseDeterministicGuids` 透出开关。
+  - [SpriteMetaDataExtensions.cs](file:///d:/Project/AssetRipper/Source/AssetRipper.SourceGenerated.Extensions/SpriteMetaDataExtensions.cs) — 新增 `CalculateSpriteId`，`FillSpriteMetaData` 受开关控制。
+  - [TextureExportCollection.cs](file:///d:/Project/AssetRipper/Source/AssetRipper.Export.UnityProjects/Textures/TextureExportCollection.cs) — 传递 `container.UseDeterministicGuids`。
   - 新增 [DeterministicGuidTests.cs](file:///d:/Project/AssetRipper/Source/AssetRipper.Tests/DeterministicGuidTests.cs)。
 - 不影响：导入、场景 GUID（沿用原始数据）、脚本 GUID、用户项目资产 GUID。
 
@@ -42,7 +46,7 @@ AssetRipper 每次导出时，[AssetExportCollection.cs](file:///d:/Project/Asse
 
 启用 `EnableDeterministicGuids` 时，系统 SHALL 为 `AssetExportCollection<T>` 及其全部派生集合的导出 GUID 使用 `DeterministicGuidCalculator` 计算的结果，而非随机值。
 
-计算键格式：`{ClassName}|{GetBestDirectory()}|{GetBestName()}|{Collection.Name}|{PathID}`；结果 = `UnityGuid.Md5Hash(key)`。
+计算键格式：`{ClassName}|{GetBestDirectory()}|{GetBestName()}|{GetBestExtension()}|{Collection.Name}|{PathID}`；结果 = `UnityGuid.Md5Hash(key)`。SpriteID 使用同样的稳定标识计算（`SpriteMetaDataExtensions.CalculateSpriteId`），仅输出格式为字符串。
 
 #### Scenario: 同一资源跨批次 GUID 相同
 

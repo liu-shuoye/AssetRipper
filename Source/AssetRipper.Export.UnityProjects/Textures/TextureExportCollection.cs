@@ -159,7 +159,7 @@ public class TextureExportCollection : AssetsExportCollection<ITexture2D>
 		{
 			KeyValuePair<ISprite, ISpriteAtlas?> kvp = textureSpriteInformation.First();
 			ISpriteMetaData smeta = SpriteMetaData.Create(kvp.Key.Collection.Version);
-			smeta.FillSpriteMetaData(kvp.Key, kvp.Value);
+			smeta.FillSpriteMetaData(kvp.Key, kvp.Value, container.UseDeterministicGuids);
 			importer.SpriteSheet.CopyFromSpriteMetaData(smeta);
 		}
 		else
@@ -169,7 +169,7 @@ public class TextureExportCollection : AssetsExportCollection<ITexture2D>
 			foreach (KeyValuePair<ISprite, ISpriteAtlas?> kvp in textureSpriteInformation)
 			{
 				ISpriteMetaData smeta = spriteSheetSprites.AddNew();
-				smeta.FillSpriteMetaData(kvp.Key, kvp.Value);
+				smeta.FillSpriteMetaData(kvp.Key, kvp.Value, container.UseDeterministicGuids);
 				if (smeta.Has_InternalID())
 				{
 					smeta.InternalID = GetExportID(container, kvp.Key);

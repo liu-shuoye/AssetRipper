@@ -2,6 +2,7 @@ using AssetRipper.Assets;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Export.UnityProjects.Project;
 using AssetRipper.Import.Configuration;
+using AssetRipper.Processing.Configuration;
 using AssetRipper.Processing.Scenes;
 using AssetRipper.SourceGenerated.Classes.ClassID_141;
 using System.Diagnostics;
@@ -19,6 +20,11 @@ public class ProjectAssetContainer : IExportContainer
 		m_skippedCollections = skippedCollections ?? throw new ArgumentNullException(nameof(skippedCollections));
 		m_redirectMap = redirectMap ?? throw new ArgumentNullException(nameof(redirectMap));
 		CurrentCollection = null!;
+
+		// 从 Core 读取开关并提供给接口，使导出元数据（如 SpriteID）也遵循确定性 GUID 设置。
+		UseDeterministicGuids = options.SingletonData.TryGetStoredValue<ProcessingSettings>(
+			nameof(ProcessingSettings), out ProcessingSettings? ps)
+			&& ps.EnableDeterministicGuids;
 
 		ExportVersion = options.Version;
 
@@ -113,6 +119,8 @@ public class ProjectAssetContainer : IExportContainer
 	public IExportCollection CurrentCollection { get; set; }
 	public AssetCollection File => CurrentCollection.File;
 	public UnityVersion ExportVersion { get; }
+	/// <inheritdoc/>
+	public bool UseDeterministicGuids { get; }
 
 	private readonly ProjectExporter m_exporter;
 	private readonly Dictionary<IUnityObjectBase, IExportCollection> m_assetCollections = new();

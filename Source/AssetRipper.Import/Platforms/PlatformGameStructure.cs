@@ -289,7 +289,7 @@ public abstract partial class PlatformGameStructure
 		if (root.EndsWith(@"art\audio")
 		    || root.EndsWith(@"art\ui")
 		    || root.EndsWith(@"art\dye")
-		    || root.EndsWith(@"art\fx")
+		    // || root.EndsWith(@"art\fx")
 		    || root.EndsWith(@"art\public")
 		    || root.EndsWith(@"art\minicharacter")
 		    || root.EndsWith(@"art\nailbeauty")
@@ -297,6 +297,11 @@ public abstract partial class PlatformGameStructure
 		    || root.EndsWith(@"art\character"))
 		{
 			
+			Logger.Info(LogCategory.Import, $"跳过文件夹 '{root}'");
+			return;
+		}
+		if (!root.EndsWith(@"art") && root.Contains("art") && !root.Contains(@"art\fx"))
+		{
 			Logger.Info(LogCategory.Import, $"跳过文件夹 '{root}'");
 			return;
 		}

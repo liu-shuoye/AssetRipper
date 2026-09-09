@@ -10,7 +10,9 @@ using AssetRipper.Primitives;
 using AssetRipper.Processing;
 using AssetRipper.Processing.Configuration;
 using AssetRipper.SourceGenerated.Classes.ClassID_114;
+using AssetRipper.SourceGenerated.Classes.ClassID_213;
 using AssetRipper.SourceGenerated.Extensions;
+using System.Reflection;
 
 namespace AssetRipper.Tests;
 
@@ -134,6 +136,42 @@ internal class DeterministicGuidTests
 	}
 
 	/// <summary>
+	/// 同标识精灵（同源文件、同名、同 PathID）计算出的 SpriteID 跨"批次"一致。
+	/// </summary>
+	[Test]
+	public void CalculateSpriteId_SameSprite_IsDeterministic()
+	{
+		ProcessedAssetCollection first = new GameBundle().AddNewProcessedCollection("SameBatch", UnityVersion.V_2022);
+		ProcessedAssetCollection second = new GameBundle().AddNewProcessedCollection("SameBatch", UnityVersion.V_2022);
+
+		ISprite sprite1 = CreateSprite(first, "Hero");
+		ISprite sprite2 = CreateSprite(second, "Hero");
+
+		string firstId = SpriteMetaDataExtensions.CalculateSpriteId(sprite1);
+		string secondId = SpriteMetaDataExtensions.CalculateSpriteId(sprite2);
+
+		Assert.Multiple(() =>
+		{
+			Assert.That(secondId, Is.EqualTo(firstId));
+			Assert.That(firstId, Does.Match("^[0-9a-f]{32}$"));
+		});
+	}
+
+	/// <summary>
+	/// 不同精灵（PathID 不同）即使同名，SpriteID 也不得碰撞。
+	/// </summary>
+	[Test]
+	public void CalculateSpriteId_DifferentSprites_ReturnDifferentIds()
+	{
+		ProcessedAssetCollection collection = new GameBundle().AddNewProcessedCollection("CollideTest", UnityVersion.V_2022);
+
+		ISprite first = CreateSprite(collection, "SameName");
+		ISprite second = CreateSprite(collection, "SameName");
+
+		Assert.That(SpriteMetaDataExtensions.CalculateSpriteId(first), Is.Not.EqualTo(SpriteMetaDataExtensions.CalculateSpriteId(second)));
+	}
+
+	/// <summary>
 	/// 构建一个包含同名资源的包并导出（可选开启确定性 GUID），返回指定 .meta 文件的内容。
 	/// </summary>
 	private static string ExportToNewFileSystem(bool enableDeterministicGuids, string metaPath)
@@ -162,6 +200,21 @@ internal class DeterministicGuidTests
 	{
 		string line = metaText.Split('\n').First(l => l.TrimStart().StartsWith("guid:"));
 		return line.Trim();
+	}
+
+	/// <summary>
+	/// 构造一个指定名称的 sprite 实例，仿照 <see cref="AssetRipper.Tests.DeduplicationTests.CreateShader"/> 的做法：
+	/// 通过反射选取 ISprite 的非抽象实现类，名称用 <see cref="IUnityObjectBase.OverrideName"/> 控制。
+	/// </summary>
+	private static ISprite CreateSprite(ProcessedAssetCollection collection, string name)
+	{
+		Type? spriteType = typeof(ISprite).Assembly.GetTypes()
+			.FirstOrDefault(t => typeof(ISprite).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
+		Assert.That(spriteType, Is.Not.Null);
+
+		ISprite sprite = collection.CreateAsset(-1, ai => (ISprite)Activator.CreateInstance(spriteType!, ai)!);
+		sprite.Name = name;
+		return sprite;
 	}
 
 	/// <summary>

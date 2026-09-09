@@ -44,7 +44,7 @@ public readonly struct Meta
 		if (HasLicenseData)
 		{
 			// root.Add(TimeCreatedName, CurrentTick);
-			root.Add(LicenseTypeName, "Free");
+			// root.Add(LicenseTypeName, "Free");
 		}
 		//if (Importer.IncludesImporter(container.ExportVersion)) //For now, assume true
 		{

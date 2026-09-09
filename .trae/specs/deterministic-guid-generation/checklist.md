@@ -18,3 +18,4 @@
 - [x] 所有语言 `Localizations/*.json` 含 `enable_deterministic_guids` 键，`SettingsPage.g.cs` 已重新生成（含 `WriteCheckBoxForEnableDeterministicGuids`）
 - [x] 新增单元测试覆盖：同资源确定性、异资源不同、默认随机、开关开启端到端一致
 - [x] 未修改场景/脚本/用户资产 GUID 的相关逻辑，未破坏去重（`deduplicate-exported-assets`）行为
+- [x] 开启开关时 `SpriteMetaData.SpriteID` 改用 `CalculateSpriteId`（确定性 32 位小写 hex），关闭时保持随机；`IExportContainer.UseDeterministicGuids` 由 `ProjectAssetContainer` 从 `CoreConfiguration` 读取并传递到 `TextureExportCollection`
