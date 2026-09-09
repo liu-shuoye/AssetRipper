@@ -37,6 +37,7 @@ partial class GameBundle
 	private void InitializeFromPaths(IEnumerable<string> paths, AssetFactoryBase assetFactory, FileSystem fileSystem, IGameInitializer? initializer)
 	{
 		ResourceProvider = initializer?.ResourceProvider;
+		LogMemoryDiagnostics("加载文件和依赖项前");
 		List<FileBase> fileStack = LoadFilesAndDependencies(paths, fileSystem, initializer?.DependencyProvider);
 		UnityVersion defaultVersion = initializer?.DefaultVersion ?? default;
 		LogMemoryDiagnostics("加载文件和依赖项后");
