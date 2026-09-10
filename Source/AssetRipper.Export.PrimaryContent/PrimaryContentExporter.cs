@@ -103,7 +103,7 @@ public sealed class PrimaryContentExporter
 		RegisterHandler<IComponent>(modelExporter);
 		RegisterHandler<ILevelGameManager>(modelExporter);
 
-		RegisterHandler<IMesh>(new GlbMeshExporter());
+		RegisterHandler<IMesh>(new GlbMeshExporter(settings.ImportSettings.StripMeshData));
 
 		RegisterHandler<INavMeshData>(new GlbNavMeshExporter());
 		RegisterHandler<ITerrainData>(new GlbTerrainExporter());
@@ -113,7 +113,7 @@ public sealed class PrimaryContentExporter
 		RegisterHandler<IMovieTexture>(BinaryAssetContentExtractor.Instance);
 		RegisterHandler<IVideoClip>(BinaryAssetContentExtractor.Instance);
 
-		RegisterHandler<IAudioClip>(new AudioContentExtractor());
+		RegisterHandler<IAudioClip>(new AudioContentExtractor(settings.ImportSettings.StripAudioClipData));
 
 		RegisterHandler<IImageTexture>(new TextureExporter(settings.ExportSettings.ImageExportFormat, settings.ImportSettings.StripTexture2DData));
 

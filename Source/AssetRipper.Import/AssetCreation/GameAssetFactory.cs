@@ -15,7 +15,9 @@ using AssetRipper.SerializationLogic;
 using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Classes.ClassID_114;
 using AssetRipper.SourceGenerated.Classes.ClassID_28;
+using AssetRipper.SourceGenerated.Classes.ClassID_43;
 using AssetRipper.SourceGenerated.Classes.ClassID_48;
+using AssetRipper.SourceGenerated.Classes.ClassID_83;
 using AssetRipper.SourceGenerated.Extensions;
 using AssetRipper.SourceGenerated.Subclasses.AABB;
 using AssetRipper.SourceGenerated.Subclasses.AABBInt;
@@ -47,15 +49,28 @@ namespace AssetRipper.Import.AssetCreation;
 /// <param name="assemblyManager"></param>
 /// <param name="gameType"></param>
 /// <param name="stripTexture2DData">占位模式：加载时剥离 Texture2D 图像数据，配合导出阶段的白色占位图以降低内存占用。</param>
-public sealed class GameAssetFactory(IAssemblyManager assemblyManager, GameType gameType, bool stripTexture2DData = false) : AssetFactoryBase
+/// <param name="stripMeshData">占位模式：加载时剥离 Mesh 网格数据，配合导出阶段的占位文件。</param>
+/// <param name="stripAudioClipData">占位模式：加载时剥离 AudioClip 数据引用，配合导出阶段的占位文件。</param>
+public sealed class GameAssetFactory(
+	IAssemblyManager assemblyManager,
+	GameType gameType,
+	bool stripTexture2DData = false,
+	bool stripMeshData = false,
+	bool stripAudioClipData = false) : AssetFactoryBase
 {
 	private IAssemblyManager AssemblyManager { get; } = assemblyManager ?? throw new ArgumentNullException(nameof(assemblyManager));
 
 	/// <summary>
-	/// 占位模式开关；由 <see cref="Configuration.ImportSettings.StripTexture2DData"/> 驱动。
+	/// 占位模式开关；由 <see cref="Configuration.ImportSettings"/> 的同名 Strip 选项驱动。
 	/// 默认参数值保持旧调用点（如独立工具）无需感知该选项。
 	/// </summary>
 	private bool StripTexture2DData { get; } = stripTexture2DData;
+
+	/// <summary>占位模式：剥离 Mesh 数据。</summary>
+	private bool StripMeshData { get; } = stripMeshData;
+
+	/// <summary>占位模式：剥离 AudioClip 数据引用。</summary>
+	private bool StripAudioClipData { get; } = stripAudioClipData;
 
 	/// <summary>
 	/// 当前游戏类型的专属资产提供者；该游戏未注册专属解析时为 null，走默认解析。
@@ -181,6 +196,31 @@ public sealed class GameAssetFactory(IAssemblyManager assemblyManager, GameType 
 				// 清空后 IsSet()=false，GetImageData() 返回空数组，导出阶段据此生成白色占位图。
 				texture2D.ImageData_C28 = [];
 				texture2D.StreamData_C28?.ClearValues();
+			}
+			if (StripMeshData && asset is IMesh mesh)
+			{
+				// 占位模式：内嵌顶点数据与索引缓冲是 Mesh 加载期的主要内存占用，
+				// 外部流引用同样必须清空，否则导出阶段会回读 .resS 流。
+				// 工程模式的 YAML 导出对空数据天然容错，直接写出空网格占位文件。
+				mesh.VertexData.Data = [];
+				mesh.IndexBuffer = [];
+				mesh.StreamData?.ClearValues();
+			}
+			if (StripAudioClipData && asset is IAudioClip audioClip)
+			{
+				// 占位模式：音频数据本体在 .resource 外部流（懒加载，不占加载内存），
+				// 此处剥离仅为了让导出阶段生成空占位文件；
+				// IStreamedResource 没有 ClearValues 扩展，按 YamlAudioExportCollection 的先例手工清空三个字段。
+				if (audioClip.Has_AudioData())
+				{
+					audioClip.AudioData = [];
+				}
+				if (audioClip.Has_Resource() && audioClip.Resource is not null)
+				{
+					audioClip.Resource.Source = Utf8String.Empty;
+					audioClip.Resource.Offset = 0;
+					audioClip.Resource.Size = 0;
+				}
 			}
 			if (reader.Position != reader.Length)
 			{

@@ -490,19 +490,27 @@ CoreConfiguration（导入设置 + 导出路径 + 版本）
 - 语言选择：`ExportSettings.LanguageCode`，经 `Localization.LoadLanguage(code)` 加载 `Localizations/*.json`。
 
 ### 常用设置
-- **导入**（`ImportSettings`）：`ScriptContentLevel`（Level0 禁用脚本 / Level1 桩方法）、`DefaultVersion`、`TargetVersion`、`GameType`、`IgnoreStreamingAssets`、`Il2CppDumpPath`、`LoadDependencyMap`/`DependencyMapPath`、`StripTexture2DData`；
+- **导入**（`ImportSettings`）：`ScriptContentLevel`（Level0 禁用脚本 / Level1 桩方法）、`DefaultVersion`、`TargetVersion`、`GameType`、`IgnoreStreamingAssets`、`Il2CppDumpPath`、`LoadDependencyMap`/`DependencyMapPath`、`StripTexture2DData`、`StripMeshData`、`StripAudioClipData`；
 - **处理**（`ProcessingSettings`）：`RemoveNullableAttributes`、`PublicizeAssemblies`、`BundledAssetsExportMode`、`EnableAssetDeduplication`、`EnableDeterministicGuids`；
 - **导出**（`ExportSettings`）：`SaveSettingsToDisk`、`LanguageCode` 等。
 
-### Texture2D 占位导出（StripTexture2DData）
+### 资源占位导出（StripTexture2DData / StripMeshData / StripAudioClipData）
 
-启用 `ImportSettings.StripTexture2DData` 后进入"占位模式"，专为批量加载全部资源时的 OOM 问题设计：
+`ImportSettings` 提供三个独立的占位模式开关，专为批量加载全部资源时的 OOM 问题与文件引用完整性设计，启用后对应类型的资源不再按真实数据导出，而是生成占位文件保持文件名与引用不丢失；关闭开关并重新加载后可再次导出真实文件覆盖占位文件。
 
+**Texture2D（`StripTexture2DData`）**：
 1. **加载期剥离**：`GameAssetFactory.TryReadNormalObject`（`AssetCreation/GameAssetFactory.cs`）反序列化完成后，对每个 `ITexture2D` 清空 `ImageData_C28` 并调用 `StreamData_C28.ClearValues()`（清空流引用的 Path/Offset/Size）。二者缺一不可——只清内嵌数据时 `GetImageData()` 会回退读取 `.resS` 流，导出阶段仍会把流数据读回内存并解码出真实图片。剥离后纹理仅保留 `m_Width/m_Height/m_Format` 等元数据，常驻内存大幅下降。
-2. **导出期占位**：`TextureConverter.TryCreatePlaceholderBitmap`（`Export.Modules.Textures`）按真实宽高生成纯白不透明 RGBA 位图（depth=1，PNG 压缩后仅几 KB）。三处导出器（工程模式 `TextureAssetExporter`/`LightmapTextureAssetExporter`、PrimaryContent 模式 `TextureExporter`）在占位模式下跳过完整性检查与解码，直接写占位文件；PrimaryContent 的 `TryCreateCollection` 亦需放行（数据剥离后 `CheckAssetIntegrity` 不再是可靠前置）。
-3. **引用保持**：占位图沿用原文件名与 `.meta` GUID，材质等引用不丢失。关闭设置并重新加载资源后，可再次导出真实图片覆盖占位图。
+2. **导出期占位**：`TextureConverter.TryCreatePlaceholderBitmap`（`Export.Modules.Textures`）按真实宽高生成纯白不透明 RGBA 位图（depth=1，PNG 压缩后仅几 KB）。三处导出器（工程模式 `TextureAssetExporter`/`LightmapTextureAssetExporter`、主内容模式 `TextureExporter`）在占位模式下跳过完整性检查与解码，直接写占位文件；主内容模式的 `TryCreateCollection` 亦需放行（数据剥离后 `CheckAssetIntegrity` 不再是可靠前置）。
 
-注意事项：更改该选项后需**重新加载资源文件**才生效；占位模式下纹理预览与 Sprite 切图不可用（数据已剥离，回退 YAML/跳过）；非占位模式下导出行为完全不变。设置页 UI 由 `SettingsPageGenerator` 反射 `ImportSettings` 自动生成复选框，本地化键为 `strip_texture_2d_data`（属性名 `Localization.StripTexture2dData`）。
+**Mesh（`StripMeshData`）**：
+1. **加载期剥离**：对每个 `IMesh` 清空 `VertexData.Data`（内嵌顶点数据，Mesh 加载期内存大头）、`IndexBuffer`（索引缓冲）并 `StreamData.ClearValues()`（外部流引用，Mesh_Nikki4 的 StreamData 同为 `IStreamingInfo`）。
+2. **导出期占位**：工程模式无需改动——`YamlStreamedAssetExporter` 的 YAML 导出对空数据天然容错，直接写出空网格 `.asset`（`YamlStreamedAssetExportCollection.ExportMesh` 会临时回读流再清空，空流时写空数据）；主内容模式的 `GlbMeshExporter` 在占位模式下放行 `IsSet()` 检查并写出一个不含网格数据的最小合法空场景 GLB。
+
+**AudioClip（`StripAudioClipData`）**：
+1. **加载期剥离**：对每个 `IAudioClip` 清空 `AudioData`（老版本内嵌数据）并将 `Resource`（`IStreamedResource`，外部 `.resource` 流）的 Source/Offset/Size 置空。音频数据本身是懒加载流，此项不降低加载内存，仅用于统一生成占位文件。
+2. **导出期占位**：工程模式 `AudioClipExporter`（AudioExportFormat 为 Default/PreferWav 时启用）在占位模式下跳过 FMod 解码，写空占位文件，扩展名按格式设置取 ogg/wav；主内容模式 `AudioContentExtractor` 同理（固定 ogg）。AudioExportFormat 为 Native 时占位不生效（导出跳过），Yaml 模式天然占位（导出 YAML 元数据）。
+
+**注意事项**：更改选项后需**重新加载资源文件**才生效（数据已剥离不可恢复）；占位模式下纹理预览、Sprite 切图、Mesh 3D 预览与音频播放不可用；非占位模式下导出行为完全不变。设置页 UI 复选框需同步手写进 `SettingsPage.cs` 并按生成器规则补 `SettingsPage.g.cs`（该文件是预生成静态文件，见 5.13），本地化键为 `strip_texture_2d_data`/`strip_mesh_data`/`strip_audio_clip_data`。
 
 ---
 

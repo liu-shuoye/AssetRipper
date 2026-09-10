@@ -69,6 +69,21 @@ public sealed record class ImportSettings
 	/// </summary>
 	public bool StripTexture2DData { get; set; } = false;
 
+	/// <summary>
+	/// 加载时剥离 Mesh 的顶点数据、索引缓冲与外部流引用以降低内存占用；
+	/// 导出时生成不含网格数据的占位文件（工程模式为空网格 YAML，主内容模式为空 GLB），
+	/// 保持文件名与引用不丢失。更改此选项后需重新加载资源文件才能生效。
+	/// </summary>
+	public bool StripMeshData { get; set; } = false;
+
+	/// <summary>
+	/// 加载时剥离 AudioClip 的音频数据引用；
+	/// 导出时生成空占位音频文件，保持文件名与引用不丢失。
+	/// AudioClip 数据本身是懒加载流，此项不降低加载内存，仅用于统一生成占位文件。
+	/// 更改此选项后需重新加载资源文件才能生效。
+	/// </summary>
+	public bool StripAudioClipData { get; set; } = false;
+
 	public void Log()
 	{
 		Logger.Info(LogCategory.General, $"{nameof(ScriptContentLevel)}: {ScriptContentLevel}");
@@ -80,5 +95,7 @@ public sealed record class ImportSettings
 		Logger.Info(LogCategory.General, $"{nameof(DependencyMapPath)}: {DependencyMapPath}");
 		Logger.Info(LogCategory.General, $"{nameof(Il2CppDumpPath)}: {Il2CppDumpPath}");
 		Logger.Info(LogCategory.General, $"{nameof(StripTexture2DData)}: {StripTexture2DData}");
+		Logger.Info(LogCategory.General, $"{nameof(StripMeshData)}: {StripMeshData}");
+		Logger.Info(LogCategory.General, $"{nameof(StripAudioClipData)}: {StripAudioClipData}");
 	}
 }

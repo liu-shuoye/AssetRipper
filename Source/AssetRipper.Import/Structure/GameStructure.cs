@@ -50,7 +50,14 @@ public sealed class GameStructure : IDisposable
 		// 依赖关系映射：打开游戏子文件夹时用于解析不在打开范围内的依赖文件
 		DependencyMap? dependencyMap = LoadDependencyMap(configuration.ImportSettings);
 
-		InitializeGameCollection(configuration.ImportSettings.DefaultVersion, configuration.ImportSettings.TargetVersion, configuration.ImportSettings.GameType, configuration.ImportSettings.StripTexture2DData, dependencyMap);
+		InitializeGameCollection(
+			configuration.ImportSettings.DefaultVersion,
+			configuration.ImportSettings.TargetVersion,
+			configuration.ImportSettings.GameType,
+			configuration.ImportSettings.StripTexture2DData,
+			configuration.ImportSettings.StripMeshData,
+			configuration.ImportSettings.StripAudioClipData,
+			dependencyMap);
 
 		if (!FileCollection.HasAnyAssetCollections())
 		{
@@ -76,11 +83,11 @@ public sealed class GameStructure : IDisposable
 
 	/// <summary> 初始化游戏文件集合。 </summary>
 	[MemberNotNull(nameof(FileCollection))]
-	private void InitializeGameCollection(UnityVersion defaultVersion, UnityVersion targetVersion, GameType gameType, bool stripTexture2DData, DependencyMap? dependencyMap)
+	private void InitializeGameCollection(UnityVersion defaultVersion, UnityVersion targetVersion, GameType gameType, bool stripTexture2DData, bool stripMeshData, bool stripAudioClipData, DependencyMap? dependencyMap)
 	{
 		Logger.SendStatusChange("loading_step_create_file_collection");
 
-		GameAssetFactory assetFactory = new(AssemblyManager, gameType, stripTexture2DData);
+		GameAssetFactory assetFactory = new(AssemblyManager, gameType, stripTexture2DData, stripMeshData, stripAudioClipData);
 
 		IEnumerable<string> filePaths;
 		if (PlatformStructure is null || MixedStructure is null)

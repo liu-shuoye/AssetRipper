@@ -15,7 +15,8 @@ public sealed class AudioClipExportCollection : AudioExportCollection
 
 	protected override bool ExportInner(IExportContainer container, string filePath, string dirPath, FileSystem fileSystem)
 	{
-		if (data is null or { Length: 0 })
+		// data 为 null 仍视为失败；空数组是占位模式生成的空占位文件，需照常写出以保持引用
+		if (data is null)
 		{
 			return false;
 		}

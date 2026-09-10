@@ -12,26 +12,32 @@ public struct ObjectInfo
 	/// 5.0.0unk 及更高版本 / 格式版本至少为 14
 	/// </summary>
 	public static bool IsLongID(FormatVersion generation) => generation >= FormatVersion.Unknown_14;
+
 	/// <summary>
 	/// 小于 5.5.0 / 格式版本小于 16
 	/// </summary>
 	public static bool HasClassID(FormatVersion generation) => generation < FormatVersion.RefactoredClassId;
+
 	/// <summary>
 	/// 小于 5.0.0unk / 格式版本小于 11
 	/// </summary>
 	public static bool HasIsDestroyed(FormatVersion generation) => generation < FormatVersion.HasScriptTypeIndex;
+
 	/// <summary>
 	/// 5.0.0unk 到 5.5.0unk 之间（不包括 5.5.0unk）/ 格式版本至少为 11 但小于 17
 	/// </summary>
 	public static bool HasScriptTypeIndex(FormatVersion generation) => generation >= FormatVersion.HasScriptTypeIndex && generation < FormatVersion.RefactorTypeData;
+
 	/// <summary>
 	/// 5.0.1 到 5.5.0unk 之间（不包括 5.5.0unk）/ 格式版本至少为 15 但小于 17
 	/// </summary>
 	public static bool HasStripped(FormatVersion generation) => generation >= FormatVersion.SupportsStrippedObject && generation < FormatVersion.RefactorTypeData;
+
 	/// <summary>
 	/// 5.5.0unk 及更高版本 / 格式版本至少为 17
 	/// </summary>
 	public static bool HasSerializedTypeIndex(FormatVersion generation) => generation >= FormatVersion.RefactorTypeData;
+
 	/// <summary>
 	/// 2020.1.0 及更高版本 / 格式版本至少为 22
 	/// </summary>
@@ -70,6 +76,7 @@ public struct ObjectInfo
 		// 避免在读取阶段立即分配大块 byte[]，减少峰值内存占用。
 		// 真正的字节读取推迟到 LoadObjectData() 被调用时。
 		_dataStream = (reader.BaseStream as SmartStream)?.CreateReference();
+		SetLoadObjectDataHash(LoadObjectData());
 		_dataAbsoluteOffset = dataOffset + byteStart;
 		_dataSize = byteSize;
 
@@ -82,10 +89,12 @@ public struct ObjectInfo
 			SerializedTypeIndex = -1;
 			TypeID = reader.ReadInt32();
 		}
+
 		if (HasClassID(reader.Generation))
 		{
 			ClassID = reader.ReadInt16();
 		}
+
 		if (HasScriptTypeIndex(reader.Generation))
 		{
 			ScriptTypeIndex = reader.ReadInt16();
@@ -94,6 +103,7 @@ public struct ObjectInfo
 		{
 			IsDestroyed = reader.ReadUInt16();
 		}
+
 		bool? stripped;
 		if (HasStripped(reader.Generation))
 		{
@@ -105,6 +115,7 @@ public struct ObjectInfo
 			Stripped = false;
 			stripped = null;
 		}
+
 		Type = GetSerializedType(types, stripped);
 		if (Type is not null)
 		{
@@ -113,10 +124,12 @@ public struct ObjectInfo
 			{
 				ClassID = (short)Type.TypeID;
 			}
+
 			if (!HasScriptTypeIndex(reader.Generation))
 			{
 				ScriptTypeIndex = Type.ScriptTypeIndex;
 			}
+
 			if (!HasStripped(reader.Generation))
 			{
 				Stripped = Type.IsStrippedType;
@@ -154,10 +167,12 @@ public struct ObjectInfo
 		{
 			writer.Write(TypeID);
 		}
+
 		if (HasClassID(writer.Generation))
 		{
 			writer.Write(ClassID);
 		}
+
 		if (HasScriptTypeIndex(writer.Generation))
 		{
 			writer.Write(ScriptTypeIndex);
@@ -166,6 +181,7 @@ public struct ObjectInfo
 		{
 			writer.Write(IsDestroyed);
 		}
+
 		if (HasStripped(writer.Generation))
 		{
 			writer.Write(Stripped);
@@ -208,6 +224,7 @@ public struct ObjectInfo
 					}
 				}
 			}
+
 			return result ?? throw new Exception($"Type with ID {TypeID} and stripped {Stripped} not found");
 		}
 	}
@@ -217,28 +234,35 @@ public struct ObjectInfo
 	/// Unique ID that identifies the object. Can be used as a key for a map.
 	/// </summary>
 	public long FileID { get; set; }
+
 	/// <summary>
 	/// Type ID of the object, which is mapped to <see cref="SerializedType.TypeID"/><br/>
 	/// Equals to classID if the object is not MonoBehaviour"/>
 	/// </summary>
 	public int TypeID { get; set; }
+
 	/// <summary>
 	/// Type index in <see cref="SerializedFileMetadata.Types"/> array<br/>
 	/// </summary>
 	public int SerializedTypeIndex { get; set; }
+
 	/// <summary>
 	/// Class ID of the object.
 	/// </summary>
 	public short ClassID { get; set; }
+
 	public ushort IsDestroyed { get; set; }
 	public short ScriptTypeIndex { get; set; }
 	public bool Stripped { get; set; }
 	public SerializedType? Type { get; set; }
+
 	/// <summary>
 	/// The data for the object.
 	/// </summary>
 	[AllowNull]
 	public byte[] ObjectData { readonly get => field ?? []; set; }
+
+	private int LoadObjectDataHash { get; set; }
 
 	// 懒加载相关字段：持有 SmartStream 引用与数据位置信息，
 	// 让 Read 阶段不必立即分配 byte[]，将内存峰值降到与单个对象大小相关而非全部对象总和。
@@ -246,9 +270,7 @@ public struct ObjectInfo
 	private long _dataAbsoluteOffset;
 	private int _dataSize;
 
-	public ObjectInfo()
-	{
-	}
+	public ObjectInfo() { }
 
 	public ObjectInfo(SerializedType type)
 	{
@@ -258,6 +280,7 @@ public struct ObjectInfo
 		{
 			ClassID = (short)type.TypeID;
 		}
+
 		ScriptTypeIndex = type.ScriptTypeIndex;
 		Stripped = type.IsStrippedType;
 	}
@@ -294,6 +317,21 @@ public struct ObjectInfo
 		return [];
 	}
 
+	private void SetLoadObjectDataHash(byte[] currentData)
+	{
+		if (LoadObjectDataHash == 0)
+		{
+			HashCode hash = new();
+			hash.AddBytes(currentData);
+			LoadObjectDataHash = hash.ToHashCode();
+		}
+	}
+
+	public readonly int GetLoadObjectDataHash()
+	{
+		return LoadObjectDataHash;
+	}
+
 	/// <summary>
 	/// 显式释放底层 SmartStream 引用，使引用计数下降。
 	/// 调用后 <see cref="LoadObjectData"/> 将回退到 <see cref="ObjectData"/> 字段。
@@ -319,17 +357,17 @@ public struct ObjectInfo
 		// 保证读取后的 ObjectInfo 与构造赋值的 ObjectInfo 能正确相等（用于测试与序列化往返一致性）。
 		bool dataEqual = (_dataStream is not null && other._dataStream is not null)
 			? _dataAbsoluteOffset == other._dataAbsoluteOffset && _dataSize == other._dataSize
-			: LoadObjectData().AsSpan().SequenceEqual(other.LoadObjectData());
+			: GetLoadObjectDataHash() == other.GetLoadObjectDataHash();
 
 		return FileID == other.FileID
-			&& TypeID == other.TypeID
-			&& SerializedTypeIndex == other.SerializedTypeIndex
-			&& ClassID == other.ClassID
-			&& IsDestroyed == other.IsDestroyed
-			&& ScriptTypeIndex == other.ScriptTypeIndex
-			&& Stripped == other.Stripped
-			&& EqualityComparer<SerializedType>.Default.Equals(Type, other.Type)
-			&& dataEqual;
+		       && TypeID == other.TypeID
+		       && SerializedTypeIndex == other.SerializedTypeIndex
+		       && ClassID == other.ClassID
+		       && IsDestroyed == other.IsDestroyed
+		       && ScriptTypeIndex == other.ScriptTypeIndex
+		       && Stripped == other.Stripped
+		       && EqualityComparer<SerializedType>.Default.Equals(Type, other.Type)
+		       && dataEqual;
 	}
 
 	public override readonly int GetHashCode()
@@ -345,7 +383,7 @@ public struct ObjectInfo
 		hash.Add(Type);
 		// 与 Equals 保持一致：通过 LoadObjectData 取真实字节计算 hash，
 		// 确保 Equals 相等的两个 ObjectInfo 实例具有相同 hash code。
-		hash.AddBytes(LoadObjectData());
+		hash.Add(LoadObjectDataHash);
 		return hash.ToHashCode();
 	}
 

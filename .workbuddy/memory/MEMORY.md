@@ -20,5 +20,6 @@
 ## 纹理/生成接口经验
 - 依赖方向 Export→Import 单向：Import 项目内的类（如 GameAssetFactory）读不到 ExportSettings，加载期需要的行为开关放 ImportSettings。
 - 生成的接口 `ITexture2D.StreamData_C28` 是只读属性（内部固定实例），清流引用用 `StreamData_C28?.ClearValues()`（StreamingInfoExtensions）；清空后 `CheckAssetIntegrity()` 返回 **true**（CheckIntegrity 把空 Path 视为无外部依赖），不能当"数据已剥离"的判据。
-- 本会话内 `dotnet build --no-restore` 可用（前提 obj 缓存存在）；从未在本机 restore 过的项目（如 *.SourceGenerator、Tools.DependenceGrapher）缺 project.assets.json，无法编译。
+- 占位导出已扩展三类：Texture2D（白图）、Mesh（`IMesh.StreamData` 也是 IStreamingInfo，清 VertexData.Data/IndexBuffer/StreamData，工程 YAML 天然占位、GLB 写空场景）、AudioClip（`Resource` 是 IStreamedResource? 无 ClearValues，手工清 Source/Offset/Size；解码发生在 AudioClipExporter.TryCreateCollection 而非 Export）。占位导出器 TryCreateCollection 有完整性前置检查的都要用 PlaceholderMode 放行。
+- 本会话内 `dotnet build --no-restore` 可用（前提 obj 缓存存在）；从未在本机 restore 过的项目（如 *.SourceGenerator、Tools.DependenceGrapher）缺 project.assets.json，无法编译。桌面会话构建一次后，后续会话的 --no-restore 构建随之可用。
 - LocalizationGenerator 的 snake_case→PascalCase 对数字后的字母不大写：`strip_texture_2d_data` → `StripTexture2dData`。
