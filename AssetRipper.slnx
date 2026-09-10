@@ -61,6 +61,7 @@
     <File Path=".github/workflows/publish.yml" />
     <File Path=".github/workflows/test.yml" />
   </Folder>
+  <Project Path="External/Ruri.ShaderDecompiler/Ruri.ShaderDecompiler.csproj" />
   <Project Path="Source/AssetRipper.AssemblyDumper.Downloader/AssetRipper.AssemblyDumper.Downloader.csproj" />
   <Project Path="Source/AssetRipper.AssemblyDumper.NativeEnumExtractor/AssetRipper.AssemblyDumper.NativeEnumExtractor.csproj" />
   <Project Path="Source/AssetRipper.AssemblyDumper.NuGetFixer/AssetRipper.AssemblyDumper.NuGetFixer.csproj" />

@@ -119,6 +119,8 @@
     "shader_asset_format_disassembly_description": "将着色器（Shader）反汇编并导出。 此选项为实验性且容易损坏。这不会在 Unity Editor 中编译。",
     "shader_asset_format_dummy": "虚拟着色器（Dummy Shader）",
     "shader_asset_format_dummy_description": "将着色器（Shader）导出为虚拟着色器（Dummy Shader）。 尽管它保留了 Properties 和 FallBack 等数据，但它使用了通用且不透明的着色器（Shader）代码。",
+    "shader_asset_format_ruri_decompile": "反编译（Ruri）",
+    "shader_asset_format_ruri_decompile_description": "使用 Ruri.ShaderDecompiler 将着色器（Shader）导出为 ShaderLab。会处理全部 Pass 与变体，并把变体写入独立的 .hlsl 文件。非常实验性，不保证能在 Unity Editor 中编译。仅支持 DX11 与 Vulkan 平台。",
     "shader_asset_format_yaml": "Yaml 资源",
     "shader_asset_format_yaml_description": "将着色器（Shader）导出为 Yaml 资源。实验性功能，仅可用于在 Unity Editor 中查看。Unity Editor 的预设行为可能会损坏这些文件。",
     "skip_streaming_assets": "跳过 SteamingAssets 目录",

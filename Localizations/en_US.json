@@ -237,6 +237,8 @@
     "shader_asset_format_disassembly_description": "Export the shader as disassembly. Experimental and prone to breakage. This does not compile in the editor.",
     "shader_asset_format_dummy": "Dummy Shader",
     "shader_asset_format_dummy_description": "Export the shader as a dummy shader. Although it preserves data like the properties and fallback, it uses general, opaque shader code.",
+    "shader_asset_format_ruri_decompile": "Decompilation (Ruri)",
+    "shader_asset_format_ruri_decompile_description": "Export the shader to ShaderLab using Ruri.ShaderDecompiler. Covers every pass and shader variant and writes variants to separate .hlsl files. Very experimental and not guaranteed to compile in the editor. Only supports DX11 and Vulkan platforms.",
     "shader_asset_format_yaml": "Yaml Asset",
     "shader_asset_format_yaml_description": "Export the shader as a yaml asset. Experimental and only usable for viewing in the editor. The editor can randomly corrupt these files.",
     "shader_decompilation": "Shader Decompilation",

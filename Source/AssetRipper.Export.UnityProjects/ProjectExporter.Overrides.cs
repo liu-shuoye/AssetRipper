@@ -146,6 +146,7 @@ partial class ProjectExporter
 			ShaderExportMode.Yaml => new YamlShaderExporter(),
 			ShaderExportMode.Disassembly => new ShaderDisassemblyExporter(),
 			ShaderExportMode.Decompile => new USCShaderExporter(),
+			ShaderExportMode.RuriDecompile => new ShaderRuriDecompileExporter(),
 			_ => new DummyShaderTextExporter(),
 		});
 		OverrideExporter<IShader>(new SimpleShaderExporter());

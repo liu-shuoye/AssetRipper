@@ -17,5 +17,11 @@ public enum ShaderExportMode
 	/// <summary>
 	/// Export as decompiled hlsl (unstable!)
 	/// </summary>
-	Decompile
+	Decompile,
+	/// <summary>
+	/// Export as decompiled hlsl via Ruri.ShaderDecompiler (binary -> SPIR-V -> HLSL).
+	/// Covers every pass and shader variant, and splits variants into separate files.
+	/// Not guaranteed to compile back in the editor.
+	/// </summary>
+	RuriDecompile
 }

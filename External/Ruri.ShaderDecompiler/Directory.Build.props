@@ -1,0 +1,42 @@
+<Project>
+
+  <!--
+    这份 props 是随工程一起携带的最小复刻版。
+
+    背景：Ruri.ShaderDecompiler 在母仓库中位于 `Source/` 之下，其编译设置
+    （全局 using、LangVersion、可裁剪性分析等）来自上级 `Source/Directory.Build.props`。
+    本仓库把它作为源码携带在 `External/` 下，不再处于那份 props 的管辖范围，
+    因此在这里补齐，保证「独立可编译」。
+  -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <DebugType>embedded</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
+
+    <Version>1.0.0.0</Version>
+    <AssemblyVersion>$(Version)</AssemblyVersion>
+    <Copyright>Copyright © ShiyumeMeguri</Copyright>
+    <Authors>ShiyumeMeguri</Authors>
+  </PropertyGroup>
+
+  <!--
+    这些全局 using 原先由母仓库的 Source/Directory.Build.props 提供。
+    其中 System.Diagnostics.CodeAnalysis 是必需的：SmolvDecoder 等从 AssetRipper
+    移植过来的文件直接使用了 NotNull/NotNullWhen/AllowNull 等特性。
+  -->
+  <ItemGroup>
+    <Using Include="System" />
+    <Using Include="System.Collections.Generic" />
+    <Using Include="System.Diagnostics.CodeAnalysis" />
+    <Using Include="System.IO" />
+    <Using Include="System.Linq" />
+    <Using Include="System.Threading" />
+    <Using Include="System.Threading.Tasks" />
+  </ItemGroup>
+
+</Project>

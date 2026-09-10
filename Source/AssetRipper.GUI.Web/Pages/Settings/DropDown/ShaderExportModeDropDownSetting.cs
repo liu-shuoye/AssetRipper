@@ -14,6 +14,7 @@ public sealed class ShaderExportModeDropDownSetting : DropDownSetting<ShaderExpo
 		ShaderExportMode.Yaml => Localization.ShaderAssetFormatYaml,
 		ShaderExportMode.Disassembly => Localization.ShaderAssetFormatDisassembly,
 		ShaderExportMode.Decompile => Localization.ShaderAssetFormatDecompile,
+		ShaderExportMode.RuriDecompile => Localization.ShaderAssetFormatRuriDecompile,
 		_ => base.GetDisplayName(value),
 	};
 
@@ -23,6 +24,7 @@ public sealed class ShaderExportModeDropDownSetting : DropDownSetting<ShaderExpo
 		ShaderExportMode.Yaml => Localization.ShaderAssetFormatYamlDescription,
 		ShaderExportMode.Disassembly => Localization.ShaderAssetFormatDisassemblyDescription,
 		ShaderExportMode.Decompile => Localization.ShaderAssetFormatDecompileDescription,
+		ShaderExportMode.RuriDecompile => Localization.ShaderAssetFormatRuriDecompileDescription,
 		_ => base.GetDescription(value),
 	};
 }

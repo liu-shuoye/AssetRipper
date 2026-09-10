@@ -3,6 +3,10 @@
 	<PropertyGroup>
 		<OutputPath>..\0Bins\Other\AssetRipper.Export.UnityProjects\$(Configuration)\</OutputPath>
 		<IntermediateOutputPath>..\0Bins\obj\AssetRipper.Export.UnityProjects\$(Configuration)\</IntermediateOutputPath>
+
+		<!-- Ruri.ShaderDecompiler 以源码形式随仓库携带（External/），保持 net10.0 及自身 csproj 设置；
+		     如需指向外部副本（例如并行开发 Ruri 仓库），可用 -p:RuriShaderDecompilerProject=... 覆盖。 -->
+		<RuriShaderDecompilerProject Condition="'$(RuriShaderDecompilerProject)' == ''">..\..\External\Ruri.ShaderDecompiler\Ruri.ShaderDecompiler.csproj</RuriShaderDecompilerProject>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -19,6 +23,8 @@
 		<ProjectReference Include="..\AssetRipper.Import\AssetRipper.Import.csproj" />
 		<ProjectReference Include="..\AssetRipper.Processing\AssetRipper.Processing.csproj" />
 		<ProjectReference Include="..\AssetRipper.Yaml\AssetRipper.Yaml.csproj" />
+		<!-- Shader 还原：编译后着色器二进制 -> 可读 HLSL 的反编译库。 -->
+		<ProjectReference Include="$(RuriShaderDecompilerProject)" />
 	</ItemGroup>
 
 	<ItemGroup>

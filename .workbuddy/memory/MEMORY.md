@@ -14,8 +14,18 @@
 
 ## 构建环境
 - 解决方案目标 net10.0；本机已装 .NET 10.0.301 SDK，可编译。
-- 注意：本会话 Bash/PowerShell 里 dotnet build 的 NuGet restore 必崩（NuGet.Common.NuGetEnvironment 用 Environment.GetFolderPath 取 KnownFolder 返回 null → path1 null；设 APPDATA/ProgramData 无效），需在正常桌面会话构建；csc.exe 在黑名单。
+- **构建优先走 Rider MCP**（`mcp__rider__execute_tool`：`build_solution_start` → `build_solution_state` 轮询）：Rider 自带完整 Windows 环境，restore/build 都正常，并且能顺带做真实 NuGet restore。
+- **沙箱 Bash 里 `dotnet restore` 会崩**（NuGet `path1` null，报在 NuGet.targets:782），这只是 shell 环境问题、与仓库无关。要在 bash 里用 `dotnet build --no-restore`，先 `export APPDATA="C:\Users\Administrator\AppData\Roaming"; export ProgramData="C:\ProgramData"; export LOCALAPPDATA="C:\Users\Administrator\AppData\Local"`——**缺 APPDATA/ProgramData 会让 `ResolvePackageAssets` 读 assets 时报 NETSDK1060（value cannot be null path1）**，早期笔记说"设了无效"是因为同时还缺别的变量/没走对命令。
+- **新增工程或工程引用后必须先真实 restore**（Rider 终端跑 `dotnet restore <csproj>` 即可），否则 `--no-restore` 构建报 NU1105。csc.exe 在黑名单。
 - 快速复现验证：`0Bins/AssetRipper.GUI.Free/Debug/AssetRipper.GUI.Free.exe --port <N> --headless`（Ookii POSIX 风格参数），POST /Settings/Update (ImportSettings.GameType=Nikki4)、/LoadFile(Path=)，GET /Collections/View、/Assets/Json|Yaml 观察（用 --noproxy curl 或 python urllib）。
+
+## Shader 还原：Ruri.ShaderDecompiler 接入（已落地）
+- 库以**源码内嵌**在 `External/Ruri.ShaderDecompiler/`（原为独立 git 仓库 E:\Project\Ruri\Ruri.RipperHook\Source\Ruri.ShaderDecompiler，拷贝时排除 `.git`/`bin`），并补了一个本地 `Directory.Build.props` 复刻母仓库的全局 using（`System.Diagnostics.CodeAnalysis` 是 SmolvDecoder 必需的）与 LangVersion=preview/IsTrimmable。
+- 引用方式：`AssetRipper.Export.UnityProjects.csproj` 里 `<RuriShaderDecompilerProject>` 属性（默认 `..\..\External\Ruri.ShaderDecompiler\Ruri.ShaderDecompiler.csproj`，可 `-p:` 覆盖）；工程已加入 `AssetRipper.slnx`。**跨盘符绝对路径的 ProjectReference 必然 restore 失败（NU1105），必须同盘相对路径**。
+- 接入点：`ShaderExportMode.RuriDecompile`（枚举尾部追加，别动 Decompile）→ `ProjectExporter.Overrides.cs` switch → `ShaderRuriDecompileExporter`；GUI 下拉 + `Localizations` 键 `shader_asset_format_ruri_decompile`。移植文件在 `Source/AssetRipper.Export.UnityProjects/Shaders/Ruri/`。
+- 移植三个易错点：① 本仓库用 AssetRipper 原生 `ShaderSubProgram`（RipperHook 那边是参数直接为 Ruri 类型的影子版），`AppendRuntimeSymbols` 必须逐字段转换；② `ShaderGpuProgramTypeExtensions` 同名歧义，取 SourceGenerated 那个的别名；③ 写文件必须走 `FileSystem` 抽象（有 `VirtualFileSystem`），不能 `File.WriteAllText`；④ 无法反编译时要回退 `DummyShaderTextExporter`，否则该 shader 无产物。
+- 原生库 `spirv-cross.dll`/`dxil-spirv-c-shared.dll` 经 NuGet 落到 `runtimes/win-x64/native/`，正是库 `NativeLibraryResolver` 的探测路径，无需手工部署。
+- 开关：`SplitVariantsToHlslFiles` 默认 true（拆 .hlsl）；环境变量 `RURI_SHADER_PLATFORM`/`RURI_SHADER_FAST_ITERATION`/`RURI_STRICT_SHADER_EXPORT`（会 `Environment.Exit`，GUI 下勿开）/`RURI_DUMP_INPUT_DIR`/`RURI_SHADER_DUMP_FAILURES`（本项目新增，默认关）。
 
 ## 纹理/生成接口经验
 - 依赖方向 Export→Import 单向：Import 项目内的类（如 GameAssetFactory）读不到 ExportSettings，加载期需要的行为开关放 ImportSettings。
