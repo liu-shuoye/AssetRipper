@@ -1,6 +1,6 @@
 using AssetRipper.Assets;
 using AssetRipper.Assets.Collections;
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 
 namespace AssetRipper.Export.UnityProjects.UserAssets;
 

@@ -1,4 +1,4 @@
-﻿namespace AssetRipper.Import.Logging;
+namespace AssetRipper.Logging;
 
 /// <summary>
 /// A file logger that doesn't include log types in the output.

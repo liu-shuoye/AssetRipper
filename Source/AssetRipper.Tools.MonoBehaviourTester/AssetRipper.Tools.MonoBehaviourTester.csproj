@@ -10,4 +10,8 @@
 		<ProjectReference Include="..\AssetRipper.Export\AssetRipper.Export.csproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<ProjectReference Include="..\AssetRipper.Logging\AssetRipper.Logging.csproj" />
+	</ItemGroup>
+
 </Project>

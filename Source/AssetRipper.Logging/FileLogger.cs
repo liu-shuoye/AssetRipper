@@ -1,6 +1,6 @@
-﻿using System.Text;
+using System.Text;
 
-namespace AssetRipper.Import.Logging;
+namespace AssetRipper.Logging;
 
 public class FileLogger : FileLoggerBase
 {

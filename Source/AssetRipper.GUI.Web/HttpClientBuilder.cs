@@ -1,5 +1,5 @@
 ﻿using System.Net.Http;
-using static AssetRipper.Import.AssetRipperRuntimeInformation;
+using static AssetRipper.Logging.AssetRipperRuntimeInformation;
 
 namespace AssetRipper.GUI.Web;
 

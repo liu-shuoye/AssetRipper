@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.Modules.Audio;
 using AssetRipper.Export.Modules.Models;
@@ -11,7 +11,7 @@ using AssetRipper.Export.UnityProjects.Shaders;
 using AssetRipper.GUI.Web.Documentation;
 using AssetRipper.GUI.Web.Paths;
 using AssetRipper.Import.AssetCreation;
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.Import.Structure.Assembly;
 using AssetRipper.Import.Structure.Assembly.Managers;
 using AssetRipper.Processing.Textures;

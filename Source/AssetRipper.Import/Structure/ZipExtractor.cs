@@ -1,4 +1,4 @@
-﻿using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.IO.Files;
 using SharpCompress.Archives;
 using SharpCompress.Archives.Zip;

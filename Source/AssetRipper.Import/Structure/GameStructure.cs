@@ -1,7 +1,7 @@
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Import.AssetCreation;
 using AssetRipper.Import.Configuration;
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.Import.Platforms;
 using AssetRipper.Import.Structure.Assembly;
 using AssetRipper.Import.Structure.Assembly.Managers;

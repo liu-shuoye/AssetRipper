@@ -9,7 +9,7 @@ using AssetRipper.GUI.Web.Pages.Scenes;
 using AssetRipper.GUI.Web.Pages.Search;
 using AssetRipper.GUI.Web.Pages.Settings;
 using AssetRipper.GUI.Web.Paths;
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.IO.Files;
 using AssetRipper.Web.Extensions;
 using Microsoft.AspNetCore.Builder;

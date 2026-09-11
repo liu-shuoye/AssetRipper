@@ -107,7 +107,7 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 
 				string? originalDirectory = Path.GetDirectoryName(originalPath);
 				int count = collection.Count(asset => asset.GetBestName() != asset.ClassName);
-				if (count > 9)
+				if (count > 3)
 				{
 					if (originalDirectory == null || !originalDirectory.EndsWith(Path.GetFileNameWithoutExtension(originalPath)))
 					{

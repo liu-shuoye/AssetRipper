@@ -1,6 +1,6 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Export.Modules.Models;
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.SourceGenerated.Classes.ClassID_43;
 using AssetRipper.SourceGenerated.Extensions;
 using SharpGLTF.Scenes;

@@ -72,6 +72,7 @@
   <Project Path="Source/AssetRipper.Assets.Tests/AssetRipper.Assets.Tests.csproj" />
   <Project Path="Source/AssetRipper.Assets/AssetRipper.Assets.csproj" />
   <Project Path="Source/AssetRipper.Configuration/AssetRipper.Configuration.csproj" />
+  <Project Path="Source/AssetRipper.Diagnostics/AssetRipper.Diagnostics.csproj" />
   <Project Path="Source/AssetRipper.DocExtraction.ConsoleApp/AssetRipper.DocExtraction.ConsoleApp.csproj" />
   <Project Path="Source/AssetRipper.DocExtraction/AssetRipper.DocExtraction.csproj" />
   <Project Path="Source/AssetRipper.Export.Modules.Audio/AssetRipper.Export.Modules.Audio.csproj" />
@@ -93,6 +94,7 @@
   <Project Path="Source/AssetRipper.IO.Files.SourceGenerator/AssetRipper.IO.Files.SourceGenerator.csproj" />
   <Project Path="Source/AssetRipper.IO.Files.Tests/AssetRipper.IO.Files.Tests.csproj" />
   <Project Path="Source/AssetRipper.IO.Files/AssetRipper.IO.Files.csproj" />
+  <Project Path="Source/AssetRipper.Logging/AssetRipper.Logging.csproj" />
   <Project Path="Source/AssetRipper.Numerics.Tests/AssetRipper.Numerics.Tests.csproj" />
   <Project Path="Source/AssetRipper.Numerics/AssetRipper.Numerics.csproj" />
   <Project Path="Source/AssetRipper.Processing.SourceGenerator/AssetRipper.Processing.SourceGenerator.csproj" />

@@ -1,4 +1,4 @@
-﻿using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.Import.Structure.Platforms;
 using AssetRipper.IO.Files;
 

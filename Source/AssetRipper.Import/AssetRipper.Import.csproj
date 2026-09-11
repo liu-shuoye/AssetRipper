@@ -18,6 +18,7 @@
 	<ItemGroup>
 		<ProjectReference Include="..\AssetRipper.Assets\AssetRipper.Assets.csproj" />
 		<ProjectReference Include="..\AssetRipper.Configuration\AssetRipper.Configuration.csproj" />
+		<ProjectReference Include="..\AssetRipper.Logging\AssetRipper.Logging.csproj" />
 		<ProjectReference Include="..\AssetRipper.Numerics\AssetRipper.Numerics.csproj" />
 		<ProjectReference Include="..\AssetRipper.SerializationLogic\AssetRipper.SerializationLogic.csproj" />
 		<ProjectReference Include="..\AssetRipper.SourceGenerated.Extensions.SourceGenerator\AssetRipper.SourceGenerated.Extensions.SourceGenerator.csproj" />

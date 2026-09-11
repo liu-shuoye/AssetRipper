@@ -1,4 +1,4 @@
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.IO.Files;
 using AssetRipper.IO.Files.CompressedFiles;
 using AssetRipper.IO.Files.SerializedFiles;

@@ -1,4 +1,4 @@
-﻿using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using DXDecompiler;
 using DXDecompiler.Decompiler;
 using DXDecompiler.Util;

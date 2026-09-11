@@ -1,7 +1,7 @@
 using AssetRipper.Assets.Cloning;
 using AssetRipper.Assets.Metadata;
 using AssetRipper.Assets.Traversal;
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.IO.Endian;
 using AssetRipper.SourceGenerated.Classes.ClassID_1;
 using AssetRipper.SourceGenerated.Classes.ClassID_1001;

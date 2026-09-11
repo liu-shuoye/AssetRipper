@@ -3,7 +3,7 @@ using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Cloning;
 using AssetRipper.Export.UnityProjects.Project;
 using AssetRipper.Import.Configuration;
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.Processing.Configuration;
 using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Classes.ClassID_48;

@@ -1,4 +1,4 @@
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.SourceGenerated.Classes.ClassID_83;
 using AssetRipper.SourceGenerated.Extensions;
 using AssetRipper.SourceGenerated.NativeEnums.Fmod;

@@ -153,6 +153,41 @@ public sealed class SerializedAssetCollection : AssetCollection
 	}
 
 	/// <summary>
+	/// 遍历底层 <see cref="SerializedFile.Objects"/>，仅返回已反序列化（存在于 <see cref="AssetCollection.Assets"/> 字典）对象的 (ClassID, 序列化字节大小)，不触发反序列化。
+	/// ClassID 计算与 <see cref="EnsureAssetsLoaded"/> 保持一致：TypeID &lt; 0 → 114（MonoBehaviour），否则用 TypeID。
+	/// 用于内存诊断时只统计已加载进内存的对象体积，排除尚未反序列化的原始文件对象。
+	/// </summary>
+	public IEnumerable<(int ClassID, int DataSize)> EnumerateDeserializedObjectSizes()
+	{
+		SerializedFile? file = _sourceFile;
+		if (file is null)
+		{
+			yield break;
+		}
+		// 不能把 ReadOnlySpan<ObjectInfo> 保存为局部变量，因为 ref struct 不能跨 yield 边界。
+		// 每次循环通过索引访问 file.Objects[i]，由编译器在每次迭代中重新获取 span。
+		int length = file.Objects.Length;
+		for (int i = 0; i < length; i++)
+		{
+			ObjectInfo info = file.Objects[i];
+			// 仅统计已反序列化、真正驻留内存的对象；assets 字典的键即 PathID/FileID，
+			// 这样能精确反映 AssetCollection.Assets 当前的内存占用，而非原始文件全部对象。
+			if (!assets.ContainsKey(info.FileID))
+			{
+				continue;
+			}
+			int classID = info.TypeID < 0 ? 114 : info.TypeID;
+			yield return (classID, info.DataSize);
+		}
+	}
+
+	/// <summary>
+	/// 返回底层 <see cref="SerializedFile"/>，供内存诊断统计其（解析元数据、ObjectInfo 数组、类型树、字符串名表等）真实托管堆占用。
+	/// 仅在诊断场景读取，不参与正常反序列化流程。
+	/// </summary>
+	public SerializedFile? SerializedFileForDiagnostics => _sourceFile;
+
+	/// <summary>
 	/// 单对象反序列化：若已全量加载或此前已单对象反序列化过则直接走字典查询；否则从 ObjectInfo 数组按 PathID
 	/// 查找并反序列化单个对象。反序列化后的对象加入 assets 字典避免重复反序列化，但 <see cref="_assetsLoaded"/>
 	/// 保持 false，以保持懒加载状态兼容老代码（GetEnumerator 仍会触发全量加载）。

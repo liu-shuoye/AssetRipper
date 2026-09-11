@@ -1,5 +1,5 @@
-﻿using AssetRipper.Assets;
-using AssetRipper.Import.Logging;
+using AssetRipper.Assets;
+using AssetRipper.Logging;
 using AssetRipper.SourceGenerated.Classes.ClassID_1006;
 using AssetRipper.SourceGenerated.Classes.ClassID_1055;
 using AssetRipper.SourceGenerated.Classes.ClassID_117;

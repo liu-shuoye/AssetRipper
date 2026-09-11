@@ -1,11 +1,10 @@
-﻿using AssetRipper.IO.Files;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
 
-namespace AssetRipper.Import;
+namespace AssetRipper.Logging;
 
 /// <summary>  AssetRipper运行时信息 </summary>
 public static partial class AssetRipperRuntimeInformation
@@ -32,7 +31,8 @@ public static partial class AssetRipperRuntimeInformation
 		/// <summary>
 		/// “已编译”或“已发布”
 		/// </summary>
-		public static string Type => File.Exists(Path.Join(LocalFileSystem.ExecutingDirectory, "AssetRipper.Assets.dll")) ? "Compiled" : "Published";
+		/// <remarks>用 AppContext.BaseDirectory 而不是 LocalFileSystem.ExecutingDirectory：两者取值相同，但本程序集保持零依赖。</remarks>
+		public static string Type => File.Exists(Path.Join(AppContext.BaseDirectory, "AssetRipper.Assets.dll")) ? "Compiled" : "Published";
 
 		public static string? Version => typeof(AssetRipperRuntimeInformation).Assembly.GetName().Version?.ToString();
 	}
@@ -130,7 +130,7 @@ public static partial class AssetRipperRuntimeInformation
 	{
 		get
 		{
-			string path = Path.Join(LocalFileSystem.ExecutingDirectory, "compile_time.txt");
+			string path = Path.Join(AppContext.BaseDirectory, "compile_time.txt");
 			if (File.Exists(path))
 			{
 				return File.ReadAllText(path).Trim();

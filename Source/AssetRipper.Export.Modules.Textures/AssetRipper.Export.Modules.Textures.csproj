@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<OutputPath>..\0Bins\Other\AssetRipper.Export.Modules.Textures\$(Configuration)\</OutputPath>
@@ -16,6 +16,10 @@
 		<PackageReference Include="AssetRipper.TextureDecoder" Version="2.6.2" />
 		<PackageReference Include="AssetRipper.Tpk" Version="1.2.0" />
 		<PackageReference Include="StbImageWriteSharp" Version="1.16.7" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\AssetRipper.Logging\AssetRipper.Logging.csproj" />
 	</ItemGroup>
 
 </Project>

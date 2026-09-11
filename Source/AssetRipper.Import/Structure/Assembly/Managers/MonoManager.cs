@@ -1,6 +1,6 @@
 using AsmResolver.DotNet;
 using AsmResolver.PE.File;
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.Import.Structure.Platforms;
 using AssetRipper.IO.Files;
 using System.Diagnostics;

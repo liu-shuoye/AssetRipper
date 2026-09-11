@@ -1,6 +1,6 @@
-﻿using AssetRipper.Export.Configuration;
+using AssetRipper.Export.Configuration;
 using AssetRipper.Import.Configuration;
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.Import.Structure.Platforms;
 using AssetRipper.Processing;
 

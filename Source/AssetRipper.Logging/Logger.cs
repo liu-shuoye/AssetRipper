@@ -1,7 +1,11 @@
-﻿using System.Text;
+using System.Text;
 
-namespace AssetRipper.Import.Logging;
+namespace AssetRipper.Logging;
 
+/// <summary>
+/// 全局日志入口。本程序集刻意零依赖，因此 AssetRipper 最底层的程序集（如 AssetRipper.Assets）也能直接使用。
+/// Cpp2IL 日志桥接与内存诊断等"上层才知道怎么办"的内容，分别放在 <c>AssetRipper.Import</c> 里。
+/// </summary>
 public static class Logger
 {
 	private static readonly object _lock = new();
@@ -10,18 +14,13 @@ public static class Logger
 
 	public static event Action<string, object?> OnStatusChanged = (_, _) => { };
 
-	static Logger()
-	{
-		Cpp2IL.Core.Logging.Logger.InfoLog += (message, source) => LogCpp2IL(LogType.Info, message);
-		Cpp2IL.Core.Logging.Logger.WarningLog += (message, source) => LogCpp2IL(LogType.Verbose, message);
-		Cpp2IL.Core.Logging.Logger.ErrorLog += (message, source) => LogCpp2IL(LogType.Error, message);
-		Cpp2IL.Core.Logging.Logger.VerboseLog += (message, source) => LogCpp2IL(LogType.Verbose, message);
-	}
-
-	private static void LogCpp2IL(LogType logType, string message)
-	{
-		Log(logType, LogCategory.Cpp2IL, message.Trim());
-	}
+	/// <summary>
+	/// 供上层把外部日志系统的输出桥接进来（见 AssetRipper.Import 的 Cpp2ILBridge）：
+	/// 统一裁掉首尾空白并打上 <see cref="LogCategory.Cpp2IL"/> 分类标记。
+	/// </summary>
+	/// <param name="logType">映射后的日志级别。</param>
+	/// <param name="message">外部日志系统的原始消息。</param>
+	public static void LogExternal(LogType logType, string message) => Log(logType, LogCategory.Cpp2IL, message.Trim());
 
 	public static void Log(LogType type, LogCategory category, string message)
 	{
@@ -108,10 +107,16 @@ public static class Logger
 		Log(LogType.Info, LogCategory.System, $"UTC Current Time: {AssetRipperRuntimeInformation.CurrentTime}");
 		Log(LogType.Info, LogCategory.System, $"UTC Compile Time: {AssetRipperRuntimeInformation.CompileTime}");
 	}
+	public static void Add(ILogger logger) => loggers.Add(logger);
+
 	/// <summary>
 	/// 输出当前内存状态，用于定位哪个阶段内存上涨最多。
+	/// 只做最基础的快照（强制 GC 后读取托管堆与工作集），更详细的按类型拆解在
+	/// <c>AssetRipper.Diagnostics.Memory.MemoryDiagnostics</c> 里——那部分需要资产对象模型，放不在本程序集。
 	/// </summary>
-	public static void LogMemoryDiagnostics(string stage)
+	/// <param name="stage">当前阶段标识。</param>
+	/// <returns>强制回收后的托管堆字节数，便于调用方自行比较涨幅。</returns>
+	public static long LogMemoryDiagnostics(string stage)
 	{
 		// 强制 GC 后再统计，排除已可回收但未回收的对象干扰
 		GC.Collect();
@@ -120,9 +125,9 @@ public static class Logger
 
 		long managedMemory = GC.GetTotalMemory(false);
 		long workingSet = Environment.WorkingSet;
-		Logger.Info(LogCategory.Processing, $"[内存诊断] {stage}: 托管: {managedMemory / 1024.0 / 1024.0:F1} MB | 工作集: {workingSet / 1024.0 / 1024.0:F1} MB");
+		Info(LogCategory.Processing, $"[内存诊断] {stage}: 托管: {managedMemory / 1024.0 / 1024.0:F1} MB | 工作集: {workingSet / 1024.0 / 1024.0:F1} MB");
+		return managedMemory;
 	}
-	public static void Add(ILogger logger) => loggers.Add(logger);
 
 	public static void Remove(ILogger logger) => loggers.Remove(logger);
 

@@ -1,7 +1,7 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.Modules.Audio;
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.SourceGenerated.Classes.ClassID_83;
 
 namespace AssetRipper.Export.UnityProjects.Audio;

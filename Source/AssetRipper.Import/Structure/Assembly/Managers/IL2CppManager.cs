@@ -1,6 +1,6 @@
 using AsmResolver.DotNet;
 using AssetRipper.Import.Configuration;
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.Import.Structure.Platforms;
 using Cpp2IL.Core.Api;
 using Cpp2IL.Core.InstructionSets;

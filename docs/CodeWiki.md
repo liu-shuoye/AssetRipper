@@ -68,8 +68,12 @@ AssetRipper 采用**经典的分层管线架构**，数据自底向上流动：
 ├─────────────────────────────────────────────────────────────┤
 │  资产模型层  Assets（资产集合、对象模型、Bundle 层次）          │
 ├─────────────────────────────────────────────────────────────┤
+│  诊断层  Diagnostics（内存诊断；依赖 Assets + ClrMD）           │
+├─────────────────────────────────────────────────────────────┤
 │  基础层  IO.Files（文件解析）| Numerics | Yaml | Configuration│
 │          SerializationLogic | SourceGenerated（生成的资产类）  │
+├─────────────────────────────────────────────────────────────┤
+│  最底层  Logging（零依赖的日志模块，任意层可用）                │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -118,12 +122,18 @@ Unity 工程（Assets / ProjectSettings / Packages 等）+ 后处理文件
 ### 基础层
 | 项目 | 职责 |
 |---|---|
+| `AssetRipper.Logging` | 日志模块（`Logger`/`ILogger`/`LogType`/`LogCategory`/各 Logger 实现/`AssetRipperRuntimeInformation`）。**零依赖**，处于依赖图最底层，任何层都能直接使用 |
 | `AssetRipper.IO.Files` | Unity 文件格式二进制解析（Bundle / SerializedFile / WebFile / 资源文件 / 压缩流 / SmartStream） |
 | `AssetRipper.Assets` | 资产对象模型：`IUnityObjectBase`、`AssetCollection`、`Bundle`/`GameBundle`、PPtr 引用、克隆/遍历 |
 | `AssetRipper.Numerics` | Unity 数学类型（Vector2/3/4、Matrix4x4、Color 等，供生成类使用） |
 | `AssetRipper.Yaml` | YAML 写出器（导出 `.meta` / `.asset` 文本文件用） |
 | `AssetRipper.Configuration` | 通用配置数据容器（DataSet / DataInstance / Singleton 与 List 存储） |
 | `AssetRipper.SerializationLogic` | 判断资产属于场景/预制体等序列化类型的静态逻辑 |
+
+### 诊断层
+| 项目 | 职责 |
+|---|---|
+| `AssetRipper.Diagnostics` | 内存诊断（`MemoryDiagnostics` / `ClrMdHeapAnalyzer` / `ManagedSizeCalculator`）。依赖 Logging + Assets + ClrMD，**刻意独立成程序集**，避免 ClrMD 这类重依赖渗进最底层模型层；也不能放进 Assets（`ClassIDType` 所在的 `SourceGenerated` 反过来引用 Assets，会成环） |
 
 ### 管线层
 | 项目 | 职责 |
@@ -274,7 +284,9 @@ Unity 工程（Assets / ProjectSettings / Packages 等）+ 后处理文件
 | `GameInitializer` | `Structure/GameInitializer.cs` | 版本变更（`VersionChanger`）、引擎资源注入（`EngineResourceInjector`）、自定义资源提供 |
 | `DependencyMap` / `DependencyMapScanner` | `Structure/DependencyMap.cs` | 跨文件夹依赖映射：打开子文件夹时解析不在范围内的依赖文件 |
 | `ZipExtractor` | `Structure/ZipExtractor.cs` | 输入 zip 解压 |
-| `Logger` / `ILogger` / `FileLogger` / `ConsoleLogger` | `Logging/` | 日志系统（含内存诊断 `LogMemoryDiagnostics`、状态变更 `SendStatusChange`） |
+| `Logger` / `ILogger` / `FileLogger` / `ConsoleLogger` | 独立程序集 `AssetRipper.Logging/` | 日志系统（状态变更 `SendStatusChange`）。零依赖，下层程序集也能用 |
+| `Cpp2ILBridge` | `Logging/Cpp2ILBridge.cs` | 用模块初始化器把 Cpp2IL 的日志桥接到 `AssetRipper.Logging.Logger` |
+| `MemoryDiagnostics` | 独立程序集 `AssetRipper.Diagnostics/Memory/` | 内存诊断：阶段快照 + 按资源类型拆解（总量/数量/平均占用榜），见"关键设计要点" |
 | `ScriptingBackend` | `Structure/Assembly/ScriptingBackend.cs` | Mono / IL2CPP / Unknown 枚举 |
 
 ### 5.6 序列化逻辑（AssetRipper.SerializationLogic）
@@ -440,6 +452,8 @@ Unity 工程（Assets / ProjectSettings / Packages 等）+ 后处理文件
 依赖方向自底向上（`csproj` 的 ProjectReference 链）：
 
 ```
+[最底]  Logging（零依赖，被 Assets / Import / 各导出与入口层直接引用）
+         ↑
 [基础]  IO.Files  ←  Assets ←  Import ←  Processing
                 ↘     ↙ Numerics / Yaml / Configuration（被多个上层引用）
                         ↙
@@ -447,13 +461,16 @@ Unity 工程（Assets / ProjectSettings / Packages 等）+ 后处理文件
     SourceGenerated（AssetRipper.SourceGenerated.dll，被 Import/Export 引用）
 
 [导入]  Import
-        ├── 引用 IO.Files、Assets、SerializationLogic、Configuration
+        ├── 引用 IO.Files、Assets、Logging、SerializationLogic、Configuration
         └── 程序集工具链（AsmResolver、Cpp2IL、ICSharpCode.Decompiler 等 NuGet）
 
 [处理]  Processing → Import、Assets
 
+[诊断]  Diagnostics → Logging、Assets（+ SourceGenerated / ClrMD 包）
+        Diagnostics 只被导出/入口层引用；Import 与 Assets 都**不**依赖它
+
 [导出]  Export（抽象）→ Assets、Configuration
-        Export.UnityProjects → Export、Import、Processing、Assets
+        Export.UnityProjects → Export、Import、Processing、Assets、Logging、Diagnostics
         Export.PrimaryContent → Export、Export.UnityProjects
         Export.Modules.{Textures,Models,Audio,Shaders} → Assets、Export.UnityProjects
         （GUI.Web 引用 Export.Modules.Shaders / PrimaryContent / UnityProjects）
@@ -559,7 +576,7 @@ dotnet test -c Debug
 5. **确定性 GUID**：可选按资产稳定标识计算 GUID，保证跨批次导出结果可复现。
 6. **双 GC 重置**：`GameFileLoader.Reset` 在释放 Bundle 后执行两轮 `GC.Collect()`（第一轮触发终结器，第二轮回收终结器释放的对象），确保重新加载前内存被回收。
 7. **代码生成驱动**：`AssetRipper.SourceGenerated` 的全部资产类型类由 AssemblyDumper 工具链从 Unity 程序集自动生成，配合多个 SourceGenerator 在编译期注入扩展，保证对海量 Unity 版本/类型的覆盖率。
-8. **内存诊断**：管线各阶段通过 `Logger.LogMemoryDiagnostics` 记录内存峰值，用于验证懒加载效果。
+8. **日志与内存诊断**：日志模块是**独立且零依赖**的 `AssetRipper.Logging` 程序集（`Logger` / `ILogger` / `LogType` / `LogCategory` / 各 Logger 实现 / `AssetRipperRuntimeInformation`），位于依赖图最底层，`AssetRipper.Assets` 等下层程序集可直接使用；Cpp2IL 日志桥接放在 `AssetRipper.Import/Logging/Cpp2ILBridge.cs`（模块初始化器挂接）。内存诊断是**独立程序集 `AssetRipper.Diagnostics`**（依赖 Logging + Assets + ClrMD），这样 ClrMD 这类重依赖不会污染最底层模型程序集。管线各阶段用 `Logger.LogMemoryDiagnostics` 记录内存峰值，用于验证懒加载效果；托管的详细拆解由 `MemoryDiagnostics.LogMemoryDiagnostics(stage, collections)` 负责——当托管堆较上次拆解增长超过阈值（`RURI_MEM_BREAKDOWN_GROWTH_MB`，默认 1024MB，0 关闭）时自动追加一次。`MemoryDiagnostics.LogResourceBreakdown` 按资源类型拆解占用，输出四张榜（总量 25 / 数量 10 / **平均占用 25** / Unity 资产归并与命名空间分组），口径由 `RURI_MEM_BREAKDOWN_MODE` 选择：默认按序列化字节、`live` 按反射估算真实托管堆、`clrmd` 用 ClrMD 抓取整个进程 GC 堆快照按托管类型聚合。
 
 ---
 

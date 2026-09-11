@@ -1,5 +1,5 @@
-﻿using AssetRipper.Import.Configuration;
-using AssetRipper.Import.Logging;
+using AssetRipper.Import.Configuration;
+using AssetRipper.Logging;
 using AssetRipper.Import.Platforms;
 using AssetRipper.Import.Structure.Assembly;
 using AssetRipper.Import.Structure.Assembly.Managers;

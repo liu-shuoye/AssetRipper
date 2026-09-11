@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<OutputPath>..\0Bins\Other\AssetRipper.Export.Modules.Audio\$(Configuration)\</OutputPath>
@@ -22,6 +22,10 @@
 
 	<ItemGroup>
 		<None Remove="C:\Users\**\.nuget\packages\naudio.vorbis\**\README.md" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\AssetRipper.Logging\AssetRipper.Logging.csproj" />
 	</ItemGroup>
 
 </Project>

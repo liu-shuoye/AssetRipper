@@ -1,12 +1,12 @@
-﻿using AssetRipper.IO.Files;
-
-namespace AssetRipper.Import.Logging;
+namespace AssetRipper.Logging;
 
 public abstract class FileLoggerBase : ILogger
 {
 	protected readonly string filePath;
 
-	public FileLoggerBase() : this(Path.Join(LocalFileSystem.ExecutingDirectory, "AssetRipper.log")) { }
+	// 用 AppContext.BaseDirectory 而不是 LocalFileSystem.ExecutingDirectory：两者取值相同，
+	// 但本程序集要保持零依赖（见 csproj 注释）
+	public FileLoggerBase() : this(Path.Join(AppContext.BaseDirectory, "AssetRipper.log")) { }
 
 	/// <param name="filePath">The absolute path to the log file</param>
 	public FileLoggerBase(string filePath)

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputPath>..\0Bins\Other\AssetRipper.Diagnostics\$(Configuration)\</OutputPath>
+		<IntermediateOutputPath>..\0Bins\obj\AssetRipper.Diagnostics\$(Configuration)\</IntermediateOutputPath>
+	</PropertyGroup>
+
+	<!-- 诊断程序集：只放"要读资产对象模型才知道怎么办"的诊断能力。
+	     依赖刻意压到最小（Logging + Assets + ClrMD），这样：
+	     ① 处于模型层之上，不会与 SourceGenerated 形成环（ClassIDType 在 SourceGenerated 里，而它引用 Assets）；
+	     ② ClrMD 这类重依赖被隔离在本程序集，不会污染最底层的 Assets。 -->
+
+	<ItemGroup>
+		<ProjectReference Include="..\AssetRipper.Assets\AssetRipper.Assets.csproj" />
+		<ProjectReference Include="..\AssetRipper.Logging\AssetRipper.Logging.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- 把托管类型名映射回 Unity ClassID 名（ClassIDType 枚举）时用 -->
+		<PackageReference Include="AssetRipper.SourceGenerated" Version="1.3.14.2" />
+		<!-- 整堆快照（RURI_MEM_BREAKDOWN_MODE=clrmd）：停在 3.1.x，4.x 会额外拖入 Azure.Identity 依赖链 -->
+		<PackageReference Include="Microsoft.Diagnostics.Runtime" Version="3.1.512801" />
+	</ItemGroup>
+
+</Project>

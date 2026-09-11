@@ -1,4 +1,4 @@
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.Import.Platforms;
 using AssetRipper.Import.Structure.Assembly;
 using AssetRipper.Import.Structure.Assembly.Managers;
@@ -384,7 +384,10 @@ public abstract partial class PlatformGameStructure
 	protected static void AddAssetBundle(List<KeyValuePair<string, string>> files, string name, string path)
 	{
 		files.Add(name, path);
-		Logger.Info(LogCategory.Import, $"已找到资源包 '{name}'");
+		if (files.Count%1000==0)
+		{
+			Logger.Info(LogCategory.Import, $"已找到资源包 {files.Count}:'{name}'");
+		}
 	}
 
 	protected UnityVersion GetUnityVersionFromSerializedFile(string filePath)

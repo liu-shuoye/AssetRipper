@@ -257,6 +257,12 @@ public struct ObjectInfo
 	public SerializedType? Type { get; set; }
 
 	/// <summary>
+	/// 对象序列化数据的字节长度。读阶段（<see cref="Read"/>）即已确定，访问它不会触发 <see cref="LoadObjectData"/>，
+	/// 因此可在不反序列化对象本体的前提下，安全地估算该对象占用的数据量（用于内存诊断按类型拆分）。
+	/// </summary>
+	public int DataSize => _dataSize;
+
+	/// <summary>
 	/// The data for the object.
 	/// </summary>
 	[AllowNull]

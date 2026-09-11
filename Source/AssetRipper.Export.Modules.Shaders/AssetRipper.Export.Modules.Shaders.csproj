@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<OutputPath>..\0Bins\Other\AssetRipper.Export.Modules.Shaders\$(Configuration)\</OutputPath>
@@ -13,6 +13,10 @@
 
 	<ItemGroup>
 		<PackageReference Include="DXDecompiler-ly" Version="0.0.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\AssetRipper.Logging\AssetRipper.Logging.csproj" />
 	</ItemGroup>
 
 </Project>

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<OutputPath>..\0Bins\Other\AssetRipper.Export\$(Configuration)\</OutputPath>
@@ -11,6 +11,10 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\AssetRipper.Processing\AssetRipper.Processing.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\AssetRipper.Logging\AssetRipper.Logging.csproj" />
 	</ItemGroup>
 
 </Project>

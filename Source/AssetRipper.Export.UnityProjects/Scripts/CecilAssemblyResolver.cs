@@ -1,5 +1,5 @@
-﻿using AsmResolver.DotNet;
-using AssetRipper.Import.Logging;
+using AsmResolver.DotNet;
+using AssetRipper.Logging;
 using AssetRipper.Import.Structure.Assembly.Managers;
 using AssetRipper.Processing.Assemblies;
 using ICSharpCode.Decompiler.Metadata;

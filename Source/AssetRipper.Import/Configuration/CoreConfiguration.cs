@@ -1,5 +1,5 @@
-﻿using AssetRipper.Configuration;
-using AssetRipper.Import.Logging;
+using AssetRipper.Configuration;
+using AssetRipper.Logging;
 using AssetRipper.IO.Files;
 using System.Diagnostics;
 

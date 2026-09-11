@@ -7,7 +7,7 @@ using AssetRipper.Export.PrimaryContent.Models;
 using AssetRipper.Export.PrimaryContent.Scripts;
 using AssetRipper.Export.PrimaryContent.Textures;
 using AssetRipper.Import.Configuration;
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.Processing;
 using AssetRipper.Processing.Prefabs;
 using AssetRipper.Processing.Textures;

@@ -1,7 +1,7 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Assets.Generics;
 using AssetRipper.Export.Modules.Models;
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.SourceGenerated.Classes.ClassID_238;
 using AssetRipper.SourceGenerated.Subclasses.HeightMeshData;
 using AssetRipper.SourceGenerated.Subclasses.Vector3f;

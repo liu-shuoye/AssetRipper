@@ -1,7 +1,7 @@
-﻿using AssetRipper.Export.Modules.Shaders.ShaderBlob;
+using AssetRipper.Export.Modules.Shaders.ShaderBlob;
 using AssetRipper.Export.Modules.Shaders.ShaderBlob.Parameters;
 using AssetRipper.Export.Modules.Shaders.UltraShaderConverter.UShader.Function;
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 
 namespace AssetRipper.Export.Modules.Shaders.UltraShaderConverter.USIL.Metadders;
 

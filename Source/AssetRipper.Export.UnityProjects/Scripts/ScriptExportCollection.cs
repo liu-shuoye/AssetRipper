@@ -1,7 +1,7 @@
 using AsmResolver.DotNet;
 using AssetRipper.Assets;
 using AssetRipper.Export.UnityProjects.Scripts.AssemblyDefinitions;
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using AssetRipper.Import.Structure.Assembly;
 using AssetRipper.Import.Structure.Assembly.Managers;
 using AssetRipper.SourceGenerated.Classes.ClassID_1050;

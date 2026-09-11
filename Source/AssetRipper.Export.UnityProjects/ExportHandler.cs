@@ -1,11 +1,14 @@
+using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets.Collections;
+using AssetRipper.Diagnostics.Memory;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects.PathIdMapping;
 using AssetRipper.Export.UnityProjects.Project;
 using AssetRipper.Export.UnityProjects.Scripts;
 using AssetRipper.Import.Configuration;
-using AssetRipper.Import.Logging;
 using AssetRipper.Import.Structure;
+using AssetRipper.Logging;
 using AssetRipper.Processing;
 using AssetRipper.Processing.AnimatorControllers;
 using AssetRipper.Processing.Assemblies;
@@ -15,6 +18,9 @@ using AssetRipper.Processing.Prefabs;
 using AssetRipper.Processing.Scenes;
 using AssetRipper.Processing.ScriptableObject;
 using AssetRipper.Processing.Textures;
+using AssetRipper.SourceGenerated.Extensions.SourceGenerator;
+using System;
+using System.Linq;
 
 namespace AssetRipper.Export.UnityProjects;
 
@@ -25,6 +31,15 @@ namespace AssetRipper.Export.UnityProjects;
 public class ExportHandler(FullConfiguration settings)
 {
 	protected FullConfiguration Settings { get; } = settings;
+
+	/// <summary>
+	/// 内存诊断入口：把当前 GameData 的资产集合（惰性求值，拆解时才真正枚举）交给 <see cref="Logger"/>。
+	/// 只有默认／live 口径需要它，<c>clrmd</c> 口径用不到但传了也无害。
+	/// </summary>
+	private static void LogMemoryDiagnostics(GameData gameData, string stage)
+	{
+		MemoryDiagnostics.LogMemoryDiagnostics(stage, gameData.GameBundle.FetchAssetCollections());
+	}
 
 	public GameData Load(IReadOnlyList<string> paths, FileSystem fileSystem)
 	{
@@ -46,13 +61,13 @@ public class ExportHandler(FullConfiguration settings)
 	public void Process(GameData gameData)
 	{
 		Logger.Info(LogCategory.Processing, "正在处理加载的资产...");
-		Logger.LogMemoryDiagnostics("Process开始");
+		LogMemoryDiagnostics(gameData, "Process开始");
 		foreach (IAssetProcessor processor in GetProcessors())
 		{
 			string processorName = processor.GetType().Name;
-			Logger.LogMemoryDiagnostics($"Process前 - {processorName}");
+			LogMemoryDiagnostics(gameData, $"Process前 - {processorName}");
 			processor.Process(gameData);
-			Logger.LogMemoryDiagnostics($"Process后 - {processorName}");
+			LogMemoryDiagnostics(gameData, $"Process后 - {processorName}");
 		}
 
 		Logger.Info(LogCategory.Processing, "已处理完资产");
@@ -112,22 +127,22 @@ public class ExportHandler(FullConfiguration settings)
 		Settings.ExportRootPath = outputPath;
 		Settings.SetProjectSettings(gameData.ProjectVersion);
 
-		Logger.LogMemoryDiagnostics("Export前 - 创建ProjectExporter");
+		LogMemoryDiagnostics(gameData, "Export前 - 创建ProjectExporter");
 		ProjectExporter projectExporter = new(Settings, gameData.AssemblyManager);
 		BeforeExport(projectExporter);
 		projectExporter.DoFinalOverrides(Settings);
-		Logger.LogMemoryDiagnostics("Export前 - DoFinalOverrides完成");
+		LogMemoryDiagnostics(gameData, "Export前 - DoFinalOverrides完成");
 		projectExporter.Export(gameData.GameBundle, Settings, fileSystem);
-		Logger.LogMemoryDiagnostics("Export后 - 主导出完成");
+		LogMemoryDiagnostics(gameData, "Export后 - 主导出完成");
 
 		Logger.Info(LogCategory.Export, "资产导出完成");
 
 		foreach (IPostExporter postExporter in GetPostExporters())
 		{
 			string postExporterName = postExporter.GetType().Name;
-			Logger.LogMemoryDiagnostics($"PostExport前 - {postExporterName}");
+			LogMemoryDiagnostics(gameData, $"PostExport前 - {postExporterName}");
 			postExporter.DoPostExport(gameData, Settings, fileSystem);
-			Logger.LogMemoryDiagnostics($"PostExport后 - {postExporterName}");
+			LogMemoryDiagnostics(gameData, $"PostExport后 - {postExporterName}");
 		}
 
 		Logger.Info(LogCategory.Export, "导出完成之后");
@@ -164,12 +179,15 @@ public class ExportHandler(FullConfiguration settings)
 		// 分两步加载：先 Load（不触发反序列化），再 Process（触发反序列化）
 		// 中间输出内存诊断，用于验证懒加载效果
 		GameData gameData = Load(paths, fileSystem);
-		Logger.LogMemoryDiagnostics("Load完成（懒加载，资产未反序列化）");
+		LogMemoryDiagnostics(gameData, "Load完成（懒加载，资产未反序列化）");
+		MemoryDiagnostics.LogResourceBreakdown(gameData.GameBundle.FetchAssetCollections(), "Load完成（未反序列化）");
 		if (gameData.GameBundle.HasAnyAssetCollections())
 		{
 			Process(gameData);
 		}
-		Logger.LogMemoryDiagnostics("Process完成（资产已反序列化）");
+
+		LogMemoryDiagnostics(gameData, "Process完成（资产已反序列化）");
+		MemoryDiagnostics.LogResourceBreakdown(gameData.GameBundle.FetchAssetCollections(), "Process完成（已反序列化）");
 
 		return gameData;
 	}

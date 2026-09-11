@@ -1,51 +1,51 @@
-﻿using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 
 namespace AssetRipper.Export.Configuration;
 
 public sealed record class ExportSettings
 {
 	/// <summary>
-	/// The file format that audio clips get exported in. Recommended: Ogg
+	/// 音频剪辑导出为何种格式？推荐：Ogg
 	/// </summary>
 	public AudioExportFormat AudioExportFormat { get; set; } = AudioExportFormat.Default;
 
 	/// <summary>
-	/// The file format that images (like textures) get exported in.
+	/// 图像（如纹理）导出为何种格式？
 	/// </summary>
 	public ImageExportFormat ImageExportFormat { get; set; } = ImageExportFormat.Original;
 
 	/// <summary>
-	/// The file format that images (like textures) get exported in.
+	/// 环境光贴图导出为何种格式？
 	/// </summary>
-	public LightmapTextureExportFormat LightmapTextureExportFormat { get; set; } = LightmapTextureExportFormat.Yaml;
+	public LightmapTextureExportFormat LightmapTextureExportFormat { get; set; } = LightmapTextureExportFormat.Exr;
 
 	/// <summary>
-	/// How are MonoScripts exported? Recommended: Decompiled
+	/// 脚本如何导出？推荐：Hybrid
 	/// </summary>
 	public ScriptExportMode ScriptExportMode { get; set; } = ScriptExportMode.Hybrid;
 
 	/// <summary>
-	/// The C# language version of decompiled scripts.
+	/// 解密脚本时使用的 C# 语言版本。
 	/// </summary>
 	public ScriptLanguageVersion ScriptLanguageVersion { get; set; } = ScriptLanguageVersion.AutoSafe;
 
 	/// <summary>
-	/// If true, type references in scripts are fully qualified.
+	/// 是否对脚本中的类型引用进行完全限定？
 	/// </summary>
 	public bool ScriptTypesFullyQualified { get; set; } = false;
 
 	/// <summary>
-	/// How to export shaders?
+	/// 如何导出着色器？
 	/// </summary>
 	public ShaderExportMode ShaderExportMode { get; set; } = ShaderExportMode.RuriDecompile;
 
 	/// <summary>
-	/// Should sprites be exported as a texture? Recommended: Native
+	/// 是否将精灵导出为纹理？推荐：原生
 	/// </summary>
-	public SpriteExportMode SpriteExportMode { get; set; } = SpriteExportMode.Yaml;
+	public SpriteExportMode SpriteExportMode { get; set; } = SpriteExportMode.Native;
 
 	/// <summary>
-	/// How are text assets exported?
+	/// 文本资产如何导出？
 	/// </summary>
 	public TextExportMode TextExportMode { get; set; } = TextExportMode.Parse;
 

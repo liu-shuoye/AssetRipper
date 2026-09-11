@@ -5,7 +5,7 @@ using AssetRipper.IO.Files.CompressedFiles;
 using AssetRipper.IO.Files.ResourceFiles;
 using AssetRipper.IO.Files.SerializedFiles;
 using AssetRipper.IO.Files.SerializedFiles.Parser;
-using Cpp2IL.Core.Logging;
+using AssetRipper.Logging;
 
 namespace AssetRipper.Assets.Bundles;
 
@@ -37,10 +37,10 @@ partial class GameBundle
 	private void InitializeFromPaths(IEnumerable<string> paths, AssetFactoryBase assetFactory, FileSystem fileSystem, IGameInitializer? initializer)
 	{
 		ResourceProvider = initializer?.ResourceProvider;
-		LogMemoryDiagnostics("加载文件和依赖项前");
+		Logger.LogMemoryDiagnostics("加载文件和依赖项前");
 		List<FileBase> fileStack = LoadFilesAndDependencies(paths, fileSystem, initializer?.DependencyProvider);
 		UnityVersion defaultVersion = initializer?.DefaultVersion ?? default;
-		LogMemoryDiagnostics("加载文件和依赖项后");
+		Logger.LogMemoryDiagnostics("加载文件和依赖项后");
 		while (fileStack.Count > 0)
 		{
 			switch (RemoveLastItem(fileStack))
@@ -61,22 +61,7 @@ partial class GameBundle
 			}
 		}
 
-		LogMemoryDiagnostics("资源序列化后");
-	}
-
-	/// <summary>
-	/// 输出当前内存状态，用于定位哪个阶段内存上涨最多。
-	/// </summary>
-	public static void LogMemoryDiagnostics(string stage)
-	{
-		// 强制 GC 后再统计，排除已可回收但未回收的对象干扰
-		GC.Collect();
-		GC.WaitForPendingFinalizers();
-		GC.Collect();
-
-		long managedMemory = GC.GetTotalMemory(false);
-		long workingSet = Environment.WorkingSet;
-		Logger.Info($"[内存诊断] {stage}: 托管: {managedMemory / 1024.0 / 1024.0:F1} MB | 工作集: {workingSet / 1024.0 / 1024.0:F1} MB");
+		Logger.LogMemoryDiagnostics("资源序列化后");
 	}
 
 	private static FileBase RemoveLastItem(List<FileBase> list)

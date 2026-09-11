@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<OutputPath>..\0Bins\Other\AssetRipper.Export.UnityProjects\$(Configuration)\</OutputPath>
@@ -16,11 +16,13 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\AssetRipper.Diagnostics\AssetRipper.Diagnostics.csproj" />
 		<ProjectReference Include="..\AssetRipper.Export.Modules.Audio\AssetRipper.Export.Modules.Audio.csproj" />
 		<ProjectReference Include="..\AssetRipper.Export.Modules.Models\AssetRipper.Export.Modules.Models.csproj" />
 		<ProjectReference Include="..\AssetRipper.Export.Modules.Shaders\AssetRipper.Export.Modules.Shaders.csproj" />
 		<ProjectReference Include="..\AssetRipper.Export.Modules.Textures\AssetRipper.Export.Modules.Textures.csproj" />
 		<ProjectReference Include="..\AssetRipper.Import\AssetRipper.Import.csproj" />
+		<ProjectReference Include="..\AssetRipper.Logging\AssetRipper.Logging.csproj" />
 		<ProjectReference Include="..\AssetRipper.Processing\AssetRipper.Processing.csproj" />
 		<ProjectReference Include="..\AssetRipper.Yaml\AssetRipper.Yaml.csproj" />
 		<!-- Shader 还原：编译后着色器二进制 -> 可读 HLSL 的反编译库。 -->

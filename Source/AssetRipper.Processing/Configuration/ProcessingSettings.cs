@@ -1,4 +1,4 @@
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 
 namespace AssetRipper.Processing.Configuration;
 

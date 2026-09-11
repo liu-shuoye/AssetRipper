@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputPath>..\0Bins\Other\AssetRipper.Logging\$(Configuration)\</OutputPath>
+		<IntermediateOutputPath>..\0Bins\obj\AssetRipper.Logging\$(Configuration)\</IntermediateOutputPath>
+		<!-- AssetRipperRuntimeInformation 用 [LibraryImport] 查询物理内存，其生成的代码需要 unsafe -->
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	</PropertyGroup>
+
+	<!-- 日志模块刻意保持零依赖（只用 BCL）：它处于依赖图最底层，
+	     AssetRipper.Assets 等下层程序集都要能用它，一旦引入任何 AssetRipper 项目就会形成循环。
+	     Cpp2IL 的日志桥接放在 AssetRipper.Import（Cpp2IL 只有那里需要）。 -->
+
+</Project>

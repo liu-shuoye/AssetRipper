@@ -1,4 +1,4 @@
-using AssetRipper.Import.Logging;
+using AssetRipper.Logging;
 using System.Text.Json.Serialization;
 
 namespace AssetRipper.Import.Configuration;
