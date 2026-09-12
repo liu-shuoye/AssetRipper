@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Collections;
+using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.IO;
 using AssetRipper.IO.Files;
 using AssetRipper.IO.Files.ResourceFiles;
@@ -28,6 +28,15 @@ public abstract class Bundle : IDisposable
 	/// </summary>
 	public IReadOnlyList<AssetCollection> Collections => collections;
 	private readonly List<AssetCollection> collections = [];
+
+	/// <summary>
+	/// 按名称索引此 Bundle 的直接集合，用于把依赖解析从线性扫描降为 O(1) 查询。
+	/// 每个名称只登记第一个集合（<see cref="Collections"/> 中靠前者），与线性扫描返回首个匹配的语义一致。
+	/// 索引为懒构建：首次被 <see cref="ResolveCollection(string)"/> 查询时从 <see cref="Collections"/> 一次性建立；
+	/// <see cref="AddCollection"/> 仅在索引已存在时增量登记。依赖初始化完成（<see cref="InitializeAllDependencyLists"/>）
+	/// 后会被置空释放，期间若仍有查询则按需重建，功能不受影响，同时降低大型项目的常驻内存。
+	/// </summary>
+	private Dictionary<string, AssetCollection>? _collectionsByName;
 
 	/// <summary>
 	/// The list of child <see cref="Bundle"/>s in this Bundle.
@@ -85,6 +94,9 @@ public abstract class Bundle : IDisposable
 		{
 			bundle.InitializeAllDependencyLists(dependencyProvider);
 		}
+		// 整棵子树依赖已解析完毕，名称索引不再需要常驻，提前释放以降低大型项目内存占用。
+		// 后续若仍有 ResolveCollection 调用（如引擎资源注入、导出期按引用解析集合），该索引会在首次查询时按需重建。
+		_collectionsByName = null;
 	}
 
 	/// <summary>
@@ -126,6 +138,8 @@ public abstract class Bundle : IDisposable
 			_ => null,
 		};
 
+	}
+
 		AssetCollection? ResolveInternal(string name)
 		{
 			Bundle? bundleToExclude = null;
@@ -154,15 +168,19 @@ public abstract class Bundle : IDisposable
 		static AssetCollection? TryResolveFromCollections(Bundle currentBundle, string name)
 		{
 			//Uniqueness is not guaranteed because of asset bundle variants
-			foreach (AssetCollection collection in currentBundle.Collections)
+			// 索引在首次查询时从集合列表一次性建立，命中后 O(1)；被释放后（见 InitializeAllDependencyLists）
+			// 再次查询会按需重建，保证与列表内容始终一致。TryAdd 保留首个同名集合，语义与线性扫描一致
+			Dictionary<string, AssetCollection>? index = currentBundle._collectionsByName;
+			if (index is null)
 			{
-				if (collection.Name == name)
+				index = new Dictionary<string, AssetCollection>();
+				foreach (AssetCollection collection in currentBundle.collections)
 				{
-					return collection;
+					index.TryAdd(collection.Name, collection);
 				}
+				currentBundle._collectionsByName = index;
 			}
-
-			return null;
+			return index.GetValueOrDefault(name);
 		}
 
 		/// <summary>
@@ -184,8 +202,6 @@ public abstract class Bundle : IDisposable
 
 			return null;
 		}
-	}
-
 	/// <summary>
 	/// Resolves a ResourceFile with the specified name in this Bundle and its ascendants.
 	/// </summary>
@@ -219,48 +235,48 @@ public abstract class Bundle : IDisposable
 
 		return null;
 
-		/// <summary>
-		/// Attempts to resolve a ResourceFile with the specified name in the specified Bundle's Resources.
-		/// </summary>
-		/// <param name="currentBundle">The Bundle to attempt to resolve the ResourceFile from.</param>
-		/// <param name="fixedName">The name of the ResourceFile with invalid characters and path separators fixed.</param>
-		/// <returns>The resolved ResourceFile if it exists, else null.</returns>
-		static ResourceFile? TryResolveFromResources(Bundle currentBundle, string fixedName)
-		{
-			//Uniqueness is not guaranteed because of asset bundle variants
-			foreach (ResourceFile resource in currentBundle.Resources)
-			{
-				if (resource.NameFixed == fixedName)
-				{
-					return resource;
-				}
-			}
-
-			return null;
-		}
-
-		/// <summary>
-		/// Attempts to resolve a ResourceFile with the specified name in the specified Bundle's child Bundles.
-		/// </summary>
-		/// <param name="currentBundle">The Bundle to attempt to resolve the ResourceFile from.</param>
-		/// <param name="originalName">The original name of the ResourceFile.</param>
-		/// <param name="fixedName">The name of the ResourceFile with invalid characters and path separators fixed.</param>
-		/// <param name="bundleToExclude">The Bundle to exclude from the search.</param>
-		/// <returns>The resolved ResourceFile if it exists, else null.</returns>
-		static ResourceFile? TryResolveFromChildBundles(Bundle currentBundle, string originalName, string fixedName, Bundle? bundleToExclude)
-		{
-			foreach (Bundle bundle in currentBundle.Bundles)
-			{
-				if (bundle != bundleToExclude && TryResolveFromResources(bundle, fixedName) is { } resource)
-				{
-					return resource;
-				}
-			}
-
-			return null;
-		}
 	}
 
+	/// <summary>
+	/// Attempts to resolve a ResourceFile with the specified name in the specified Bundle's Resources.
+	/// </summary>
+	/// <param name="currentBundle">The Bundle to attempt to resolve the ResourceFile from.</param>
+	/// <param name="fixedName">The name of the ResourceFile with invalid characters and path separators fixed.</param>
+	/// <returns>The resolved ResourceFile if it exists, else null.</returns>
+	static ResourceFile? TryResolveFromResources(Bundle currentBundle, string fixedName)
+	{
+		//Uniqueness is not guaranteed because of asset bundle variants
+		foreach (ResourceFile resource in currentBundle.Resources)
+		{
+			if (resource.NameFixed == fixedName)
+			{
+				return resource;
+			}
+		}
+
+		return null;
+	}
+
+	/// <summary>
+	/// Attempts to resolve a ResourceFile with the specified name in the specified Bundle's child Bundles.
+	/// </summary>
+	/// <param name="currentBundle">The Bundle to attempt to resolve the ResourceFile from.</param>
+	/// <param name="originalName">The original name of the ResourceFile.</param>
+	/// <param name="fixedName">The name of the ResourceFile with invalid characters and path separators fixed.</param>
+	/// <param name="bundleToExclude">The Bundle to exclude from the search.</param>
+	/// <returns>The resolved ResourceFile if it exists, else null.</returns>
+	static ResourceFile? TryResolveFromChildBundles(Bundle currentBundle, string originalName, string fixedName, Bundle? bundleToExclude)
+	{
+		foreach (Bundle bundle in currentBundle.Bundles)
+		{
+			if (bundle != bundleToExclude && TryResolveFromResources(bundle, fixedName) is { } resource)
+			{
+				return resource;
+			}
+		}
+
+		return null;
+	}
 	protected virtual ResourceFile? ResolveExternalResource(string originalName) => null;
 
 	/// <summary>
@@ -285,6 +301,9 @@ public abstract class Bundle : IDisposable
 		else if (IsCompatibleCollection(collection))
 		{
 			collections.Add(collection);
+			// 索引已构建（被解析过）时增量登记首个同名集合，保持 O(1)；未构建则保持惰性，
+			// 由下次解析从集合列表一次性重建，避免只登记新集合导致索引缺漏
+			_collectionsByName?.TryAdd(collection.Name, collection);
 		}
 		else
 		{
@@ -450,8 +469,9 @@ public abstract class Bundle : IDisposable
 					bundle.Dispose();
 				}
 
-				// 清空三个列表，让持有的引用立即可回收
+				// 清空三个列表，让持有的引用立即可回收；名称索引同样失效，避免滞留集合引用
 				collections.Clear();
+				_collectionsByName = null;
 				resources.Clear();
 				bundles.Clear();
 			}
