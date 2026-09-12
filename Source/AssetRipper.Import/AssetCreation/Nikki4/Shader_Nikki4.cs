@@ -180,8 +180,18 @@ public class Shader_Nikki4 :
 		AssetList<AssetList<uint>> compressedLengths = m_Shader.CompressedLengths_AssetList_AssetList_UInt32;
 		AssetList<AssetList<uint>> decompressedLengths = m_Shader.DecompressedLengths_AssetList_AssetList_UInt32;
 		byte[] compressedBlob = m_Shader.CompressedBlob ?? [];
-		if (offsets.Count == 0 || compressedBlob.Length == 0 || subProgramHashes.Count == 0)
+		if (subProgramHashes.Count == 0)
 		{
+			// ParsedForm 里没有读取到任何子程序，无需处理
+			return;
+		}
+
+		// 烘焙后的 shader（标准 blob 与 Code Blob 均为空）没有程序数据：
+		// 所有子程序的 BlobIndex 都是无效占位（0xFFFFFFFE），匹配不到任何 entry，
+		// 整体移除，否则导出流程（GetSubProgram）会因无效索引越界崩溃
+		if (offsets.Count == 0 || compressedBlob.Length == 0)
+		{
+			RemoveAllSubPrograms();
 			return;
 		}
 
@@ -278,6 +288,31 @@ public class Shader_Nikki4 :
 				RemapProgram(pass.ProgHull, hashQueue, platformHashMaps);
 				RemapProgram(pass.ProgDomain, hashQueue, platformHashMaps);
 				RemapProgram(pass.ProgRayTracing, hashQueue, platformHashMaps);
+			}
+		}
+	}
+
+	/// <summary>
+	/// 移除全部子程序。用于烘焙后的 shader：blob 为空意味着没有任何平台有程序数据，
+	/// 全部子程序的 BlobIndex 都是无效占位，保留只会让导出流程按无效索引去查 entry。
+	/// </summary>
+	private void RemoveAllSubPrograms()
+	{
+		if (m_Shader.ParsedForm?.SubShaders is null)
+		{
+			return;
+		}
+
+		foreach (ISerializedSubShader subShader in m_Shader.ParsedForm.SubShaders)
+		{
+			foreach (ISerializedPass pass in subShader.Passes)
+			{
+				pass.ProgVertex?.SubPrograms.Clear();
+				pass.ProgFragment?.SubPrograms.Clear();
+				pass.ProgGeometry?.SubPrograms.Clear();
+				pass.ProgHull?.SubPrograms.Clear();
+				pass.ProgDomain?.SubPrograms.Clear();
+				pass.ProgRayTracing?.SubPrograms.Clear();
 			}
 		}
 	}

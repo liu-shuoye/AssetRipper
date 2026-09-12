@@ -275,6 +275,15 @@ public sealed class ShaderRuriDecompileExporter : ShaderExporterBase
 
         foreach (ShaderReadSource source in EnumerateProgramSources(program, shader.Collection.Version, platform))
         {
+            // 烘焙/未编译的 shader 会带无效 BlobIndex（如 0xFFFFFFFE）或根本没有 entry，
+            // 此时解析不出程序数据；跳过而不是抛异常，保证单个 shader 的坏数据不影响整体导出
+            if (blob.Entries.Length == 0
+                || source.BlobIndex >= blob.Entries.Length
+                || (source.ParameterBlobIndex is uint parameterIndex && parameterIndex >= blob.Entries.Length))
+            {
+                continue;
+            }
+
             ShaderSubProgram subProgram = source.ParameterBlobIndex is uint paramBlobIndex
                 ? blob.GetSubProgram(source.BlobIndex, paramBlobIndex)
                 : blob.GetSubProgram(source.BlobIndex);
