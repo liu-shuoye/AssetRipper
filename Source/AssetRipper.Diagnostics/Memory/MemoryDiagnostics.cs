@@ -9,9 +9,9 @@ namespace AssetRipper.Diagnostics.Memory;
 /// 内存诊断：阶段内存快照（<see cref="LogMemoryDiagnostics"/>）与按资源类型的占用拆解（<see cref="LogResourceBreakdown"/>）。
 /// </summary>
 /// <remarks>
-/// 拆解口径由环境变量 <c>RURI_MEM_BREAKDOWN_MODE</c> 选择：
+/// 拆解口径由调用方（通常来自设置）通过参数传入：
 /// <list type="bullet">
-///   <item><description>默认：已反序列化对象的<b>序列化字节数</b>（廉价、不反序列化）；</description></item>
+///   <item><description>默认（空串）：已反序列化对象的<b>序列化字节数</b>（廉价、不反序列化）；</description></item>
 ///   <item><description><c>live</c>：用 <see cref="ManagedSizeCalculator"/> 反射估算<b>真实托管堆字节数</b>；</description></item>
 ///   <item><description><c>clrmd</c>：用 ClrMD 抓取<b>整个进程 GC 堆</b>的快照并按托管类型聚合（不需要资产集合）。</description></item>
 /// </list>
@@ -52,7 +52,8 @@ public static class MemoryDiagnostics
 	/// 供拆解枚举的资产集合（通常传 <c>gameData.GameBundle.FetchAssetCollections()</c>，惰性求值）。
 	/// 为 null 时只有 <c>clrmd</c> 口径可用。
 	/// </param>
-	public static void LogMemoryDiagnostics(string stage, IEnumerable<AssetCollection>? collections = null)
+	/// <param name="mode">拆解口径：<c>live</c> 反射估算托管堆、<c>clrmd</c> 抓取整堆快照，空串/其它值走默认口径（序列化字节数）。</param>
+	public static void LogMemoryDiagnostics(string stage, IEnumerable<AssetCollection>? collections = null, string? mode = null)
 	{
 		long managedMemory = Logger.LogMemoryDiagnostics(stage);
 
@@ -79,7 +80,7 @@ public static class MemoryDiagnostics
 		// 拆解结束后会把基线前移，保证同一段增长只报一次
 		Logger.Info(LogCategory.Processing,
 			$"[内存诊断] ↑ {stage}: 托管堆较上次拆解增长 {ToMegabytes(growth):F1} MB（阈值 {ToMegabytes(threshold):F1} MB），输出详细拆解");
-		LogResourceBreakdown(collections, stage);
+		LogResourceBreakdown(collections, stage, mode);
 	}
 
 	/// <summary>
@@ -90,9 +91,9 @@ public static class MemoryDiagnostics
 	/// </summary>
 	/// <param name="collections">要枚举的资产集合；默认与 <c>live</c> 口径必需，<c>clrmd</c> 口径可传 null。</param>
 	/// <param name="stage">当前阶段标识，用于日志区分。</param>
-	public static void LogResourceBreakdown(IEnumerable<AssetCollection>? collections, string stage)
+	/// <param name="mode">拆解口径：<c>live</c> 反射估算托管堆、<c>clrmd</c> 抓取整堆快照，空串/其它值走默认口径（序列化字节数）。</param>
+	public static void LogResourceBreakdown(IEnumerable<AssetCollection>? collections, string stage, string? mode = null)
 	{
-		string mode = Environment.GetEnvironmentVariable("RURI_MEM_BREAKDOWN_MODE") ?? string.Empty;
 		try
 		{
 			if (string.Equals(mode, "clrmd", StringComparison.OrdinalIgnoreCase))
@@ -561,15 +562,15 @@ public static class MemoryDiagnostics
 		hasBreakdownBaseline = true;
 	}
 
-	/// <summary>把口径的内部值翻译成日志里的可读说法。</summary>
-	private static string DescribeMode(string mode)
+	/// <summary>把口径的内部值翻译成日志里的可读说法；null 视为默认口径。</summary>
+	private static string DescribeMode(string? mode)
 	{
 		if (string.Equals(mode, "live", StringComparison.OrdinalIgnoreCase))
 		{
 			return "live(托管堆估算)";
 		}
 
-		return mode.Length == 0 ? "默认(序列化数据)" : mode;
+		return string.IsNullOrEmpty(mode) ? "默认(序列化数据)" : mode;
 	}
 
 	/// <summary>解析对象数上限环境变量，缺失或非法时按"不限制"处理。</summary>

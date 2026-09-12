@@ -36,6 +36,9 @@ partial class SettingsPage
 			case nameof(ImportSettings.Il2CppDumpPath):
 				Configuration.ImportSettings.Il2CppDumpPath = value;
 				break;
+			case nameof(ImportSettings.MemoryBreakdownMode):
+				Configuration.ImportSettings.MemoryBreakdownMode = TryParseEnum<MemoryBreakdownMode>(value);
+				break;
 			case nameof(ProcessingSettings.BundledAssetsExportMode):
 				Configuration.ProcessingSettings.BundledAssetsExportMode = TryParseEnum<BundledAssetsExportMode>(value);
 				break;
@@ -128,6 +131,11 @@ partial class SettingsPage
 	private static void WriteCheckBoxForStripAudioClipData(TextWriter writer, string label, bool disabled = false)
 	{
 		WriteCheckBox(writer, label, Configuration.ImportSettings.StripAudioClipData, nameof(ImportSettings.StripAudioClipData), disabled);
+	}
+
+	private static void WriteDropDownForMemoryBreakdownMode(TextWriter writer)
+	{
+		WriteDropDown(writer, MemoryBreakdownModeDropDownSetting.Instance, Configuration.ImportSettings.MemoryBreakdownMode, nameof(ImportSettings.MemoryBreakdownMode));
 	}
 
 	private static void WriteCheckBoxForEnablePrefabOutlining(TextWriter writer, string label, bool disabled = false)

@@ -33,13 +33,22 @@ public class ExportHandler(FullConfiguration settings)
 	protected FullConfiguration Settings { get; } = settings;
 
 	/// <summary>
-	/// 内存诊断入口：把当前 GameData 的资产集合（惰性求值，拆解时才真正枚举）交给 <see cref="Logger"/>。
-	/// 只有默认／live 口径需要它，<c>clrmd</c> 口径用不到但传了也无害。
+	/// 内存诊断入口：把当前 GameData 的资产集合（惰性求值，拆解时才真正枚举）交给 <see cref="Logger"/>，
+	/// 口径取自设置 <see cref="ImportSettings.MemoryBreakdownMode"/>。
+	/// 只有默认／live 口径需要资产集合，<c>clrmd</c> 口径用不到但传了也无害。
 	/// </summary>
-	private static void LogMemoryDiagnostics(GameData gameData, string stage)
+	private void LogMemoryDiagnostics(GameData gameData, string stage)
 	{
-		MemoryDiagnostics.LogMemoryDiagnostics(stage, gameData.GameBundle.FetchAssetCollections());
+		MemoryDiagnostics.LogMemoryDiagnostics(stage, gameData.GameBundle.FetchAssetCollections(), GetBreakdownModeString(Settings.ImportSettings.MemoryBreakdownMode));
 	}
+
+	/// <summary>把设置里的口径枚举翻译成内存诊断内部使用的模式串（live/clrmd，空串表示默认口径）。</summary>
+	private static string GetBreakdownModeString(MemoryBreakdownMode mode) => mode switch
+	{
+		MemoryBreakdownMode.Live => "live",
+		MemoryBreakdownMode.ClrMd => "clrmd",
+		_ => string.Empty,
+	};
 
 	public GameData Load(IReadOnlyList<string> paths, FileSystem fileSystem)
 	{
@@ -180,14 +189,14 @@ public class ExportHandler(FullConfiguration settings)
 		// 中间输出内存诊断，用于验证懒加载效果
 		GameData gameData = Load(paths, fileSystem);
 		LogMemoryDiagnostics(gameData, "Load完成（懒加载，资产未反序列化）");
-		MemoryDiagnostics.LogResourceBreakdown(gameData.GameBundle.FetchAssetCollections(), "Load完成（未反序列化）");
+		MemoryDiagnostics.LogResourceBreakdown(gameData.GameBundle.FetchAssetCollections(), "Load完成（未反序列化）", GetBreakdownModeString(Settings.ImportSettings.MemoryBreakdownMode));
 		if (gameData.GameBundle.HasAnyAssetCollections())
 		{
 			Process(gameData);
 		}
 
 		LogMemoryDiagnostics(gameData, "Process完成（资产已反序列化）");
-		MemoryDiagnostics.LogResourceBreakdown(gameData.GameBundle.FetchAssetCollections(), "Process完成（已反序列化）");
+		MemoryDiagnostics.LogResourceBreakdown(gameData.GameBundle.FetchAssetCollections(), "Process完成（已反序列化）", GetBreakdownModeString(Settings.ImportSettings.MemoryBreakdownMode));
 
 		return gameData;
 	}

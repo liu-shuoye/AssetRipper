@@ -103,6 +103,15 @@ public sealed partial class SettingsPage : DefaultPage
 							}
 						}
 
+						// 内存拆解口径：控制加载/处理阶段资源占用拆解日志的统计方式
+						using (new Div(writer).WithClass("row").End())
+						{
+							using (new Div(writer).WithClass("col").End())
+							{
+								WriteDropDownForMemoryBreakdownMode(writer);
+							}
+						}
+
 						using (new Div(writer).WithClass("row").End())
 						{
 							using (new Div(writer).WithClass("col").End())

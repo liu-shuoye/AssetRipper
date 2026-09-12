@@ -84,6 +84,12 @@ public sealed record class ImportSettings
 	/// </summary>
 	public bool StripAudioClipData { get; set; } = false;
 
+	/// <summary>
+	/// 内存拆解口径：控制加载/处理阶段输出资源占用拆解日志时的统计方式。
+	/// 默认按已反序列化对象的序列化字节数统计（廉价）；live 反射估算真实托管堆；clrmd 抓取整堆快照。
+	/// </summary>
+	public MemoryBreakdownMode MemoryBreakdownMode { get; set; } = MemoryBreakdownMode.Serialized;
+
 	public void Log()
 	{
 		Logger.Info(LogCategory.General, $"{nameof(ScriptContentLevel)}: {ScriptContentLevel}");
@@ -97,5 +103,6 @@ public sealed record class ImportSettings
 		Logger.Info(LogCategory.General, $"{nameof(StripTexture2DData)}: {StripTexture2DData}");
 		Logger.Info(LogCategory.General, $"{nameof(StripMeshData)}: {StripMeshData}");
 		Logger.Info(LogCategory.General, $"{nameof(StripAudioClipData)}: {StripAudioClipData}");
+		Logger.Info(LogCategory.General, $"{nameof(MemoryBreakdownMode)}: {MemoryBreakdownMode}");
 	}
 }
