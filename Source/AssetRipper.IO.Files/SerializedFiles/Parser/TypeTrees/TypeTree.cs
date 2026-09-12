@@ -109,6 +109,20 @@ public sealed class TypeTree : IEquatable<TypeTree?>
 		}
 	}
 
+	/// <summary>
+	/// 释放类型树占用的托管内存：清空节点、收缩底层数组并清空字符串缓冲。
+	/// 仅应在类型树不再被需要时使用（例如反序列化完成后）。调用后该 TypeTree 无法再用于写出或比较。
+	/// </summary>
+	public void Reset()
+	{
+		Nodes.Clear();
+		// List<T>.Clear() 仅将 Count 置 0，底层 T[] 数组仍被持有（Capacity 不变），
+		// 这正是优化前 TypeTreeNode[] 仍占用数百 MB 的原因。显式把 Capacity 收缩到 0，
+		// 会让 _items 指向共享的空数组 s_emptyArray，使原数组脱离强引用、可被 GC 回收。
+		Nodes.Capacity = 0;
+		StringBuffer = [];
+	}
+
 	private static void ReadTreeNode(SerializedReader reader, ICollection<TypeTreeNode> nodes, byte depth)
 	{
 		TypeTreeNode node = new TypeTreeNode();

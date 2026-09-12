@@ -13,6 +13,8 @@ internal static class Program
 
 	static void Main(string[] args)
 	{
+		// 本工具依赖 SerializedFile 的类型树，关闭反序列化后的自动释放以保留 OldType。
+		SerializedFile.ReleaseTypeTreesAfterDeserialization = false;
 		Directory.CreateDirectory(outputDirectory);
 		if (args.Length == 0)
 		{

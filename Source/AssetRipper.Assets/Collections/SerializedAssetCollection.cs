@@ -128,6 +128,14 @@ public sealed class SerializedAssetCollection : AssetCollection
 				AddAsset(asset);
 			}
 		}
+
+		// 全部对象反序列化完成后，类型树（SerializedType.OldType）不再被需要。
+		// 释放它可省去约 1/3 托管堆（TypeTreeNode 节点及重复字段名字符串）。
+		// 常规流程不会在释放后重新反序列化（UnloadAssets 无调用方），故安全。
+		if (SerializedFile.ReleaseTypeTreesAfterDeserialization)
+		{
+			file.ReleaseTypeTrees();
+		}
 	}
 
 	/// <summary>

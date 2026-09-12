@@ -11,6 +11,8 @@ internal static class Program
 
 	static void Main(string[] args)
 	{
+		// 本工具直接读取 SerializedFile 的类型树（OldType），必须保留，关闭反序列化后的自动释放。
+		SerializedFile.ReleaseTypeTreesAfterDeserialization = false;
 		System.IO.Directory.CreateDirectory(outputDirectory);
 		if (args.Length == 0)
 		{

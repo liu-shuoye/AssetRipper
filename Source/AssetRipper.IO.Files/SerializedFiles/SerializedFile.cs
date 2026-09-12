@@ -135,6 +135,35 @@ public sealed class SerializedFile : FileBase
 		m_refTypes = metadata.RefTypes;
 		HasTypeTree = metadata.EnableTypeTree;
 		UserInformation = metadata.UserInformation;
+
+		// 解析完成后，非 MonoBehaviour 的类型树（绝大多数引擎类型）在反序列化阶段永不被读取
+		// （原生资产由 SourceGenerated 类按硬编码布局反序列化，只有 MonoBehaviour 经 GameAssetFactory 重建字段结构才用 OldType）。
+		// 立即释放它们可大幅降低加载期内存峰值；MonoBehaviour 树随后由 ReleaseTypeTrees 在反序列化完成后释放。
+		if (ReleaseTypeTreesAfterDeserialization)
+		{
+			ReleaseUnusedTypeTrees();
+		}
+	}
+
+	/// <summary>
+	/// 释放所有"非 MonoBehaviour"类型的类型树（TypeTree）节点与字符串缓冲。
+	/// 这些类型树在文件解析后不会被任何产品代码读取，可安全立即释放以降低加载期内存峰值。
+	/// </summary>
+	private void ReleaseUnusedTypeTrees()
+	{
+		if (m_types is null)
+		{
+			return;
+		}
+		foreach (SerializedType type in m_types)
+		{
+			// 仅保留 MonoBehaviour 的类型树：序列化层以 RawTypeID == -1 或 ScriptTypeIndex >= 0 标记脚本类型。
+			if (type.RawTypeID != -1 && type.ScriptTypeIndex < 0)
+			{
+				type.OldType.Nodes.Clear();
+				type.OldType.StringBuffer = [];
+			}
+		}
 	}
 
 	public override void Write(Stream stream)
@@ -217,6 +246,39 @@ public sealed class SerializedFile : FileBase
 		}
 	}
 
+	/// <summary>
+	/// 反序列化完成后释放所有类型的类型树（TypeTree）节点与字符串缓冲。
+	/// 类型树仅在反序列化阶段（GameAssetFactory 通过 <see cref="SerializedTypeBase.OldType"/>）被读取，
+	/// 导出阶段不再需要；释放可省去约 1/3 托管堆（TypeTreeNode 节点及大量重复的字段名/类型名字符串）。
+	/// 注意：释放后若再次反序列化（例如通过 UnloadAssets 重新加载该集合），MonoBehaviour 将丢失其结构（退回 UnloadedStructure）。
+	/// </summary>
+	public void ReleaseTypeTrees()
+	{
+		if (m_types is not null)
+		{
+			// Reset 会清节点、收缩底层 TypeTreeNode[] 数组并清空字符串缓冲，
+			// 使 4652 万个 TypeTreeNode 及重复字符串可被 GC 回收（不只置空 Count）。
+			foreach (SerializedType type in m_types)
+			{
+				type.OldType.Reset();
+			}
+		}
+
+		if (m_refTypes is not null)
+		{
+			foreach (SerializedTypeReference type in m_refTypes)
+			{
+				type.OldType.Reset();
+			}
+		}
+	}
+
+	/// <summary>
+	/// 反序列化完成后是否自动释放类型树（TypeTree）。默认开启。
+	/// 关闭以保留类型树：例如需要原样回写 SerializedFile，或对已卸载集合重新反序列化时。
+	/// </summary>
+	public static bool ReleaseTypeTreesAfterDeserialization { get; set; } = true;
+
 	public static SerializedFile FromFile(string filePath, FileSystem fileSystem)
 	{
 		string fileName = fileSystem.Path.GetFileName(filePath);
@@ -264,6 +326,7 @@ public sealed class SerializedFile : FileBase
 					}
 				}
 			}
+
 			disposedValue = true;
 		}
 	}

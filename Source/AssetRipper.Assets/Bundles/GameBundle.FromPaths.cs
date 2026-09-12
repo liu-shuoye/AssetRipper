@@ -79,7 +79,10 @@ partial class GameBundle
 		HashSet<string> serializedFileNames = new(); //包含缺失的依赖项
 		foreach (string path in paths)
 		{
-
+			if (files.Count % 100000 == 0)
+			{
+				Logger.Info(LogCategory.Import, $"{files.Count} 正在加载文件：'{path}'");
+			}
 			FileBase? file;
 			try
 			{
