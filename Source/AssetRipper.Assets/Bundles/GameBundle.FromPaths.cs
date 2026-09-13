@@ -22,8 +22,11 @@ partial class GameBundle
 		initializer?.OnCreated(gameBundle, assetFactory);
 		gameBundle.InitializeFromPaths(paths, assetFactory, fileSystem, initializer);
 		initializer?.OnPathsLoaded(gameBundle, assetFactory);
+		Logger.Info(LogCategory.Import, "路径加载完成，开始初始化依赖");
 		gameBundle.InitializeAllDependencyLists(initializer?.DependencyProvider);
+		Logger.Info(LogCategory.Import, "依赖初始化完成，开始初始化资源");
 		initializer?.OnDependenciesInitialized(gameBundle, assetFactory);
+		Logger.Info(LogCategory.Import, "资源初始化完成");
 		return gameBundle;
 	}
 
