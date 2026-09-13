@@ -40,6 +40,11 @@ public sealed record class ExportSettings
 	public ShaderExportMode ShaderExportMode { get; set; } = ShaderExportMode.RuriDecompile;
 
 	/// <summary>
+	/// 如何导出 ComputeShader（计算着色器）？
+	/// </summary>
+	public ComputeShaderExportMode ComputeShaderExportMode { get; set; } = ComputeShaderExportMode.Yaml;
+
+	/// <summary>
 	/// 是否将精灵导出为纹理？推荐：原生
 	/// </summary>
 	public SpriteExportMode SpriteExportMode { get; set; } = SpriteExportMode.Native;
@@ -70,6 +75,7 @@ public sealed record class ExportSettings
 		Logger.Info(LogCategory.General, $"{nameof(ScriptExportMode)}: {ScriptExportMode}");
 		Logger.Info(LogCategory.General, $"{nameof(ScriptLanguageVersion)}: {ScriptLanguageVersion}");
 		Logger.Info(LogCategory.General, $"{nameof(ShaderExportMode)}: {ShaderExportMode}");
+		Logger.Info(LogCategory.General, $"{nameof(ComputeShaderExportMode)}: {ComputeShaderExportMode}");
 		Logger.Info(LogCategory.General, $"{nameof(SpriteExportMode)}: {SpriteExportMode}");
 		Logger.Info(LogCategory.General, $"{nameof(TextExportMode)}: {TextExportMode}");
 		Logger.Info(LogCategory.General, $"{nameof(ExportUnreadableAssets)}: {ExportUnreadableAssets}");

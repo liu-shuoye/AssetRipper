@@ -53,6 +53,7 @@ using AssetRipper.SourceGenerated.Classes.ClassID_48;
 using AssetRipper.SourceGenerated.Classes.ClassID_49;
 using AssetRipper.SourceGenerated.Classes.ClassID_6;
 using AssetRipper.SourceGenerated.Classes.ClassID_687078895;
+using AssetRipper.SourceGenerated.Classes.ClassID_72;
 using AssetRipper.SourceGenerated.Classes.ClassID_83;
 using AssetRipper.SourceGenerated.Classes.ClassID_94;
 
@@ -150,6 +151,13 @@ partial class ProjectExporter
 			_ => new DummyShaderTextExporter(),
 		});
 		OverrideExporter<IShader>(new SimpleShaderExporter());
+
+		// ComputeShader 源码还原（可选）：开启时把随包文本载荷直通为 .compute 源码，
+		// 否则走默认 YAML .asset 导出（不注册任何导出器）。
+		if (settings.ExportSettings.ComputeShaderExportMode == ComputeShaderExportMode.Source)
+		{
+			OverrideExporter<IComputeShader>(new ComputeShaderSourceExporter());
+		}
 
 		//Audio exporters
 		OverrideExporter<IAudioClip>(new YamlAudioExporter());

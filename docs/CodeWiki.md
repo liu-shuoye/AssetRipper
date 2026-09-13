@@ -509,7 +509,7 @@ CoreConfiguration（导入设置 + 导出路径 + 版本）
 ### 常用设置
 - **导入**（`ImportSettings`）：`ScriptContentLevel`（Level0 禁用脚本 / Level1 桩方法）、`DefaultVersion`、`TargetVersion`、`GameType`、`IgnoreStreamingAssets`、`Il2CppDumpPath`、`LoadDependencyMap`/`DependencyMapPath`、`StripTexture2DData`、`StripMeshData`、`StripAudioClipData`；
 - **处理**（`ProcessingSettings`）：`RemoveNullableAttributes`、`PublicizeAssemblies`、`BundledAssetsExportMode`、`EnableAssetDeduplication`、`EnableDeterministicGuids`；
-- **导出**（`ExportSettings`）：`SaveSettingsToDisk`、`LanguageCode` 等。
+- **导出**（`ExportSettings`）：`SaveSettingsToDisk`、`LanguageCode`、`ShaderExportMode`（含 `RuriDecompile`）、`ComputeShaderExportMode` 等。
 
 ### 资源占位导出（StripTexture2DData / StripMeshData / StripAudioClipData）
 
@@ -528,6 +528,17 @@ CoreConfiguration（导入设置 + 导出路径 + 版本）
 2. **导出期占位**：工程模式 `AudioClipExporter`（AudioExportFormat 为 Default/PreferWav 时启用）在占位模式下跳过 FMod 解码，写空占位文件，扩展名按格式设置取 ogg/wav；主内容模式 `AudioContentExtractor` 同理（固定 ogg）。AudioExportFormat 为 Native 时占位不生效（导出跳过），Yaml 模式天然占位（导出 YAML 元数据）。
 
 **注意事项**：更改选项后需**重新加载资源文件**才生效（数据已剥离不可恢复）；占位模式下纹理预览、Sprite 切图、Mesh 3D 预览与音频播放不可用；非占位模式下导出行为完全不变。设置页 UI 复选框需同步手写进 `SettingsPage.cs` 并按生成器规则补 `SettingsPage.g.cs`（该文件是预生成静态文件，见 5.13），本地化键为 `strip_texture_2d_data`/`strip_mesh_data`/`strip_audio_clip_data`。
+
+### ComputeShader 源码还原（ComputeShaderExportMode）
+
+ComputeShader 默认走 YAML `.asset` 导出（`ExportCollection.GetExportExtension` 兜底为 `asset`），产物里每个 kernel 的 `code` 字段是 hex 编码的载荷。`ExportSettings.ComputeShaderExportMode` 提供第二个模式：
+
+- **Yaml**（默认）：维持原有 `.asset` 导出；
+- **Source**：注册 `ComputeShaderSourceExporter`（`Shaders/ComputeShaderSourceExporter.cs`），遍历 `IComputeShader.Variants[].Kernels[]`，把每个 kernel 的 `Code` 载荷解码后写入 `.compute` 文本文件（`#pragma kernel` + `#pragma numthreads` + 源码），扩展名与 meta 由 `ComputeShaderExportCollection` 提供（`.compute` + `ComputeShaderImporter`）。
+
+**载荷判定**：`IsLikelyText` 取前 512 字节，可打印字符（含 `\t\n\r`）占比 ≥90% 视为文本直通输出；否则按二进制字节码（DXBC/SPIR-V 等）处理，只写 kernel 签名与注释。对闪耀暖暖这类随包携带 HLSLcc 生成的 GLES GLSL 文本源码的游戏，解码后即为完整可读的 kernel 源码——与 Shader 侧 `RuriDecompile` 的「源码直通」同一事实（Nikki4 随包不含编译字节码）。产物不保证能在 Unity Editor 中编译。
+
+**接入细节**：设置项为 `ExportSettings` 普通枚举属性，无"始终记住"语义；UI 下拉框 `ComputeShaderExportModeDropDownSetting` 挂在设置页脚本/导出格式行；`SettingsPage.g.cs` 的 `SetProperty` case 与 `WriteDropDownForComputeShaderExportMode` 需手工补齐（预生成静态文件）；本地化键 `compute_shader_asset_*` 插在 en_US.json `commands` 之后保持 ordinal 顺序。
 
 ---
 

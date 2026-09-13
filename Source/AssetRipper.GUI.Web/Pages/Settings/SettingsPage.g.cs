@@ -60,6 +60,9 @@ partial class SettingsPage
 			case nameof(ExportSettings.ShaderExportMode):
 				Configuration.ExportSettings.ShaderExportMode = TryParseEnum<ShaderExportMode>(value);
 				break;
+			case nameof(ExportSettings.ComputeShaderExportMode):
+				Configuration.ExportSettings.ComputeShaderExportMode = TryParseEnum<ComputeShaderExportMode>(value);
+				break;
 			case nameof(ExportSettings.SpriteExportMode):
 				Configuration.ExportSettings.SpriteExportMode = TryParseEnum<SpriteExportMode>(value);
 				break;
@@ -206,6 +209,11 @@ partial class SettingsPage
 	private static void WriteDropDownForShaderExportMode(TextWriter writer)
 	{
 		WriteDropDown(writer, ShaderExportModeDropDownSetting.Instance, Configuration.ExportSettings.ShaderExportMode, nameof(ExportSettings.ShaderExportMode));
+	}
+
+	private static void WriteDropDownForComputeShaderExportMode(TextWriter writer)
+	{
+		WriteDropDown(writer, ComputeShaderExportModeDropDownSetting.Instance, Configuration.ExportSettings.ComputeShaderExportMode, nameof(ExportSettings.ComputeShaderExportMode));
 	}
 
 	private static void WriteDropDownForSpriteExportMode(TextWriter writer)
