@@ -217,6 +217,151 @@ public class FileResolutionTests
 		Assert.That(gameBundle.ResolveResource(resourceName), Is.EqualTo(resource));
 	}
 
+	/// <summary>
+	/// 同名集合同时存在于自身与子 Bundle 时，必须取自身的（原实现“先查自身集合”的语义）。
+	/// </summary>
+	[Test]
+	public void CollectionResolutionPrefersOwnCollectionsOverChildBundles()
+	{
+		const string name = "duplicate";
+		GameBundle gameBundle = new();
+
+		ProcessedBundle childBundle = new();
+		gameBundle.AddBundle(childBundle);
+
+		ProcessedAssetCollection childCollection = new ProcessedAssetCollection(childBundle);
+		childCollection.Name = name;
+
+		ProcessedAssetCollection rootCollection = new ProcessedAssetCollection(gameBundle);
+		rootCollection.Name = name;
+
+		using (Assert.EnterMultipleScope())
+		{
+			Assert.That(gameBundle.ResolveCollection(name), Is.EqualTo(rootCollection));
+			Assert.That(childBundle.ResolveCollection(name), Is.EqualTo(childCollection));
+		}
+	}
+
+	/// <summary>
+	/// 同名集合分散在多个兄弟 Bundle 时，取添加顺序最靠前的那个（资产 Bundle 变体场景）。
+	/// </summary>
+	[Test]
+	public void CollectionResolutionAmongSiblingBundlesReturnsTheFirstMatch()
+	{
+		const string name = "duplicate";
+		GameBundle gameBundle = new();
+
+		ProcessedBundle firstBundle = new();
+		gameBundle.AddBundle(firstBundle);
+		ProcessedAssetCollection firstCollection = new ProcessedAssetCollection(firstBundle);
+		firstCollection.Name = name;
+
+		ProcessedBundle secondBundle = new();
+		gameBundle.AddBundle(secondBundle);
+		ProcessedAssetCollection secondCollection = new ProcessedAssetCollection(secondBundle);
+		secondCollection.Name = name;
+
+		using (Assert.EnterMultipleScope())
+		{
+			Assert.That(gameBundle.ResolveCollection(name), Is.EqualTo(firstCollection));
+			// 从第二个子 Bundle 发起解析时自身集合优先
+			Assert.That(secondBundle.ResolveCollection(name), Is.EqualTo(secondCollection));
+		}
+	}
+
+	/// <summary>
+	/// 解析只向下探一层：孙 Bundle 的集合对祖父可见性依赖于“父直接持有”，对根（隔两层）不可见。
+	/// </summary>
+	[Test]
+	public void CollectionResolutionOnlyLooksOneLevelDownIntoChildBundles()
+	{
+		const string name = "deep";
+		GameBundle gameBundle = new();
+
+		ProcessedBundle parentBundle = new();
+		gameBundle.AddBundle(parentBundle);
+
+		ProcessedBundle grandchildBundle = new();
+		parentBundle.AddBundle(grandchildBundle);
+
+		ProcessedAssetCollection collection = new ProcessedAssetCollection(grandchildBundle);
+		collection.Name = name;
+
+		using (Assert.EnterMultipleScope())
+		{
+			Assert.That(grandchildBundle.ResolveCollection(name), Is.EqualTo(collection));
+			Assert.That(parentBundle.ResolveCollection(name), Is.EqualTo(collection));
+			Assert.That(gameBundle.ResolveCollection(name), Is.Null);
+		}
+	}
+
+	/// <summary>
+	/// 同名资源分散在多个兄弟 Bundle 时，取添加顺序最靠前的那个。
+	/// </summary>
+	[Test]
+	public void ResourceResolutionPrefersOwnResourcesAndFirstSibling()
+	{
+		const string name = "duplicate.resS";
+		GameBundle gameBundle = new();
+
+		ProcessedBundle firstBundle = new();
+		gameBundle.AddBundle(firstBundle);
+		ResourceFile firstResource = CreateNewResourceFile(name);
+		firstBundle.AddResource(firstResource);
+
+		ProcessedBundle secondBundle = new();
+		gameBundle.AddBundle(secondBundle);
+		ResourceFile secondResource = CreateNewResourceFile(name);
+		secondBundle.AddResource(secondResource);
+
+		using (Assert.EnterMultipleScope())
+		{
+			Assert.That(gameBundle.ResolveResource(name), Is.EqualTo(firstResource));
+			Assert.That(secondBundle.ResolveResource(name), Is.EqualTo(secondResource));
+		}
+	}
+
+	/// <summary>
+	/// 名称索引建立之后再追加集合/资源时，索引必须失效并重建——否则后加入的条目会解析不到。
+	/// </summary>
+	/// <remarks>
+	/// 条目数超过线性扫描阈值才会真正建立字典，因此这里刻意造出足够多的条目。
+	/// </remarks>
+	[Test]
+	public void NameIndexIsRebuiltWhenEntriesAreAddedLater()
+	{
+		const int existingCount = 10;
+		GameBundle gameBundle = new();
+
+		ProcessedBundle bundle = new();
+		gameBundle.AddBundle(bundle);
+
+		for (int i = 0; i < existingCount; i++)
+		{
+			ProcessedAssetCollection existing = new ProcessedAssetCollection(bundle);
+			existing.Name = $"existing{i}";
+			bundle.AddResource(CreateNewResourceFile($"existing{i}.resS"));
+		}
+
+		// 先解析一次，确保索引已建立
+		using (Assert.EnterMultipleScope())
+		{
+			Assert.That(gameBundle.ResolveCollection("existing0"), Is.Not.Null);
+			Assert.That(gameBundle.ResolveResource("existing0.resS"), Is.Not.Null);
+		}
+
+		ProcessedAssetCollection lateCollection = new ProcessedAssetCollection(bundle);
+		lateCollection.Name = "late";
+		ResourceFile lateResource = CreateNewResourceFile("late.resS");
+		bundle.AddResource(lateResource);
+
+		using (Assert.EnterMultipleScope())
+		{
+			Assert.That(gameBundle.ResolveCollection("late"), Is.EqualTo(lateCollection));
+			Assert.That(gameBundle.ResolveResource("late.resS"), Is.EqualTo(lateResource));
+		}
+	}
+
 	private sealed record class SingleResourceProvider(ResourceFile Resource) : IResourceProvider
 	{
 		public ResourceFile? FindResource(string identifier)

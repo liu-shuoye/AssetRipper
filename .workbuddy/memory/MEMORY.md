@@ -25,3 +25,11 @@
 - `MemoryDiagnostics.LogMemoryDiagnostics(stage, collections)`：先双轮 GC 再快照；增长 ≥ `RURI_MEM_BREAKDOWN_GROWTH_MB`（默认 1024）自动拆解，基线前移。口径 `RURI_MEM_BREAKDOWN_MODE`：默认=序列化字节数 / `live`=反射估算 / `clrmd`=整堆快照。另有 `RURI_MEM_BREAKDOWN_DUMP`、`_MAX_OBJECTS`。
 - ClrMD 锁 **3.1.512801**（4.x 拖 Azure.Identity）。自快照可用；**不要**用 `AttachToProcess(suspend:false)` 读活进程。
 - 生成类全名 `AssetRipper.SourceGenerated.Classes.ClassID_<n>.<类名>`（NuGet 包，仓库无源码），数字即 Unity ClassID。
+
+## Bundle 名称/资源解析（性能敏感，勿退回线性扫描）
+- 树形：`GameBundle`(根) → 每个 bundle 文件一个 `SerializedBundle`；松散 SerializedFile 直接进根的集合列表。大项目可达**几十万个子 Bundle**。
+- `Bundle.ResolveCollection/ResolveResource` **必须**走“一层”索引 `_levelCollectionsByName` / `_levelResourcesByName`（自身条目 + 直接子 Bundle 条目，自身优先、子 Bundle 按序、首个匹配优先）。原实现对每层都遍历全部子 Bundle → 单次解析 O(子Bundle数)，30 万子 Bundle 时单次 9.6 ms，`InitializeAllDependencyLists` 直接数小时。
+- 索引懒构建 + **条目数 ≤ 8 时线性扫描不建字典**（否则几十万个单集合 Bundle 各建一个微型字典）。条目数缓存用 `NotCounted = -1` 哨兵（0 是合法值）。
+- 改动集合/资源/子 Bundle（`AddCollection`/`AddResource`/`AddBundle`/`Dispose`）后必须 `InvalidateLevelIndexes()`，且 `AddCollection`/`AddResource` 还要失效**父**节点。**不能改成增量 `TryAdd`**：新条目在“一层”顺序里排在子 Bundle 之前，同名时会输给已登记的子里条目，语义就变了。
+- 语义约束（`AssetRipper.Assets.Tests/FileResolutionTests.cs` 已固化，24 例）：只向下探**一层**（孙 Bundle 的集合对根不可见）；同名取首个；资源键用 `NameFixed`（即 `FixFileIdentifier` 后的名字）。
+- 缺失依赖日志必须去重（`Bundle.DependencyInitializationContext` + `DeduplicatingDependencyProvider`），逐条打印上限 1000 / 去重统计上限 10000，另有每 5 万集合的进度行。
