@@ -111,7 +111,15 @@ internal static class SettingsPageGenerator
 		{
 			foreach (PropertyInfo property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
 			{
-				yield return new PropertyData(property);
+				PropertyData data = new(property);
+				if (!data.IsBoolean && !data.IsEnum && !data.IsString && !data.IsUnityVersion)
+				{
+					// 集合类型（如导入类型白名单）与纯派生属性无法由通用控件表达，
+					// 它们由 SettingsPage.cs 手写的专用控件处理，这里跳过以免生成器断言失败。
+					continue;
+				}
+
+				yield return data;
 			}
 		}
 	}

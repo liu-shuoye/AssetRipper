@@ -90,6 +90,28 @@ public sealed record class ImportSettings
 	/// </summary>
 	public MemoryBreakdownMode MemoryBreakdownMode { get; set; } = MemoryBreakdownMode.Serialized;
 
+	/// <summary>
+	/// 导入类型白名单：只解析并导出这里列出的资产大类，未列出的类型在
+	/// <c>GameAssetFactory.ReadAsset</c> 阶段直接跳过，完全不反序列化。
+	/// </summary>
+	/// <remarks>
+	/// 本集合仅在 <see cref="EnableImportAssetTypeFilter"/> 为 true 时生效，
+	/// 否则一律全量导入——默认关闭是为了避免用户误清空后导出出空项目。
+	/// 使用集合而非单个枚举是因为需求要求多选；<see cref="ImportAssetTypeExtensions.IsClassIdAllowed"/>
+	/// 是判定入口，导入与导出两侧共用同一份规则。
+	/// </remarks>
+	public HashSet<ImportAssetType> ImportAssetTypes { get; set; } = [];
+
+	/// <summary>
+	/// 是否启用 <see cref="ImportAssetTypes"/> 白名单过滤。
+	/// </summary>
+	/// <remarks>
+	/// 与集合内容分离是刻意的：设置页用一组复选框表达「选中哪些类型」，
+	/// 但复选框全不勾选在语义上更接近「什么都不要」而非「不过滤」，
+	/// 于是再加一个总开关让用户能明确表达「取消过滤、恢复全量导入」。
+	/// </remarks>
+	public bool EnableImportAssetTypeFilter { get; set; } = false;
+
 	public void Log()
 	{
 		Logger.Info(LogCategory.General, $"{nameof(ScriptContentLevel)}: {ScriptContentLevel}");
@@ -104,5 +126,19 @@ public sealed record class ImportSettings
 		Logger.Info(LogCategory.General, $"{nameof(StripMeshData)}: {StripMeshData}");
 		Logger.Info(LogCategory.General, $"{nameof(StripAudioClipData)}: {StripAudioClipData}");
 		Logger.Info(LogCategory.General, $"{nameof(MemoryBreakdownMode)}: {MemoryBreakdownMode}");
+		Logger.Info(LogCategory.General, $"{nameof(EnableImportAssetTypeFilter)}: {EnableImportAssetTypeFilter}");
+		Logger.Info(LogCategory.General, $"{nameof(ImportAssetTypes)}: {(ImportAssetTypes.Count == 0 ? "(all)" : string.Join(", ", ImportAssetTypes.OrderBy(t => t)))}");
 	}
+
+	/// <summary>
+	/// 当前生效的白名单类型集合；未启用过滤时返回 null，下游据此跳过判定。
+	/// </summary>
+	/// <remarks>
+	/// 把「开关折叠进取值」这一步收敛到这里，下游（导入工厂、导出集合创建）就无需
+	/// 分别判断开关与集合内容，减少两处状态不一致的可能。
+	/// 注意：启用过滤但集合为空时返回空集合，语义是「不导入任何已知类型」，
+	/// 这比「参数为 null 即不过滤」更符合用户勾选后的直觉。
+	/// </remarks>
+	[JsonIgnore]
+	public IReadOnlyCollection<ImportAssetType>? EffectiveImportAssetTypes => EnableImportAssetTypeFilter ? ImportAssetTypes : null;
 }

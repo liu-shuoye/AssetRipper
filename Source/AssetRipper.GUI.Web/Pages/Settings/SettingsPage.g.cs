@@ -85,6 +85,7 @@ partial class SettingsPage
 		{ nameof(ImportSettings.StripTexture2DData), (value) => { Configuration.ImportSettings.StripTexture2DData = value; } },
 		{ nameof(ImportSettings.StripMeshData), (value) => { Configuration.ImportSettings.StripMeshData = value; } },
 		{ nameof(ImportSettings.StripAudioClipData), (value) => { Configuration.ImportSettings.StripAudioClipData = value; } },
+		{ nameof(ImportSettings.EnableImportAssetTypeFilter), (value) => { Configuration.ImportSettings.EnableImportAssetTypeFilter = value; } },
 		{ nameof(ProcessingSettings.EnablePrefabOutlining), (value) => { Configuration.ProcessingSettings.EnablePrefabOutlining = value; } },
 		{ nameof(ProcessingSettings.EnableStaticMeshSeparation), (value) => { Configuration.ProcessingSettings.EnableStaticMeshSeparation = value; } },
 		{ nameof(ProcessingSettings.EnableAssetDeduplication), (value) => { Configuration.ProcessingSettings.EnableAssetDeduplication = value; } },
@@ -139,6 +140,11 @@ partial class SettingsPage
 	private static void WriteDropDownForMemoryBreakdownMode(TextWriter writer)
 	{
 		WriteDropDown(writer, MemoryBreakdownModeDropDownSetting.Instance, Configuration.ImportSettings.MemoryBreakdownMode, nameof(ImportSettings.MemoryBreakdownMode));
+	}
+
+	private static void WriteCheckBoxForEnableImportAssetTypeFilter(TextWriter writer, string label, bool disabled = false)
+	{
+		WriteCheckBox(writer, label, Configuration.ImportSettings.EnableImportAssetTypeFilter, nameof(ImportSettings.EnableImportAssetTypeFilter), disabled);
 	}
 
 	private static void WriteCheckBoxForEnablePrefabOutlining(TextWriter writer, string label, bool disabled = false)

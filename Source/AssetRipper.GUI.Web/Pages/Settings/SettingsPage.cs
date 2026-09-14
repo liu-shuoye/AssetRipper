@@ -1,6 +1,7 @@
 using AssetRipper.Export.Configuration;
 using AssetRipper.GUI.Web.Pages.Settings.DropDown;
 using AssetRipper.GUI.Web.Paths;
+using AssetRipper.Import.Configuration;
 using AssetRipper.Primitives;
 using Microsoft.AspNetCore.Http;
 
@@ -83,6 +84,16 @@ public sealed partial class SettingsPage : DefaultPage
 							using (new Div(writer).WithClass("col").End())
 							{
 								WriteCheckBoxForLoadDependencyMap(writer, Localization.LoadDependencyMap);
+							}
+						}
+
+						// 导入类型白名单：只解析/导出选中的资源大类，未选中的类型在加载阶段直接跳过
+						using (new Div(writer).WithClass("row").End())
+						{
+							using (new Div(writer).WithClass("col").End())
+							{
+								WriteCheckBoxForEnableImportAssetTypeFilter(writer, Localization.EnableImportAssetTypeFilter);
+								WriteCheckBoxGroupForImportAssetTypes(writer);
 							}
 						}
 
@@ -379,6 +390,90 @@ public sealed partial class SettingsPage : DefaultPage
 		}
 	}
 
+	/// <summary>
+	/// 导入类型多选控件：一组同名复选框，外加「全选 / 全不选」快捷按钮。
+	/// </summary>
+	/// <remarks>
+	/// 所有复选框共用 <see cref="ImportAssetTypesFieldName"/> 作为 name，
+	/// 由 <see cref="ApplyImportAssetTypes"/> 在提交时整体读出，因此这里只需保证
+	/// value 使用枚举名（而非本地化文案），否则切换语言会让已保存的选择失效。
+	/// id 仍按类型名唯一化，以便 label 的 for 属性正确关联。
+	/// </remarks>
+	private static void WriteCheckBoxGroupForImportAssetTypes(TextWriter writer)
+	{
+		new Label(writer).WithClass("form-label").Close(Localization.ImportAssetTypesTitle);
+		new P(writer).WithClass("form-text").Close(Localization.ImportAssetTypesDescription);
+
+		using (new Div(writer).WithClass("mb-2").End())
+		{
+			new Button(writer)
+				.WithType("button")
+				.WithClass("btn btn-sm btn-outline-secondary me-2")
+				.WithCustomAttribute("onclick", $"setCheckBoxGroup('{ImportAssetTypesFieldName}', true)")
+				.Close(Localization.SelectAll);
+			new Button(writer)
+				.WithType("button")
+				.WithClass("btn btn-sm btn-outline-secondary")
+				.WithCustomAttribute("onclick", $"setCheckBoxGroup('{ImportAssetTypesFieldName}', false)")
+				.Close(Localization.ClearAll);
+		}
+
+		// 三列排布，避免十几个选项把设置页拉得过长
+		using (new Div(writer).WithClass("row row-cols-3 g-1").End())
+		{
+			foreach (ImportAssetType type in Enum.GetValues<ImportAssetType>())
+			{
+				bool isChecked = Configuration.ImportSettings.ImportAssetTypes.Contains(type);
+				using (new Div(writer).WithClass("col").End())
+				{
+					WriteImportAssetTypeCheckBox(writer, type, isChecked);
+				}
+			}
+		}
+	}
+
+	/// <summary>
+	/// 单个导入类型复选框。name 固定为字段名、value 为类型枚举名，供后端整体解析。
+	/// </summary>
+	private static void WriteImportAssetTypeCheckBox(TextWriter writer, ImportAssetType type, bool @checked)
+	{
+		string id = $"{ImportAssetTypesFieldName}_{type}";
+		using (new Div(writer).WithClass("form-check").End())
+		{
+			new Input(writer)
+				.WithClass("form-check-input")
+				.WithType("checkbox")
+				.WithValue(type.ToString())
+				.WithId(id)
+				.WithName(ImportAssetTypesFieldName)
+				.MaybeWithChecked(@checked)
+				.Close();
+			new Label(writer).WithClass("form-check-label").WithFor(id).Close(GetImportAssetTypeDisplayName(type));
+		}
+	}
+
+	/// <summary>
+	/// 取导入类型的本地化显示名；未登记文案时回退到枚举名，保证新增类型不会空白。
+	/// </summary>
+	private static string GetImportAssetTypeDisplayName(ImportAssetType type) => type switch
+	{
+		ImportAssetType.Mesh => Localization.ImportAssetTypeMesh,
+		ImportAssetType.Texture => Localization.ImportAssetTypeTexture,
+		ImportAssetType.Material => Localization.ImportAssetTypeMaterial,
+		ImportAssetType.Shader => Localization.ImportAssetTypeShader,
+		ImportAssetType.AnimationClip => Localization.ImportAssetTypeAnimationClip,
+		ImportAssetType.AnimatorController => Localization.ImportAssetTypeAnimatorController,
+		ImportAssetType.AudioClip => Localization.ImportAssetTypeAudioClip,
+		ImportAssetType.Font => Localization.ImportAssetTypeFont,
+		ImportAssetType.TextAsset => Localization.ImportAssetTypeTextAsset,
+		ImportAssetType.Sprite => Localization.ImportAssetTypeSprite,
+		ImportAssetType.MonoBehaviour => Localization.ImportAssetTypeMonoBehaviour,
+		ImportAssetType.ScriptableObject => Localization.ImportAssetTypeScriptableObject,
+		ImportAssetType.GameObject => Localization.ImportAssetTypeGameObject,
+		ImportAssetType.VideoClip => Localization.ImportAssetTypeVideoClip,
+		_ => type.ToString(),
+	};
+
 	private static void WriteDropDown<T>(TextWriter writer, DropDownSetting<T> setting, T value, string id) where T : struct, Enum
 	{
 		IReadOnlyList<DropDownItem<T>> items = setting.GetValues();
@@ -448,6 +543,11 @@ public sealed partial class SettingsPage : DefaultPage
 			SetProperty(key, value);
 		}
 
+		// 多选类型白名单：同名前缀的一组复选框，值为类型名。
+		// 不能放进上面的循环，因为多选需要整体覆盖集合，
+		// 且单个键的解析会与 checkbox 的 value 语义冲突。
+		ApplyImportAssetTypes(form);
+
 		if (Configuration.SaveSettingsToDisk)
 		{
 			Configuration.SaveToDefaultPath();
@@ -460,4 +560,32 @@ public sealed partial class SettingsPage : DefaultPage
 		context.Response.Redirect("/Settings/Edit");
 		return Task.CompletedTask;
 	}
+
+	/// <summary>
+	/// 从表单读取多选的导入类型复选框，整体覆盖 <see cref="ImportSettings.ImportAssetTypes"/>。
+	/// </summary>
+	/// <remarks>
+	/// 这里刻意不做增量合并：多选控件的语义就是「表单里勾了哪些，当前就是哪些」，
+	/// 增量合并会让取消勾选的项无法被移除。空结果同样写入（表示不限制类型），
+	/// 是否真正启用过滤由 <see cref="ImportSettings.EnableImportAssetTypeFilter"/> 决定。
+	/// </remarks>
+	private static void ApplyImportAssetTypes(IFormCollection form)
+	{
+		HashSet<ImportAssetType> selected = new();
+		foreach (string? value in form[ImportAssetTypesFieldName])
+		{
+			// 选项值用枚举名，避免本地化文案变动导致解析失效。
+			if (Enum.TryParse(value, out ImportAssetType type))
+			{
+				selected.Add(type);
+			}
+		}
+
+		Configuration.ImportSettings.ImportAssetTypes = selected;
+	}
+
+	/// <summary>
+	/// 类型复选框的字段名。用固定名字而非枚举名，是为了让所有选项共用同一组表单键。
+	/// </summary>
+	public const string ImportAssetTypesFieldName = nameof(ImportSettings.ImportAssetTypes);
 }

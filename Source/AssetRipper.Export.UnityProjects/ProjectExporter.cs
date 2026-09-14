@@ -106,7 +106,7 @@ public sealed partial class ProjectExporter
 		}
 
 		EventExportPreparationStarted?.Invoke();
-		List<IExportCollection> collections = CreateCollections(fileCollection, enableDeduplication,
+		List<IExportCollection> collections = CreateCollections(fileCollection, options, enableDeduplication,
 			enableDeterministicGuids,
 			out HashSet<IExportCollection> skippedCollections,
 			out Dictionary<IUnityObjectBase, IUnityObjectBase> redirectMap);
@@ -143,22 +143,37 @@ public sealed partial class ProjectExporter
 	/// 为给定的文件集合创建导出集合列表。
 	/// </summary>
 	/// <param name="fileCollection">文件集合</param>
+	/// <param name="options">配置，用于读取导入类型白名单</param>
 	/// <param name="enableDeduplication"> 是否启用去重 </param>
 	/// <param name="enableDeterministicGuids"> 是否为每个集合应用确定性 GUID </param>
 	/// <param name="skippedCollections"> 跳过集合 </param>
 	/// <param name="redirectMap"> 重定向映射 </param>
 	/// <returns></returns>
-	private List<IExportCollection> CreateCollections(GameBundle fileCollection, bool enableDeduplication,
+	private List<IExportCollection> CreateCollections(GameBundle fileCollection, CoreConfiguration options,
+		bool enableDeduplication,
 		bool enableDeterministicGuids,
 		out HashSet<IExportCollection> skippedCollections, out Dictionary<IUnityObjectBase, IUnityObjectBase> redirectMap)
 	{
 		List<IExportCollection> collections = new();
 		HashSet<IUnityObjectBase> queued = new();
 
+		// 导入类型白名单：与加载阶段共用同一份判定规则，确保「未选择不导出」。
+		// 加载阶段已跳过的类型不会出现在这里；此处的过滤用于兜底那些由处理阶段
+		// 新生成（如 Prefab/Sprite 处理器合成）或来自引擎内置资源的同类型资产。
+		IReadOnlyCollection<ImportAssetType>? allowedAssetTypes =
+			options.ImportSettings.EffectiveImportAssetTypes;
+
 		foreach (IUnityObjectBase asset in fileCollection.FetchAssets())
 		{
 			if (!queued.Contains(asset))
 			{
+				if (!ImportAssetTypeExtensions.IsClassIdAllowed(asset.ClassID, allowedAssetTypes))
+				{
+					// 未选中类型：标记为已处理并不建集合，避免被导出。
+					queued.Add(asset);
+					continue;
+				}
+
 				IExportCollection collection = CreateCollection(asset, enableDeterministicGuids);
 				foreach (IUnityObjectBase element in collection.Assets)
 				{

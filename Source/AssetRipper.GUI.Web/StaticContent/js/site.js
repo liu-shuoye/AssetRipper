@@ -75,3 +75,12 @@ async function browseForFile(inputId) {
 		console.error('Error fetching the file path:', error);
 	}
 }
+
+// 设置页多选组的「全选 / 全不选」按钮：按 name 批量切换同名复选框。
+// 用 name 而非父容器定位，是为了与后端按字段名读取表单值的逻辑保持一致 ——
+// 后端只认 name，前端就不应依赖 DOM 结构，避免改版式时按钮失效。
+function setCheckBoxGroup(groupName, checked) {
+	document.querySelectorAll(`input[type="checkbox"][name="${groupName}"]`).forEach(function (input) {
+		input.checked = checked;
+	});
+}

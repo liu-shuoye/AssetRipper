@@ -51,12 +51,18 @@ namespace AssetRipper.Import.AssetCreation;
 /// <param name="stripTexture2DData">占位模式：加载时剥离 Texture2D 图像数据，配合导出阶段的白色占位图以降低内存占用。</param>
 /// <param name="stripMeshData">占位模式：加载时剥离 Mesh 网格数据，配合导出阶段的占位文件。</param>
 /// <param name="stripAudioClipData">占位模式：加载时剥离 AudioClip 数据引用，配合导出阶段的占位文件。</param>
+/// <param name="allowedAssetTypes">
+/// 导入类型白名单。非空时，只有归属这些大类的资产会被解析，
+/// 其余类型在读取入口直接跳过（不做任何反序列化）。
+/// 为 null 表示不启用过滤，全部导入。
+/// </param>
 public sealed class GameAssetFactory(
 	IAssemblyManager assemblyManager,
 	GameType gameType,
 	bool stripTexture2DData = false,
 	bool stripMeshData = false,
-	bool stripAudioClipData = false) : AssetFactoryBase
+	bool stripAudioClipData = false,
+	IReadOnlyCollection<ImportAssetType>? allowedAssetTypes = null) : AssetFactoryBase
 {
 	private IAssemblyManager AssemblyManager { get; } = assemblyManager ?? throw new ArgumentNullException(nameof(assemblyManager));
 
@@ -73,6 +79,11 @@ public sealed class GameAssetFactory(
 	private bool StripAudioClipData { get; } = stripAudioClipData;
 
 	/// <summary>
+	/// 导入类型白名单；null 表示不过滤。判定逻辑见 <see cref="ImportAssetTypeExtensions.IsClassIdAllowed"/>。
+	/// </summary>
+	private IReadOnlyCollection<ImportAssetType>? AllowedAssetTypes { get; } = allowedAssetTypes;
+
+	/// <summary>
 	/// 当前游戏类型的专属资产提供者；该游戏未注册专属解析时为 null，走默认解析。
 	/// </summary>
 	private IGameAssetProvider? GameProvider { get; } = GameAssetProviderRegistry.GetProvider(gameType);
@@ -80,6 +91,13 @@ public sealed class GameAssetFactory(
 
 	public override IUnityObjectBase? ReadAsset(AssetInfo assetInfo, ReadOnlyArraySegment<byte> assetData, SerializedType? assetType)
 	{
+		if (!ImportAssetTypeExtensions.IsClassIdAllowed(assetInfo.ClassID, AllowedAssetTypes))
+		{
+			// 白名单未选中的类型在此直接放弃，返回 null 让上游跳过该资产。
+			// 这样既不构造对象也不做反序列化，是「未选择就不解析」的关键路径。
+			return null;
+		}
+
 		if (assetInfo.Collection.Version.LessThan(3, 5))
 		{
 			//Assets with a stripped version can't be read.
