@@ -14,7 +14,7 @@ public sealed record class ProcessingSettings
 	public bool EnableDeterministicGuids { get; set; } = false;
 	public bool RemoveNullableAttributes { get; set; } = false;
 	public bool PublicizeAssemblies { get; set; } = false;
-	public BundledAssetsExportMode BundledAssetsExportMode { get; set; } = BundledAssetsExportMode.ContainerExport;
+	public BundledAssetsExportMode BundledAssetsExportMode { get; set; } = BundledAssetsExportMode.MainAssetFolder;
 
 	public void Log()
 	{

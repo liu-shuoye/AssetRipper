@@ -13,6 +13,7 @@ public sealed class BundledAssetsExportModeDropDownSetting : DropDownSetting<Bun
 		BundledAssetsExportMode.GroupByAssetType => Localization.BundledAssetsExportGroupByAssetType,
 		BundledAssetsExportMode.GroupByBundleName => Localization.BundledAssetsExportGroupByBundleName,
 		BundledAssetsExportMode.DirectExport => Localization.BundledAssetsExportDirectExport,
+		BundledAssetsExportMode.MainAssetFolder => Localization.BundledAssetsExportMainAssetFolder,
 		_ => base.GetDisplayName(value),
 	};
 
@@ -21,6 +22,7 @@ public sealed class BundledAssetsExportModeDropDownSetting : DropDownSetting<Bun
 		BundledAssetsExportMode.GroupByAssetType => Localization.BundledAssetsExportGroupByAssetTypeDescription,
 		BundledAssetsExportMode.GroupByBundleName => Localization.BundledAssetsExportGroupByBundleNameDescription,
 		BundledAssetsExportMode.DirectExport => Localization.BundledAssetsExportDirectExportDescription,
+		BundledAssetsExportMode.MainAssetFolder => Localization.BundledAssetsExportMainAssetFolderDescription,
 		_ => base.GetDescription(value),
 	};
 }

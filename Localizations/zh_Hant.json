@@ -22,6 +22,8 @@
     "bundled_assets_export_group_by_asset_type_description": "Bundled assets 的處理方式與其他文件中的assets相同。",
     "bundled_assets_export_group_by_bundle_name": "按Bundle名稱分組",
     "bundled_assets_export_group_by_bundle_name_description": "Bundled asset按其asset名稱分組。",
+    "bundled_assets_export_main_asset_folder": "主資產資料夾（Main Asset Folder）",
+    "bundled_assets_export_main_asset_folder_description": "帶原始路徑的捆綁資源按原始路徑位置匯出；沒有原始路徑的匯出到其主資產路徑下、以主資產檔名為名的資料夾中。",
     "bundled_assets_export_title": "Bundled Assets 導出模式",
     "c_sharp_langage_version_config_1": "C# 1",
     "c_sharp_langage_version_config_10_0": "C# 10",

@@ -66,10 +66,6 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 
 								break;
 							}
-						case BundledAssetsExportMode.ContainerExport:
-							// 获取资源文件夹
-							originalDirectories[assetBundle.Collection] = originalPath;
-							break;
 					}
 				}
 			}
@@ -93,41 +89,6 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 			}
 		}
 
-
-		// 已知限制：ContainerExport 模式需要访问 asset.GetBestName() 字段，无法用元数据驱动，
-		// 仍触发全量反序列化。后续 spec 可考虑用 ClassID 推导 Name 字段位置以优化此分支。
-		if (bundledAssetsExportMode == BundledAssetsExportMode.ContainerExport)
-		{
-			foreach ((AssetCollection collection, string? originalPath) in originalDirectories)
-			{
-				if (originalPath == null)
-				{
-					continue;
-				}
-
-				string? originalDirectory = Path.GetDirectoryName(originalPath);
-				int count = collection.Count(asset => asset.GetBestName() != asset.ClassName);
-				if (count > 3)
-				{
-					if (originalDirectory == null || !originalDirectory.EndsWith(Path.GetFileNameWithoutExtension(originalPath)))
-					{
-						// 用 ChangeExtension 移除末尾扩展名：不含 '.' 时安全返回原串，避免 LastIndexOf 返回 -1 触发 ArgumentOutOfRangeException；
-						// 并且只针对文件名末端的扩展名，不会误截目录名中出现的 '.'
-						originalDirectory = Path.ChangeExtension(originalPath, null);
-					}
-				}
-
-				foreach (IUnityObjectBase asset in collection)
-				{
-					if (asset is IShader)
-					{
-						continue;
-					}
-
-					asset.OriginalDirectory ??= originalDirectory;
-				}
-			}
-		}
 	}
 
 	private static void SetOriginalPaths(IResourceManager manager)
@@ -163,7 +124,7 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 	/// </summary>
 	/// <remarks>
 	/// Asset bundles usually contain more assets than listed in <see cref="IAssetBundle.Container"/>. 
-	/// We need to export them in AssetBundleFullPath directory if <see cref="m_BundledAssetsExportMode"/> is <see cref="BundledAssetsExportMode.GroupByBundleName"/>.
+	/// We need to export them in AssetBundleFullPath directory if <paramref name="bundledAssetsExportMode"/> is <see cref="BundledAssetsExportMode.GroupByBundleName"/>.
 	/// That is done in a separate function.
 	/// </remarks>
 	/// <param name="bundle"></param>
@@ -198,8 +159,10 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 
 			switch (bundledAssetsExportMode)
 			{
-				case BundledAssetsExportMode.ContainerExport:
 				case BundledAssetsExportMode.DirectExport:
+				case BundledAssetsExportMode.MainAssetFolder:
+					// MainAssetFolder 模式下，容器里有原始路径的资源同样按原始路径位置导出；
+					// 没有原始路径的资源由 MainAssetFolderProcessor 在主资产同名文件夹下补齐位置。
 					asset.OriginalPath = OriginalPathHelper.EnsureStartsWithAssets(assetPath);
 					break;
 				case BundledAssetsExportMode.GroupByBundleName:

@@ -13,6 +13,7 @@ using AssetRipper.Processing;
 using AssetRipper.Processing.AnimatorControllers;
 using AssetRipper.Processing.Assemblies;
 using AssetRipper.Processing.AudioMixers;
+using AssetRipper.Processing.Configuration;
 using AssetRipper.Processing.Editor;
 using AssetRipper.Processing.Prefabs;
 using AssetRipper.Processing.Scenes;
@@ -123,6 +124,12 @@ public class ExportHandler(FullConfiguration settings)
 		yield return new PrefabProcessor();
 		yield return new SpriteProcessor();
 		yield return new ScriptableObjectProcessor();
+		if (Settings.ProcessingSettings.BundledAssetsExportMode == BundledAssetsExportMode.MainAssetFolder)
+		{
+			// 必须排在所有会设置 MainAsset 的处理器（PrefabProcessor / SpriteProcessor / ScriptableObjectProcessor）之后，
+			// 否则读到的主资产还是 null，无法据此分配导出目录。
+			yield return new MainAssetFolderProcessor();
+		}
 	}
 
 	/// <summary> 导出 </summary>
