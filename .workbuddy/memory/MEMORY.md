@@ -33,3 +33,18 @@
 - 改动集合/资源/子 Bundle（`AddCollection`/`AddResource`/`AddBundle`/`Dispose`）后必须 `InvalidateLevelIndexes()`，且 `AddCollection`/`AddResource` 还要失效**父**节点。**不能改成增量 `TryAdd`**：新条目在“一层”顺序里排在子 Bundle 之前，同名时会输给已登记的子里条目，语义就变了。
 - 语义约束（`AssetRipper.Assets.Tests/FileResolutionTests.cs` 已固化，24 例）：只向下探**一层**（孙 Bundle 的集合对根不可见）；同名取首个；资源键用 `NameFixed`（即 `FixFileIdentifier` 后的名字）。
 - 缺失依赖日志必须去重（`Bundle.DependencyInitializationContext` + `DeduplicatingDependencyProvider`），逐条打印上限 1000 / 去重统计上限 10000，另有每 5 万集合的进度行。
+
+## 文件扫描（`PlatformGameStructure.CollectFiles`，性能敏感）
+- 瓶颈**不是目录枚举**，是**逐文件开关流**做类型判定（`SerializedFile.IsSerializedFile` / `BundleHeader.IsBundleHeader`）。30w 文件约半小时。
+- 现走 `FileTypeScanner`：扩展名+体积预筛（零 syscall 排除）→ 候选批量并发读 32 字节头 → `HeaderProbe` 纯函数判定。**勿退回逐文件 `IsSerializedFile`**。
+- `HeaderProbe` 是纯函数、无磁盘依赖，可单测；批量结果与原逐文件判定**必须完全一致**（`FileTypeScannerTests` 已固化 4 例）。
+- `FileSystem.BatchReadHeaderPrefix` / `EnumerateFileInfos` 是**抽象原语**：改抽象签名写 `FileSystem.g.cs`，具体覆写写手写文件（否则再生成会丢）。`LocalFileSystem` 并发读头，基础类保持**串行**——`File.OpenRead` 的流池是进程级串行的，多线程用反而更慢。
+- `AssetRipper.IO.Files.csproj` **零 ProjectReference**（只有 NuGet 包）→ **不能引用 `AssetRipper.Logging`**，诊断只能走可选 `Action<string>?` 回调参数。
+- 扫描结果缓存 `FileScanCache`：键=`(目录, 扫描类型)`，按目录指纹（文件数+最后写入 UTC ticks）校验，**不符即该目录重扫、绝不静默信任**。默认**关闭**（`PlatformGameStructure.ScanCacheEnabled`/`ScanCachePath`），改动集合后须注意失效。
+- `CollectAllSerializedFiles` 原有的“按名字去重”是**死代码**（`GameBundle.FromPaths` 只用 `Files.Values()`，名字被丢弃）→ 可安全改为 `AddRange`。
+
+## ⚠️ .git 处于易失状态（操作前必须先备份）
+- 本仓库 `.git/objects` 的 **loose 对象会消失**（曾被外部清理到 `loose_objects=0`），历史只在 3 个 pack 里（约 463MB / 4352 commit）。曾导致 `.git/refs/` 丢失 → 所有 git 命令报 `fatal: not a git repository`。
+- **6 个 `optimize/*` 分支早已指向不存在的对象**（`invalid sha1 pointer`），`git fsck` 会有 244 条 reflog 错误——均为既存问题，**不要试图“修复”**。在用的 `alpha` / `master` 健康。
+- 做任何 git 操作前，**先把改动文件复制到仓库外**；**不要用 `git stash`**（它要扫描全部对象，一遇缺失就整体失败且会留下半残状态）。
+- 若再遇 `not a git repository`：`.git/refs/` 很可能被删。修复=从 `.git/logs/refs/**` reflog **最后一行第 2 个字段**取 SHA 重建 refs（注意 reflog 相对路径已含 `refs/`，别拼成 `refs/refs/`）；顶端对象若丢失，`git update-ref` 指回可读的父提交，再 `git read-tree <有效commit>` 重建索引（`reset --mixed` 会因索引引用缺失对象而失败）。

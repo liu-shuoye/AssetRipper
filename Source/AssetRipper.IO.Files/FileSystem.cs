@@ -19,6 +19,19 @@ public partial class FileSystem
 
 	public abstract string TemporaryDirectory { get; set; }
 
+	/// <summary>
+	/// 并发批量读取各文件的开头若干字节，用于在不完整解析文件的前提下识别文件类型。
+	/// </summary>
+	/// <param name="paths">待读取的文件路径，下标与 <paramref name="buffers"/> 一一对应。</param>
+	/// <param name="maxBytes">每个文件最多读取的字节数，即缓冲区的长度。</param>
+	/// <param name="buffers">与 <paramref name="paths"/> 等长的缓冲区数组，每个缓冲区长度不小于 <paramref name="maxBytes"/>。</param>
+	/// <param name="concurrency">并发度，必须为正数。</param>
+	/// <returns>实际读取的字节数；读取失败的文件返回 -1。</returns>
+	public int[] BatchReadHeaderPrefix(IReadOnlyList<string> paths, int maxBytes, byte[][] buffers, int concurrency)
+	{
+		return File.BatchReadHeaderPrefix(paths, maxBytes, buffers, concurrency);
+	}
+
 	public partial class FileImplementation
 	{
 		public string CreateTemporary()
@@ -28,6 +41,15 @@ public partial class FileSystem
 			File.Create(path).Dispose();
 			return path;
 		}
+
+		/// <summary>
+		/// 返回该路径在本机真实文件系统中的位置；若此文件系统并非本机磁盘（如虚拟文件系统）则返回 <see langword="null"/>。
+		/// </summary>
+		/// <remarks>
+		/// 用于把本机特有的快速路径（批量 stat、并发读取）限制在 <see cref="LocalFileSystem"/> 上，
+		/// 其他实现保持与原有逐次调用等价的语义。
+		/// </remarks>
+		public virtual string? GetLocalPath(string path) => null;
 	}
 
 	public partial class DirectoryImplementation
@@ -181,4 +203,114 @@ public partial class FileSystem
 	};
 
 	private protected static string GetRandomString() => Guid.NewGuid().ToString();
+
+	/// <summary>
+	/// 一个目录条目的路径与大小。大小为 <see cref="UnknownSize"/> 表示该文件系统无法廉价地提供大小。
+	/// </summary>
+	/// <param name="Path">文件完整路径。</param>
+	/// <param name="Length">文件字节数，未知时为 <see cref="UnknownSize"/>。</param>
+	public readonly record struct FileEntryInfo(string Path, long Length);
+
+	/// <summary>
+	/// <see cref="FileEntryInfo.Length"/> 的哨兵值：大小未知。0 是合法的文件大小，所以不能复用。
+	/// </summary>
+	public const long UnknownSize = -1;
+
+	/// <summary>
+	/// 尝试获取文件大小，失败或不被支持时返回 <see cref="UnknownSize"/>。
+	/// </summary>
+	private protected static long TryGetFileLength(FileSystem fileSystem, string path)
+	{
+		try
+		{
+			string? localPath = fileSystem.File.GetLocalPath(path);
+			if (localPath is not null)
+			{
+				return new System.IO.FileInfo(localPath).Length;
+			}
+		}
+		catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+		{
+			// 大小只是用于筛选的提示信息，拿不到时退化为“未知”，交由调用方决定是否仍需读取文件头
+		}
+
+		return UnknownSize;
+	}
+
+	/// <summary>
+	/// 并发批量读取各文件的开头若干字节，用于识别文件类型而不必完整打开或解析文件。
+	/// </summary>
+	/// <param name="fileSystem">用于打开文件。</param>
+	/// <param name="paths">待读取的文件路径，下标与 <paramref name="buffers"/> 一一对应。</param>
+	/// <param name="buffers">每个文件对应的缓冲区，长度即该文件最多读取的字节数。</param>
+	/// <param name="concurrency">并发度，必须为正数。</param>
+	/// <returns>实际读取的字节数；失败的文件返回 -1。</returns>
+	public static int[] BatchReadHeaderPrefixImpl(FileSystem fileSystem, IReadOnlyList<string> paths, byte[][] buffers, int concurrency)
+	{
+		ArgumentOutOfRangeException.ThrowIfLessThan(concurrency, 1);
+		int[] results = new int[paths.Count];
+		// 每个线程各持有自己的小缓冲区，避免共享状态；顺序无关，因此不需要任何同步
+		int workerCount = Math.Min(concurrency, paths.Count);
+		if (workerCount <= 1)
+		{
+			for (int i = 0; i < paths.Count; i++)
+			{
+				results[i] = ReadHeaderPrefix(fileSystem, paths[i], buffers[i]);
+			}
+			return results;
+		}
+
+		int next = -1;
+		Thread[] workers = new Thread[workerCount];
+		for (int w = 0; w < workerCount; w++)
+		{
+			workers[w] = new Thread(() =>
+			{
+				int i;
+				while ((i = Interlocked.Increment(ref next)) < paths.Count)
+				{
+					results[i] = ReadHeaderPrefix(fileSystem, paths[i], buffers[i]);
+				}
+			})
+			{
+				IsBackground = true,
+				// 大项目下等待全部读完可显著超过默认栈大小所暗示的用途，给足栈空间更从容
+				Name = "AssetRipper.HeaderReader",
+			};
+			workers[w].Start();
+		}
+
+		foreach (Thread worker in workers)
+		{
+			worker.Join();
+		}
+
+		return results;
+	}
+
+	/// <summary>
+	/// 串行版本的批量读取，供不支持并发的文件系统使用。
+	/// </summary>
+	private protected static int[] ReadHeaderPrefixSequentially(FileSystem fileSystem, IReadOnlyList<string> paths, byte[][] buffers)
+	{
+		int[] results = new int[paths.Count];
+		for (int i = 0; i < paths.Count; i++)
+		{
+			results[i] = ReadHeaderPrefix(fileSystem, paths[i], buffers[i]);
+		}
+		return results;
+	}
+
+	private static int ReadHeaderPrefix(FileSystem fileSystem, string path, byte[] buffer)
+	{
+		try
+		{
+			using Stream stream = fileSystem.File.OpenRead(path);
+			return stream.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
+		}
+		catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+		{
+			return -1;
+		}
+	}
 }

@@ -78,6 +78,14 @@ public abstract partial class FileSystem
 			throw new global::System.NotSupportedException();
 		}
 
+		/// <summary>
+		/// Fills <paramref name="buffers"/> with the leading bytes of the corresponding files.
+		/// </summary>
+		public virtual global::System.Int32[] BatchReadHeaderPrefix(global::System.Collections.Generic.IReadOnlyList<global::System.String> paths, global::System.Int32 maxBytes, global::System.Byte[][] buffers, global::System.Int32 concurrency)
+		{
+			return FileSystem.BatchReadHeaderPrefixImpl(Parent, paths, buffers, concurrency);
+		}
+
 		// Override methods below to provide custom implementation
 		public sealed override string ToString() => base.ToString();
 		public sealed override bool Equals(object obj) => base.Equals(obj);
@@ -168,6 +176,17 @@ public abstract partial class FileSystem
 		public virtual global::System.Boolean Exists(global::System.String path)
 		{
 			throw new global::System.NotSupportedException();
+		}
+
+		/// <summary>
+		/// Enumerates the files directly inside <paramref name="path"/>, returning the full path and the size in bytes.
+		/// </summary>
+		public virtual global::System.Collections.Generic.IEnumerable<global::AssetRipper.IO.Files.FileSystem.FileEntryInfo> EnumerateFileInfos(global::System.String path)
+		{
+			foreach (global::System.String file in EnumerateFiles(path))
+			{
+				yield return new global::AssetRipper.IO.Files.FileSystem.FileEntryInfo(file, global::AssetRipper.IO.Files.FileSystem.TryGetFileLength(Parent, file));
+			}
 		}
 
 		// Override methods below to provide custom implementation

@@ -204,6 +204,11 @@ public partial class VirtualFileSystem : FileSystem
 
 	public partial class VirtualFileImplementation
 	{
+		/// <summary>
+		/// 虚拟文件系统没有真实的磁盘路径，因此禁用依赖本机路径的快速路径。
+		/// </summary>
+		public override string? GetLocalPath(string path) => null;
+
 		public override SmartStream Create(string path)
 		{
 			string[] pathParts = Path.GetPathParts(path);
@@ -295,6 +300,19 @@ public partial class VirtualFileSystem : FileSystem
 			foreach (string part in parts)
 			{
 				current = current.CreateDirectory(part);
+			}
+		}
+
+		/// <summary>
+		/// 内存树中长度是现成的，因此直接给出精确大小而不必再访问底层流。
+		/// </summary>
+		public override IEnumerable<FileEntryInfo> EnumerateFileInfos(string? path)
+		{
+			string[] parts = Path.GetPathParts(path);
+			DirectoryEntry directory = Parent.OpenDirectory(parts);
+			foreach (FileEntry file in directory.Files.Values)
+			{
+				yield return new FileEntryInfo(file.FullName, file.Stream.Length);
 			}
 		}
 

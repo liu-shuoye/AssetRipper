@@ -42,7 +42,7 @@ internal sealed partial record class GameInitializer
 		}
 
 		/// <summary>
-		/// Attempts to find the path for the dependency with that name.
+		/// 尝试查找具有该名称的依赖项路径。
 		/// </summary>
 		private string? RequestDependency(string dependency)
 		{

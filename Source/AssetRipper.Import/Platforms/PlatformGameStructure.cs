@@ -90,7 +90,7 @@ public abstract partial class PlatformGameStructure
 		return false;
 	}
 
-	/// <summary>Attempts to find the path for the dependency with that name.</summary>
+	/// <summary>尝试查找具有该名称的依赖项路径。</summary>
 	public string? RequestDependency(string dependency)
 	{
 		string? dependencyPath = Files.FirstOrDefault(t => t.Key == dependency).Value;
@@ -154,6 +154,8 @@ public abstract partial class PlatformGameStructure
 			return;
 		}
 
+		LoadScanCache();
+
 		foreach (string dataPath in DataPaths)
 		{
 			CollectGameFiles(dataPath, Files);
@@ -164,7 +166,85 @@ public abstract partial class PlatformGameStructure
 		{
 			CollectStreamingAssets();
 		}
+
+		SaveScanCache();
 	}
+
+	/// <summary>
+	/// 缓存中的扫描类型名 → 枚举值。缓存文件跨版本可读，因此这里显式列出全部合法取值。
+	/// </summary>
+	private static readonly Dictionary<string, FileScanKind> ScanKindsByName = new(StringComparer.Ordinal)
+	{
+		[nameof(FileScanKind.SerializedFiles)] = FileScanKind.SerializedFiles,
+		[nameof(FileScanKind.Bundles)] = FileScanKind.Bundles,
+	};
+
+	/// <summary>
+	/// 尝试加载上一次的扫描结果缓存。
+	/// </summary>
+	/// <remarks>
+	/// 缓存仅在显式启用时读取；任何异常或校验不通过都静默退化为完整扫描，缓存永远不能成为失败点。
+	/// </remarks>
+	private void LoadScanCache()
+	{
+		if (!ScanCacheEnabled || string.IsNullOrWhiteSpace(ScanCachePath))
+		{
+			return;
+		}
+
+		Dictionary<FileScanKind, List<KeyValuePair<string, string>>>? loaded = FileScanCache.TryLoad(
+			ScanCachePath,
+			RootPath,
+			FileSystem,
+			ScanKindsByName,
+			message => Logger.Warning(LogCategory.Import, message));
+		if (loaded is null)
+		{
+			return;
+		}
+
+		_scanCache = [];
+		foreach (KeyValuePair<FileScanKind, List<KeyValuePair<string, string>>> pair in loaded)
+		{
+			// 缓存键不含目录，这里按扫描结果中第一条记录的所在目录还原，与落盘时的键构造方式对称
+			if (pair.Value.Count > 0 && FileSystem.Path.GetDirectoryName(pair.Value[0].Value) is { } directory)
+			{
+				_scanCache[(directory, pair.Key)] = pair.Value;
+			}
+		}
+
+		Logger.Info(LogCategory.Import, $"已加载文件扫描缓存：{ScanCachePath}");
+	}
+
+	/// <summary>
+	/// 把本次新扫描出的结果写入缓存文件，供下次导入直接复用。
+	/// </summary>
+	private void SaveScanCache()
+	{
+		if (!ScanCacheEnabled || string.IsNullOrWhiteSpace(ScanCachePath) || _scanCacheAdditions is null)
+		{
+			return;
+		}
+
+		FileScanCache.Save(
+			ScanCachePath,
+			RootPath,
+			FileSystem,
+			_scanCacheAdditions,
+			kind => kind.ToString(),
+			message => Logger.Warning(LogCategory.Import, message));
+		Logger.Info(LogCategory.Import, $"文件扫描缓存已保存：{ScanCachePath}");
+	}
+
+	/// <summary>
+	/// 是否启用扫描结果缓存。默认关闭，避免在磁盘上产生用户未预期的文件。
+	/// </summary>
+	public bool ScanCacheEnabled { get; set; }
+
+	/// <summary>
+	/// 扫描结果缓存文件的路径。
+	/// </summary>
+	public string? ScanCachePath { get; set; }
 
 	protected void CollectGameFiles(string root, List<KeyValuePair<string, string>> files)
 	{
@@ -235,31 +315,33 @@ public abstract partial class PlatformGameStructure
 	/// <remarks>
 	/// The search is top-level only.
 	/// Files are selected based on their file header.
+	/// 判定交由 <see cref="FileTypeScanner"/> 完成：它先用名称与体积筛掉不可能命中的文件，
+	/// 再对候选并发读取文件头，避免对每个文件都单独打开一次流。
 	/// </remarks>
 	protected void CollectAllSerializedFiles(string root, List<KeyValuePair<string, string>> files)
 	{
-		foreach (string path in FileSystem.Directory.EnumerateFiles(root))
+		if (TryGetCachedScan(root, FileScanKind.SerializedFiles, out List<KeyValuePair<string, string>>? cached))
 		{
-			if (SerializedFile.IsSerializedFile(path, FileSystem))
-			{
-				string name = FileSystem.Path.GetFileName(path);
-				string actualName = MultiFileStream.GetFileName(name);
-				AddFile(files, actualName, path);
-			}
+			files.AddRange(cached);
+			return;
 		}
+
+		List<KeyValuePair<string, string>> scanned = FileTypeScanner.ScanSerializedFiles(FileSystem, root);
+		StoreCachedScan(root, FileScanKind.SerializedFiles, scanned);
+		files.AddRange(scanned);
 	}
 
 	/// <summary>
-	/// Collect bundles from the Streaming Assets folder
+	/// 从 Streaming Assets 文件夹中收集资源包
 	/// </summary>
-	protected void CollectStreamingAssets()
+	private void CollectStreamingAssets()
 	{
 		if (string.IsNullOrWhiteSpace(StreamingAssetsPath))
 		{
 			return;
 		}
 
-		Logger.Info(LogCategory.Import, "Collecting Streaming Assets...");
+		Logger.Info(LogCategory.Import, "正在收集流媒体资源...");
 		if (FileSystem.Directory.Exists(StreamingAssetsPath))
 		{
 			CollectAssetBundlesRecursively(StreamingAssetsPath, Files);
@@ -269,14 +351,37 @@ public abstract partial class PlatformGameStructure
 	/// <summary>
 	/// 仅从该目录收集资产包
 	/// </summary>
+	/// <remarks>
+	/// 判定交由 <see cref="FileTypeScanner"/> 完成：先用名称与体积筛掉不可能命中的文件，
+	/// 再对候选并发读取文件头。大型项目下该目录可能包含数十万文件，这一层筛选是主要提速点。
+	/// </remarks>
 	protected void CollectAssetBundles(string root, List<KeyValuePair<string, string>> files)
 	{
-		foreach (string file in FileSystem.Directory.EnumerateFiles(root))
+		if (TryGetCachedScan(root, FileScanKind.Bundles, out List<KeyValuePair<string, string>>? cached))
 		{
-			if (BundleHeader.IsBundleHeader(file, FileSystem))
+			LogBundleProgress(files, cached);
+			files.AddRange(cached);
+			return;
+		}
+
+		List<KeyValuePair<string, string>> scanned = FileTypeScanner.ScanBundles(FileSystem, root);
+		StoreCachedScan(root, FileScanKind.Bundles, scanned);
+		LogBundleProgress(files, scanned);
+		files.AddRange(scanned);
+	}
+
+	/// <summary>
+	/// 按原实现的粒度输出资源包进度日志，保证扫描过程对使用者仍可见。
+	/// </summary>
+	private void LogBundleProgress(List<KeyValuePair<string, string>> files, List<KeyValuePair<string, string>> scanned)
+	{
+		int startCount = files.Count;
+		for (int i = 0; i < scanned.Count; i++)
+		{
+			// 与 AddAssetBundle 的每 1000 个一次保持一致，只是改为在批量收集后统一计算
+			if ((startCount + i + 1) % 1000 == 0)
 			{
-				string name = FileSystem.Path.GetFileNameWithoutExtension(file).ToLowerInvariant();
-				AddAssetBundle(files, name, file);
+				Logger.Info(LogCategory.Import, $"已找到资源包 {startCount + i + 1}:'{scanned[i].Key}'");
 			}
 		}
 	}
@@ -286,16 +391,6 @@ public abstract partial class PlatformGameStructure
 	/// </summary>
 	protected void CollectAssetBundlesRecursively(string root, List<KeyValuePair<string, string>> files)
 	{
-		if (root.EndsWith(@"art\audio"))
-		{
-			Logger.Info(LogCategory.Import, $"跳过文件夹 '{root}'");
-			return;
-		}
-		if (!root.EndsWith(@"art") && root.Contains("art") && !root.Contains(@"art\character"))
-		{
-			Logger.Info(LogCategory.Import, $"跳过文件夹 '{root}'");
-			return;
-		}
 		CollectAssetBundles(root, files);
 		foreach (string directory in FileSystem.Directory.EnumerateDirectories(root))
 		{
@@ -337,6 +432,48 @@ public abstract partial class PlatformGameStructure
 				CollectAssemblies(libPath);
 			}
 		}
+	}
+
+	/// <summary>
+	/// 目录扫描结果的缓存，键为 (目录, 扫描类型)。
+	/// </summary>
+	/// <remarks>
+	/// 同一目录可能被多个平台结构重复扫描；缓存既避免重复 IO，也让“扫描结果落盘”可以按目录粒度复用。
+	/// </remarks>
+	private Dictionary<(string Directory, FileScanKind Kind), List<KeyValuePair<string, string>>>? _scanCache;
+
+	/// <summary>
+	/// 本次导入过程中被写入缓存的新扫描结果，供结束时统一落盘。
+	/// </summary>
+	private Dictionary<(string Directory, FileScanKind Kind), List<KeyValuePair<string, string>>>? _scanCacheAdditions;
+
+	/// <summary>
+	/// 扫描类型，用于区分同一目录下不同的筛选口径。
+	/// </summary>
+	private enum FileScanKind
+	{
+		SerializedFiles,
+		Bundles,
+	}
+
+	/// <summary>
+	/// 尝试从缓存取出该目录的扫描结果。
+	/// </summary>
+	private bool TryGetCachedScan(string directory, FileScanKind kind, [NotNullWhen(true)] out List<KeyValuePair<string, string>>? files)
+	{
+		files = null;
+		return _scanCache is not null && _scanCache.TryGetValue((directory, kind), out files);
+	}
+
+	/// <summary>
+	/// 记录本次扫描结果，既写入内存缓存也登记待落盘条目。
+	/// </summary>
+	private void StoreCachedScan(string directory, FileScanKind kind, List<KeyValuePair<string, string>> files)
+	{
+		_scanCache ??= [];
+		_scanCacheAdditions ??= [];
+		_scanCache[(directory, kind)] = files;
+		_scanCacheAdditions[(directory, kind)] = files;
 	}
 
 	private string? FindEngineDependency(string path, string dependency)
