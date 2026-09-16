@@ -4,6 +4,9 @@
 - GUI = 本地 ASP.NET Core Web（Vue 前端 + C# 生成 HTML，`AssetRipper.GUI.Web`）。设置模型 `FullConfiguration`(Export/Processing/Import) → `AssetRipper.Settings.json`，仅 `ExportSettings.SaveSettingsToDisk` 勾选才落盘。
 - **禁止往 `ExportSettings` 加"始终记住"的字段**：`SettingsPageGenerator` 反射其全部 public 属性生成设置页，会多出控件。→ 放独立文件（参考 `LastExportSettings`）。
 - `SettingsPage.g.cs` 是**预生成静态文件**，构建不会更新。改设置字段后必须跑 `0Bins/Other/AssetRipper.GUI.SourceGenerator/Debug/*.exe`（顺带重排 en_US.json），或手工补 booleanProperties 条目 + WriteXxxFor。
+  - ⚠️ **该 exe 用的是它自己输出目录里那份 `AssetRipper.Import.dll`，构建不会自动刷新它** → 直接跑会**静默产出不含新属性的文件（无报错）**。正确顺序：先 dotnet 构建 `AssetRipper.Import` → 把新的 `AssetRipper.Import.dll/.pdb` 复制进生成器目录（先备份，用完还原）→ 再跑 exe。
+- 新增 Import/Processing 设置项的完整清单：字段 + `Log()` 一行 + `SettingsPage.cs` 手写控件 + 跑生成器 + `Localizations/{en_US,zh_Hans,zh_Hant}.json` 三个 key（`xxx` / `xxx_description`）；**仅 en_US 参与生成**，其余语言缺失即回退英文。
+- 设置**下发时机**：`GameStructure` 构造函数里 `PlatformStructure`/`MixedStructure` 赋值后、`CollectFiles(...)` **之前**（`ApplyScanCacheSettings`）。晚于 CollectFiles 则入口处的缓存读写看到的还是默认值。
 - 前端初值：`VuePage.WriteScriptReferences` 里在 Vue 脚本前注入 `<script>window.x = {JSON};</script>`，JS 用 `window.x ?? default`；路径必须 `JsonSerializer.Serialize`（Windows 反斜杠）。
 
 ## Nikki4 专属类（AssetCreation/Nikki4）
@@ -13,6 +16,8 @@
 
 ## 构建与运行环境
 - net10.0；.NET 10.0.301 已装。**PowerShell 的 `dotnet` 可用**（不回显 stdout → 写文件再 Read）。**优先走 Rider MCP**（`build_solution_start` → `build_solution_state --sessionId`）。
+  - ⚠️ Rider MCP 偶尔**假失败**：返回 `buildIsSuccess:false` + `problems:[]` + “Build failed without diagnostic output”，而 `get_project_problems` 只有无关的 `SourceGenerator.Foundations.Contracts` 加载警告 → **改用 dotnet CLI 复核**。
+  - CLI 复核走沙箱 bash：`export APPDATA/ProgramData/LOCALAPPDATA` 后 `dotnet build --no-restore -v m > out.txt 2>&1`，Read 该文件（GBK 编码，用 `errors='replace'` 读再按 `错误|警告|->` 过滤）。比 PowerShell 吞 stdout 可靠。
 - 沙箱 bash 里 `dotnet restore` 必崩（NuGet path1 null）。用 `--no-restore` 前须 `export APPDATA/ProgramData/LOCALAPPDATA`（缺任一项报 NETSDK1060）。coreutils 缺失时改用 PowerShell。
 - 新增工程/引用后必须先真实 restore，否则 NU1105。csc.exe 在黑名单。跨盘符绝对路径 ProjectReference 必失败，须同盘相对路径。
 - 快速复现：`0Bins/AssetRipper.GUI.Free/Debug/AssetRipper.GUI.Free.exe --port <N> --headless`；POST /Settings/Update、/LoadFile，GET /Collections/View、/Assets/Json|Yaml。
@@ -40,8 +45,11 @@
 - `HeaderProbe` 是纯函数、无磁盘依赖，可单测；批量结果与原逐文件判定**必须完全一致**（`FileTypeScannerTests` 已固化 4 例）。
 - `FileSystem.BatchReadHeaderPrefix` / `EnumerateFileInfos` 是**抽象原语**：改抽象签名写 `FileSystem.g.cs`，具体覆写写手写文件（否则再生成会丢）。`LocalFileSystem` 并发读头，基础类保持**串行**——`File.OpenRead` 的流池是进程级串行的，多线程用反而更慢。
 - `AssetRipper.IO.Files.csproj` **零 ProjectReference**（只有 NuGet 包）→ **不能引用 `AssetRipper.Logging`**，诊断只能走可选 `Action<string>?` 回调参数。
-- 扫描结果缓存 `FileScanCache`：键=`(目录, 扫描类型)`，按目录指纹（文件数+最后写入 UTC ticks）校验，**不符即该目录重扫、绝不静默信任**。默认**关闭**（`PlatformGameStructure.ScanCacheEnabled`/`ScanCachePath`），改动集合后须注意失效。
+- 扫描结果缓存 `FileScanCache`：键=`(目录, 扫描类型)`，按目录指纹（文件数+最后写入 UTC ticks）校验，**不符即该目录重扫、绝不静默信任**。默认**关闭**（`PlatformGameStructure.ScanCacheEnabled`/`ScanCachePath`），改动集合后须注意失效。已接入设置页：`ImportSettings.EnableFileScanCache`/`FileScanCachePath` → `GameStructure.ApplyScanCacheSettings`。
 - `CollectAllSerializedFiles` 原有的“按名字去重”是**死代码**（`GameBundle.FromPaths` 只用 `Files.Values()`，名字被丢弃）→ 可安全改为 `AddRange`。
+- `RequestDependency` 走 `GetOrBuildFilesIndex()`：`_filesIndex`（`TryAdd` 保住“首个匹配优先”）+ 过期判定 `_filesIndexCount != Files.Count`（`Files` 只增不减，全仓无 `Files.Clear/Remove`）。
+- Unity 版本读取已**记忆化**：`static Dictionary<(string Path, bool IsBundle), UnityVersion> VersionCache`。因为平台探测会给同一个 `globalgamemanagers` 建多个结构体实例，实例级缓存跨不了实例。清空入口 `PlatformChecker.CheckPlatform` 开头（每次导入恰好一次，且早于任何结构体构造）；`ClearVersionCache` 须为 `internal static`（`PlatformChecker` 是静态类非子类）。
+- `AssetRipper.Import` 导入链路**单线程**（无 `Task.Run`/`Parallel.`/`Thread(`）→ 缓存用普通 `Dictionary` 即可，无需并发容器。
 
 ## ⚠️ .git 处于易失状态（操作前必须先备份）
 - 本仓库 `.git/objects` 的 **loose 对象会消失**（曾被外部清理到 `loose_objects=0`），历史只在 3 个 pack 里（约 463MB / 4352 commit）。曾导致 `.git/refs/` 丢失 → 所有 git 命令报 `fatal: not a git repository`。

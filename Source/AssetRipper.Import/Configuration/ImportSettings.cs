@@ -112,6 +112,21 @@ public sealed record class ImportSettings
 	/// </remarks>
 	public bool EnableImportAssetTypeFilter { get; set; } = false;
 
+	/// <summary>
+	/// 是否启用文件扫描结果缓存。启用后同目录的扫描结果会落盘，
+	/// 下次导入且目录未变化时可直接复用，跳过逐文件读取文件头。
+	/// </summary>
+	/// <remarks>
+	/// 默认关闭是刻意的：缓存会在磁盘上写出一个额外文件，不应在用户未要求时悄悄产生。
+	/// 缓存本身按目录指纹（文件数 + 最后写入时间）校验，指纹不符即重新扫描，不会漏文件。
+	/// </remarks>
+	public bool EnableFileScanCache { get; set; } = false;
+
+	/// <summary>
+	/// 文件扫描结果缓存文件路径。仅在 <see cref="EnableFileScanCache"/> 为 true 时生效。
+	/// </summary>
+	public string? FileScanCachePath { get; set; }
+
 	public void Log()
 	{
 		Logger.Info(LogCategory.General, $"{nameof(ScriptContentLevel)}: {ScriptContentLevel}");
@@ -128,6 +143,8 @@ public sealed record class ImportSettings
 		Logger.Info(LogCategory.General, $"{nameof(MemoryBreakdownMode)}: {MemoryBreakdownMode}");
 		Logger.Info(LogCategory.General, $"{nameof(EnableImportAssetTypeFilter)}: {EnableImportAssetTypeFilter}");
 		Logger.Info(LogCategory.General, $"{nameof(ImportAssetTypes)}: {(ImportAssetTypes.Count == 0 ? "(all)" : string.Join(", ", ImportAssetTypes.OrderBy(t => t)))}");
+		Logger.Info(LogCategory.General, $"{nameof(EnableFileScanCache)}: {EnableFileScanCache}");
+		Logger.Info(LogCategory.General, $"{nameof(FileScanCachePath)}: {FileScanCachePath}");
 	}
 
 	/// <summary>

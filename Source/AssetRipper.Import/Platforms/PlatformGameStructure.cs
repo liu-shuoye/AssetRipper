@@ -90,10 +90,45 @@ public abstract partial class PlatformGameStructure
 		return false;
 	}
 
+	/// <summary>
+	/// 名称到路径的查找索引，避免 <see cref="RequestDependency"/> 对数十万条目做线性扫描。
+	/// </summary>
+	/// <remarks>
+	/// 仅在 <see cref="Files"/> 的条目数不再是 <see cref="_filesIndexCount"/> 时重建，
+	/// 这样集合在扫描期间持续增长也只会让索引延后一次构建，不会读到过期数据。
+	/// </remarks>
+	private Dictionary<string, string>? _filesIndex;
+
+	/// <summary>
+	/// 构建 <see cref="_filesIndex"/> 时 <see cref="Files"/> 的条目数，用于判断索引是否过期。
+	/// </summary>
+	private int _filesIndexCount = -1;
+
+	/// <summary>
+	/// 同一名称出现多次时，只有**首个**条目会进入索引，以保持与原线性扫描一致的“首个匹配优先”语义。
+	/// </summary>
+	private Dictionary<string, string> GetOrBuildFilesIndex()
+	{
+		if (_filesIndex is null || _filesIndexCount != Files.Count)
+		{
+			Dictionary<string, string> index = new(Files.Count, StringComparer.Ordinal);
+			foreach (KeyValuePair<string, string> pair in Files)
+			{
+				// Dictionary 的索引器会覆盖旧值，这里必须显式跳过重复项才能保住“首个优先”
+				index.TryAdd(pair.Key, pair.Value);
+			}
+
+			_filesIndex = index;
+			_filesIndexCount = Files.Count;
+		}
+
+		return _filesIndex;
+	}
+
 	/// <summary>尝试查找具有该名称的依赖项路径。</summary>
 	public string? RequestDependency(string dependency)
 	{
-		string? dependencyPath = Files.FirstOrDefault(t => t.Key == dependency).Value;
+		string? dependencyPath = GetOrBuildFilesIndex().GetValueOrDefault(dependency);
 		if (!string.IsNullOrEmpty(dependencyPath))
 		{
 			return dependencyPath;
@@ -519,20 +554,51 @@ public abstract partial class PlatformGameStructure
 		}
 	}
 
+	/// <summary>
+	/// 已解析过的 Unity 版本，键为文件路径。
+	/// </summary>
+	/// <remarks>
+	/// 平台探测会为同一个 <c>globalgamemanagers</c> 构造多个结构体实例，每次都完整解析一遍该文件。
+	/// 缓存必须是**静态**的：同一次导入里不同实例读的是同一个文件，实例级缓存无法跨实例复用。
+	/// 一次导入的输入文件在过程中不变，因此这里以路径为键做一次性记忆化是安全的。
+	/// </remarks>
+	private static readonly Dictionary<(string Path, bool IsBundle), UnityVersion> VersionCache = new();
+
+	/// <summary>
+	/// 清空 Unity 版本缓存。每次新的导入开始前调用，避免长时间驻留导致缓存无限增长。
+	/// </summary>
+	internal static void ClearVersionCache()
+	{
+		VersionCache.Clear();
+	}
+
 	protected UnityVersion GetUnityVersionFromSerializedFile(string filePath)
 	{
+		if (VersionCache.TryGetValue((filePath, false), out UnityVersion cachedVersion))
+		{
+			return cachedVersion;
+		}
+
 		// 使用 using 确保 SerializedFile 持有的 SmartStream 引用被释放，
 		// 避免仅为读取 Version 而长期占用底层文件流。
 		using SerializedFile file = SerializedFile.FromFile(filePath, FileSystem);
+		VersionCache[(filePath, false)] = file.Version;
 		return file.Version;
 	}
 
 	protected UnityVersion GetUnityVersionFromBundleFile(string filePath)
 	{
+		if (VersionCache.TryGetValue((filePath, true), out UnityVersion cachedVersion))
+		{
+			return cachedVersion;
+		}
+
 		using Stream stream = FileSystem.File.OpenRead(filePath);
 		FileStreamBundleHeader header = new();
 		header.Read(stream);
-		return UnityVersion.Parse(header.UnityWebMinimumRevision);
+		UnityVersion version = UnityVersion.Parse(header.UnityWebMinimumRevision);
+		VersionCache[(filePath, true)] = version;
+		return version;
 	}
 
 	protected UnityVersion? GetUnityVersionFromDataDirectory(string dataDirectoryPath)

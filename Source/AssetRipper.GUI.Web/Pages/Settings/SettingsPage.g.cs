@@ -39,6 +39,9 @@ partial class SettingsPage
 			case nameof(ImportSettings.MemoryBreakdownMode):
 				Configuration.ImportSettings.MemoryBreakdownMode = TryParseEnum<MemoryBreakdownMode>(value);
 				break;
+			case nameof(ImportSettings.FileScanCachePath):
+				Configuration.ImportSettings.FileScanCachePath = value;
+				break;
 			case nameof(ProcessingSettings.BundledAssetsExportMode):
 				Configuration.ProcessingSettings.BundledAssetsExportMode = TryParseEnum<BundledAssetsExportMode>(value);
 				break;
@@ -86,6 +89,7 @@ partial class SettingsPage
 		{ nameof(ImportSettings.StripMeshData), (value) => { Configuration.ImportSettings.StripMeshData = value; } },
 		{ nameof(ImportSettings.StripAudioClipData), (value) => { Configuration.ImportSettings.StripAudioClipData = value; } },
 		{ nameof(ImportSettings.EnableImportAssetTypeFilter), (value) => { Configuration.ImportSettings.EnableImportAssetTypeFilter = value; } },
+		{ nameof(ImportSettings.EnableFileScanCache), (value) => { Configuration.ImportSettings.EnableFileScanCache = value; } },
 		{ nameof(ProcessingSettings.EnablePrefabOutlining), (value) => { Configuration.ProcessingSettings.EnablePrefabOutlining = value; } },
 		{ nameof(ProcessingSettings.EnableStaticMeshSeparation), (value) => { Configuration.ProcessingSettings.EnableStaticMeshSeparation = value; } },
 		{ nameof(ProcessingSettings.EnableAssetDeduplication), (value) => { Configuration.ProcessingSettings.EnableAssetDeduplication = value; } },
@@ -145,6 +149,11 @@ partial class SettingsPage
 	private static void WriteCheckBoxForEnableImportAssetTypeFilter(TextWriter writer, string label, bool disabled = false)
 	{
 		WriteCheckBox(writer, label, Configuration.ImportSettings.EnableImportAssetTypeFilter, nameof(ImportSettings.EnableImportAssetTypeFilter), disabled);
+	}
+
+	private static void WriteCheckBoxForEnableFileScanCache(TextWriter writer, string label, bool disabled = false)
+	{
+		WriteCheckBox(writer, label, Configuration.ImportSettings.EnableFileScanCache, nameof(ImportSettings.EnableFileScanCache), disabled);
 	}
 
 	private static void WriteCheckBoxForEnablePrefabOutlining(TextWriter writer, string label, bool disabled = false)

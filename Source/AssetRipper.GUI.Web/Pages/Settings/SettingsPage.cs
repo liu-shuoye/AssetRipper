@@ -114,6 +114,24 @@ public sealed partial class SettingsPage : DefaultPage
 							}
 						}
 
+						// 文件扫描缓存：大型项目（数十万文件）重复导入时复用上一次的扫描结果
+						using (new Div(writer).WithClass("row").End())
+						{
+							using (new Div(writer).WithClass("col").End())
+							{
+								WriteCheckBoxForEnableFileScanCache(writer, Localization.EnableFileScanCache);
+								new P(writer).WithClass("form-text").Close(Localization.EnableFileScanCacheDescription);
+							}
+						}
+
+						using (new Div(writer).WithClass("row").End())
+						{
+							using (new Div(writer).WithClass("col").End())
+							{
+								WriteTextInputForFileScanCachePath(writer);
+							}
+						}
+
 						// 内存拆解口径：控制加载/处理阶段资源占用拆解日志的统计方式
 						using (new Div(writer).WithClass("row").End())
 						{
@@ -367,6 +385,31 @@ public sealed partial class SettingsPage : DefaultPage
 				.WithClass("btn btn-outline-secondary")
 				.WithCustomAttribute("onclick", $"browseForFolder('{id}')")
 				.Close(Localization.SelectFolder);
+		}
+	}
+
+	/// <summary>
+	/// 文件扫描缓存文件的路径输入框，附带"选择文件"按钮。
+	/// 仅当启用扫描缓存时才会读写该文件，留空则视为不启用。
+	/// </summary>
+	private static void WriteTextInputForFileScanCachePath(TextWriter writer)
+	{
+		string id = nameof(Configuration.ImportSettings.FileScanCachePath);
+		new Label(writer).WithClass("form-label").WithFor(id).Close(Localization.FileScanCachePath);
+		using (new Div(writer).WithClass("input-group").End())
+		{
+			new Input(writer)
+				.WithType("text")
+				.WithClass("form-control")
+				.WithId(id)
+				.WithName(id)
+				.WithValue(Configuration.ImportSettings.FileScanCachePath ?? "")
+				.Close();
+			new Button(writer)
+				.WithType("button")
+				.WithClass("btn btn-outline-secondary")
+				.WithCustomAttribute("onclick", $"browseForFile('{id}')")
+				.Close(Localization.SelectFile);
 		}
 	}
 

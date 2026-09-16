@@ -11,6 +11,10 @@ public static class PlatformChecker
 		platformStructure = null;
 		mixedStructure = null;
 
+		// 平台探测会为同一个文件反复解析 Unity 版本，这里在每次导入开始时清空记忆化缓存，
+		// 既让首次探测的结果可以被后续的平台检查复用，也避免缓存随多次导入无限增长。
+		PlatformGameStructure.ClearVersionCache();
+
 		if (CheckWindows(paths, fileSystem, out WindowsGameStructure? pcGameStructure))
 		{
 			platformStructure = pcGameStructure;

@@ -35,8 +35,12 @@ public sealed class GameStructure : IDisposable
 		FileSystem = fileSystem;
 		PlatformChecker.CheckPlatform(paths, fileSystem, out PlatformGameStructure? platformStructure, out MixedGameStructure? mixedStructure);
 		PlatformStructure = platformStructure;
-		PlatformStructure?.CollectFiles(configuration.ImportSettings.IgnoreStreamingAssets);
 		MixedStructure = mixedStructure;
+
+		// 扫描缓存必须在 CollectFiles 之前配置好，否则 CollectFiles 入口处的缓存读写会看到默认的“未启用”
+		ApplyScanCacheSettings(configuration.ImportSettings);
+
+		PlatformStructure?.CollectFiles(configuration.ImportSettings.IgnoreStreamingAssets);
 		//MixedStructure?.CollectFiles(configuration.IgnoreStreamingAssets);
 		//The PlatformGameStructure constructor adds all the paths to the Assemblies and Files dictionaries
 		//No bundles or assemblies have been loaded yet
@@ -105,6 +109,28 @@ public sealed class GameStructure : IDisposable
 			assetFactory,
 			FileSystem,
 			new GameInitializer(PlatformStructure, MixedStructure, FileSystem, defaultVersion, targetVersion, dependencyMap));
+	}
+
+	/// <summary>
+	/// 把导入设置里的扫描缓存配置下发给平台结构。
+	/// </summary>
+	/// <remarks>
+	/// 两个结构都要配置：平台结构与混合结构各自持有独立的 <see cref="PlatformGameStructure.Files"/>，
+	/// 缓存也因此按结构分别落盘。路径留空时由 <see cref="PlatformGameStructure"/> 侧判定为不启用。
+	/// </remarks>
+	private void ApplyScanCacheSettings(ImportSettings settings)
+	{
+		if (PlatformStructure is not null)
+		{
+			PlatformStructure.ScanCacheEnabled = settings.EnableFileScanCache;
+			PlatformStructure.ScanCachePath = settings.FileScanCachePath;
+		}
+
+		if (MixedStructure is not null)
+		{
+			MixedStructure.ScanCacheEnabled = settings.EnableFileScanCache;
+			MixedStructure.ScanCachePath = settings.FileScanCachePath;
+		}
 	}
 
 	/// <summary>
