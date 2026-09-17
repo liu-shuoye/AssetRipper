@@ -12,6 +12,19 @@ public static class Logger
 	private static readonly List<ILogger> loggers = new();
 	public static bool AllowVerbose { get; set; }
 
+	/// <summary>
+	/// 是否在每条日志前附加时间戳前缀（如 "[12:34:56.789] "）。默认开启。
+	/// 关闭后日志保持原有格式，便于与旧日志对比或对接只认纯文本的下游。
+	/// </summary>
+	public static bool IncludeTimestamp { get; set; } = true;
+
+	/// <summary>
+	/// 当前正在分发的日志行对应的时间戳前缀。
+	/// 在 <see cref="Log(LogType, LogCategory, string)"/> 的锁内赋值，供各 <see cref="ILogger"/> 读取，
+	/// 保证同一条日志在控制台与文件里打出的时间一致，且只计算一次。
+	/// </summary>
+	internal static string CurrentTimestamp { get; private set; } = string.Empty;
+
 	public static event Action<string, object?> OnStatusChanged = (_, _) => { };
 
 	/// <summary>
@@ -36,8 +49,11 @@ public static class Logger
 
 		ArgumentNullException.ThrowIfNull(message);
 
+		// 在锁外先算好时间戳，锁内只做一次赋值，避免每条日志重复取时间
+		string timestamp = IncludeTimestamp ? $"[{DateTime.Now:HH:mm:ss.fff}] " : string.Empty;
 		lock (_lock)
 		{
+			CurrentTimestamp = timestamp;
 			foreach (ILogger instance in loggers)
 			{
 				instance?.Log(type, category, message);

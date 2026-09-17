@@ -276,7 +276,7 @@ public static class MemoryDiagnostics
 	/// <param name="stage">当前阶段标识，用于日志区分。</param>
 	private static void LogHeapSnapshotBreakdown(string stage)
 	{
-		Logger.Info(LogCategory.Processing, "=======================[内存诊断][整堆]=================================");
+		Logger.Info(LogCategory.Processing, "======================================================== [内存诊断][整堆] ========================================================");
 		string? dumpPath = Environment.GetEnvironmentVariable("RURI_MEM_BREAKDOWN_DUMP");
 		int maxObjects = ParseObjectLimit(Environment.GetEnvironmentVariable("RURI_MEM_BREAKDOWN_MAX_OBJECTS"));
 
@@ -293,17 +293,17 @@ public static class MemoryDiagnostics
 		Logger.Info(LogCategory.Processing,
 			$"{Prefix} {stage}: 共 {snapshot.TotalCount} 个对象 | 堆占用 {ToMegabytes(snapshot.TotalSize):F1} MB{(snapshot.Truncated ? "（已达到对象数上限，以下为抽样结果）" : string.Empty)}");
 
-		Logger.Info(LogCategory.Processing, "=======================内存占用=================================");
+		Logger.Info(LogCategory.Processing, "======================================================== 内存占用 ==================================================================");
 		LogRankingBySize(Prefix, stage, snapshot.Types, snapshot.TotalSize);
-		Logger.Info(LogCategory.Processing, "=======================数量=================================");
+		Logger.Info(LogCategory.Processing, "======================================================== 数量 ==================================================================");
 		LogRankingByCount(Prefix, stage, snapshot.Types, snapshot.TotalCount);
-		Logger.Info(LogCategory.Processing, "=======================平均占用=================================");
+		Logger.Info(LogCategory.Processing, "======================================================== 平均占用 ==================================================================");
 		LogRankingByAverage(Prefix, stage, snapshot.Types, "堆占用");
-		Logger.Info(LogCategory.Processing, "=======================Unity类型=================================");
+		Logger.Info(LogCategory.Processing, "======================================================== Unity类型 ==================================================================");
 		LogUnityTypeView(Prefix, stage, snapshot.Types);
-		Logger.Info(LogCategory.Processing, "=======================命名空间分组=================================");
+		Logger.Info(LogCategory.Processing, "======================================================== 命名空间分组 ==================================================================");
 		LogNamespaceGroups(Prefix, stage, snapshot.Types, snapshot.TotalSize);
-		Logger.Info(LogCategory.Processing, "========================================================");
+		Logger.Info(LogCategory.Processing, "======================================================== END ==================================================================");
 	}
 
 	/// <summary>按占用字节降序输出类型排名，占比相对总量。</summary>

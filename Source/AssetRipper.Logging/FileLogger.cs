@@ -15,6 +15,9 @@ public class FileLogger : FileLoggerBase
 	{
 		stringBuilder.Clear();
 
+		// 复用分发时算好的时间戳，保证和控制台日志同一行时间一致
+		stringBuilder.Append(Logger.CurrentTimestamp);
+
 		if (category != LogCategory.None)
 		{
 			stringBuilder.Append($"{category.ToString()} ");

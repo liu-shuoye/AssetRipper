@@ -31,15 +31,17 @@ public class ConsoleLogger : ILogger
 
 	public void Log(LogType type, LogCategory category, string message)
 	{
+		// 复用分发时算好的时间戳，保证和文件日志同一行时间一致
+		string ts = Logger.CurrentTimestamp;
 		if (type == LogType.Info)
 		{
 			if (category == LogCategory.None)
 			{
-				Console.WriteLine(message);
+				Console.WriteLine($"{ts}{message}");
 			}
 			else
 			{
-				Console.WriteLine($"{category} : {message}");
+				Console.WriteLine($"{ts}{category} : {message}");
 			}
 
 			return;
@@ -68,11 +70,11 @@ public class ConsoleLogger : ILogger
 
 		if (category == LogCategory.None)
 		{
-			Console.WriteLine(message);
+			Console.WriteLine($"{ts}{message}");
 		}
 		else
 		{
-			Console.WriteLine($"{category} : {message}");
+			Console.WriteLine($"{ts}{category} : {message}");
 		}
 
 		Console.ForegroundColor = foreColor;
