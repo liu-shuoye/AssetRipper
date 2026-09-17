@@ -153,6 +153,13 @@ public sealed partial class ProjectExporter
 				}
 
 				aborted = failures.ShouldAbort;
+
+				// P1-2 内存看门狗：周期性打印"托管堆/工作集/失败累计"，超阈值时主动压缩降压。
+				// 这样内存拐点（如白名单未生效导致的再物化）能在崩溃前暴露在日志里，而不是事后翻 11 小时旧账。
+				if (currentExportable == 1 || currentExportable % MemoryWatchdogCheckInterval == 0)
+				{
+					WatchdogLogAndRelieve(failures, currentExportable, exportableCount);
+				}
 			}
 
 			EventExportProgressUpdated?.Invoke(i, collections.Count);
@@ -619,6 +626,70 @@ public sealed partial class ProjectExporter
 		return best;
 	}
 
+	/// <summary>看门狗检查间隔：每导出这么多集合打一次内存快照并做阈值判定。</summary>
+	private const int MemoryWatchdogCheckInterval = 500;
+
+	/// <summary>托管堆超过该阈值（MB）时看门狗主动做一次 LOH 压缩并告警；可用环境变量 RURI_EXPORT_HEAP_WATCHDOG_MB 覆盖默认值。</summary>
+	private static readonly long MemoryWatchdogThresholdMb = GetWatchdogThresholdMb();
+
+	private static long GetWatchdogThresholdMb()
+	{
+		// 默认取 24 GB：本机 32 GB 物理内存 + 59 GB 托管堆上限下，24 GB 已是明显偏高的信号。
+		// 不同机器可经环境变量覆盖，避免硬编码阈值在不同规格主机上失准。
+		const long DefaultThresholdMb = 24_000;
+		string? raw = Environment.GetEnvironmentVariable("RURI_EXPORT_HEAP_WATCHDOG_MB");
+		return long.TryParse(raw, out long value) && value > 0 ? value : DefaultThresholdMb;
+	}
+
+	/// <summary>
+	/// 看门狗采样：打印内存与失败累计快照；托管堆超过阈值时主动压缩降压并告警。
+	/// 注意与 OOM 分支（<see cref="RelieveMemoryPressure"/>）的分工：这里是"预判"，OOM 那里是"抢救"。
+	/// </summary>
+	private static void WatchdogLogAndRelieve(ExportFailureTracker failures, int currentExportable, int exportableCount)
+	{
+		long heapMb = GC.GetTotalMemory(false) / 1024 / 1024;
+		long workingSetMb = Environment.WorkingSet / 1024 / 1024;
+		Logger.Info(LogCategory.ExportProgress,
+			$"[看门狗] 已处理 {currentExportable}/{exportableCount} 个集合：托管堆 {heapMb:N0} MB，工作集 {workingSetMb:N0} MB，"
+			+ $"失败累计 {failures.FailureCount}（内存不足 {failures.MemoryFailureCount}）");
+		if (heapMb <= MemoryWatchdogThresholdMb)
+		{
+			return;
+		}
+
+		Logger.Warning(LogCategory.ExportProgress,
+			$"[看门狗] 托管堆 {heapMb:N0} MB 超过阈值 {MemoryWatchdogThresholdMb:N0} MB，主动做一次 LOH 压缩降压；"
+			+ "若反复触发说明导出阶段仍在大量物化资产（例如导入类型白名单未生效），请检查 ImportSettings.EffectiveImportAssetTypes。");
+		RelieveMemoryPressure();
+	}
+
+	/// <summary>
+	/// 导出一趟的关键节点（进入导出前 / OOM 熔断前）调用：请求一次 LargeObjectHeap 压缩后再走两轮 GC。
+	/// 只动 LOH 是因为大对象碎片是导出内存压力最主要的放大器
+	/// （本机实测整堆快照里 Free 碎片高达 8.5 GB / 16.5%，且 Server GC 默认不整理 LOH），
+	/// 而 LOH 压缩又能顺带把不再需要的堆段整段归还给操作系统，
+	/// 为 FastPng 之类的原生 VirtualAlloc 腾出可提交内存。
+	/// </summary>
+	/// <remarks>
+	/// 压缩是一次 stop-the-world（几十秒量级），相比动辄数小时的整场导出可以忽略，
+	/// 因此只在"临界点"调用，正常导出路径不反复支付这个成本。
+	/// </remarks>
+	public static void RelieveMemoryPressure()
+	{
+		try
+		{
+			GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+			GC.Collect();
+			GC.WaitForPendingFinalizers();
+			GC.Collect();
+		}
+		catch (Exception ex)
+		{
+			// 降压自身失败不该盖掉真正的导出流程，如实记录后继续
+			Logger.Warning(LogCategory.Export, $"内存降压失败（{ex.GetType().Name}: {ex.Message}）");
+		}
+	}
+
 	/// <summary>
 	/// 导出期的失败记账与内存熔断策略。
 	/// </summary>
@@ -662,6 +733,12 @@ public sealed partial class ProjectExporter
 		/// <summary>是否应终止导出；true 表示已判定"继续跑没有意义"。</summary>
 		public bool ShouldAbort => consecutiveMemoryFailureCount >= MaxConsecutiveMemoryFailures
 			|| memoryFailureCount >= MaxTotalMemoryFailures;
+
+		/// <summary>失败总数（含内存不足），供看门狗周期采样打印。</summary>
+		public int FailureCount => failureCount;
+
+		/// <summary>其中内存不足失败数，供看门狗周期采样打印。</summary>
+		public int MemoryFailureCount => memoryFailureCount;
 
 		/// <summary>记录一次成功，用于重置"连续内存不足"判定。</summary>
 		public void RecordSuccess()
@@ -745,27 +822,6 @@ public sealed partial class ProjectExporter
 			if (failureSamples.Count < MaxFailureSamples)
 			{
 				failureSamples.Add($"{description} [{exceptionTypeName}]");
-			}
-		}
-
-		/// <summary>
-		/// 内存不足后的降压：请求一次 LargeObjectHeap 压缩后再走两轮 GC。
-		/// 只动 LOH 是因为 OOM 的元凶基本都是大数组/大缓冲留下的碎片
-		/// （本机实测碎片占堆的 16.5%，而 Server GC 默认不整理 LOH）。
-		/// </summary>
-		private static void RelieveMemoryPressure()
-		{
-			try
-			{
-				GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-				GC.Collect();
-				GC.WaitForPendingFinalizers();
-				GC.Collect();
-			}
-			catch (Exception ex)
-			{
-				// 降压自身失败不该盖掉原始的导出失败，如实记录后继续
-				Logger.Warning(LogCategory.Export, $"内存降压失败（{ex.GetType().Name}: {ex.Message}）");
 			}
 		}
 	}
