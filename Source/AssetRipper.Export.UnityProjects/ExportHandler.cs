@@ -140,6 +140,19 @@ public class ExportHandler(FullConfiguration settings)
 		Logger.Info(LogCategory.Export, $"游戏文件包含以下 Unity 版本：{GetListOfVersions(gameData.GameBundle)}");
 		Logger.Info(LogCategory.Export, $"导出到 Unity 版本 {gameData.ProjectVersion}");
 
+		// P1-1：进入导出前主动做一次 LOH 压缩。Process 阶段（尤其修复前的全量物化）会留下大量
+		// 大对象碎片（整堆快照实测 Free 碎片 8.5 GB / 16.5%），此刻压缩既能回收碎片，
+		// 又能让 Server GC 把不再需要的堆段归还给 OS，为导出期 FastPng 等原生 2N 缓冲分配腾出可提交内存。
+		// 这是 export 前唯一一次主动压缩；后续 OOM 分支的降压由 ProjectExporter.Export 内的熔断逻辑负责。
+		Logger.Info(LogCategory.Export, "导出前内存整理（LOH 压缩）...");
+		long heapBeforeMb = GC.GetTotalMemory(false) / 1024 / 1024;
+		long workingSetBeforeMb = Environment.WorkingSet / 1024 / 1024;
+		ProjectExporter.RelieveMemoryPressure();
+		long heapAfterMb = GC.GetTotalMemory(false) / 1024 / 1024;
+		long workingSetAfterMb = Environment.WorkingSet / 1024 / 1024;
+		Logger.Info(LogCategory.Export,
+			$"内存整理完成：托管堆 {heapBeforeMb:N0} MB → {heapAfterMb:N0} MB，工作集 {workingSetBeforeMb:N0} MB → {workingSetAfterMb:N0} MB。");
+
 		Settings.ExportRootPath = outputPath;
 		Settings.SetProjectSettings(gameData.ProjectVersion);
 
