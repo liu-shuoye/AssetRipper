@@ -20,14 +20,24 @@ public class AssetExportCollection<T> : ExportCollection where T : IUnityObjectB
 		fileSystem.Directory.Create(subPath);
 
 		string filePath = fileSystem.Path.Join(subPath, fileName);
-		bool result = ExportInner(container, filePath, projectDirectory, fileSystem);
-		if (result)
+		try
 		{
-			Meta meta = new Meta(GUID, CreateImporter(container));
-			ExportMeta(container, meta, filePath, fileSystem);
-			return true;
+			bool result = ExportInner(container, filePath, projectDirectory, fileSystem);
+			if (result)
+			{
+				Meta meta = new Meta(GUID, CreateImporter(container));
+				ExportMeta(container, meta, filePath, fileSystem);
+				return true;
+			}
+			return false;
 		}
-		return false;
+		catch
+		{
+			// 导出器可能已经建好文件、并在写入内容的过程中抛异常（例如大纹理 PNG 编码时内存不足），
+			// 此时目录里留下的是空文件或截断文件，必须清掉，否则会被当成有效资源
+			DeletePartialExportFiles(filePath, fileSystem);
+			throw;
+		}
 	}
 
 	public override bool Contains(IUnityObjectBase asset)

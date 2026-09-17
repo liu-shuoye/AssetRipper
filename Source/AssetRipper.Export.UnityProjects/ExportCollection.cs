@@ -2,6 +2,7 @@ using AssetRipper.Assets;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Export.Modules.Shaders.IO;
 using AssetRipper.IO.Files.SerializedFiles;
+using AssetRipper.Logging;
 using AssetRipper.SourceGenerated.Classes.ClassID_1102;
 using AssetRipper.SourceGenerated.Classes.ClassID_1107;
 using AssetRipper.SourceGenerated.Classes.ClassID_1109;
@@ -74,9 +75,51 @@ public abstract class ExportCollection : IExportCollection
 		string fullName = $"{name}.{GetExportExtension(asset)}";
 		string uniqueName = fileSystem.GetUniqueName(path, fullName, FileSystem.MaxFileNameLength - MetaExtension.Length);
 		string filePath = fileSystem.Path.Join(path, uniqueName);
-		AssetExporter.Export(container, asset, filePath, fileSystem);
-		Meta meta = new Meta(GUID, importer);
-		ExportMeta(container, meta, filePath, fileSystem);
+		try
+		{
+			AssetExporter.Export(container, asset, filePath, fileSystem);
+			Meta meta = new Meta(GUID, importer);
+			ExportMeta(container, meta, filePath, fileSystem);
+		}
+		catch
+		{
+			// 异常可能在写出内容的中途抛出，此时目录里留着的是空文件或截断文件
+			DeletePartialExportFiles(filePath, fileSystem);
+			throw;
+		}
+	}
+
+	/// <summary>
+	/// 删除导出失败时残留的半成品文件（资产内容文件与同名 .meta）。
+	/// </summary>
+	/// <remarks>
+	/// 导出器通常先 <c>fileSystem.File.Create</c> 建文件再写内容，中途抛异常会留下空文件或截断文件。
+	/// 这类残留比"文件缺失"更麻烦：Unity 会把损坏内容当成真资源导入，而"这次导出失败了"这件事
+	/// 也从结果目录里看不出来。删掉之后文件名会被 <see cref="FileSystem.GetUniqueName"/> 重新视为可用，
+	/// 重跑导出能拿到同样的路径，便于对比。
+	/// 清理自身失败不应影响异常传播，因此一律降级为日志。
+	/// </remarks>
+	/// <param name="filePath">资产内容文件的完整路径。</param>
+	/// <param name="fileSystem">目标文件系统。</param>
+	protected static void DeletePartialExportFiles(string filePath, FileSystem fileSystem)
+	{
+		TryDeleteFile(filePath, fileSystem);
+		TryDeleteFile($"{filePath}{MetaExtension}", fileSystem);
+	}
+
+	private static void TryDeleteFile(string path, FileSystem fileSystem)
+	{
+		try
+		{
+			if (fileSystem.File.Exists(path))
+			{
+				fileSystem.File.Delete(path);
+			}
+		}
+		catch (Exception ex)
+		{
+			Logger.Log(LogType.Warning, LogCategory.Export, $"清理半成品文件失败 '{path}'（{ex.GetType().Name}: {ex.Message}）");
+		}
 	}
 
 	protected string GetUniqueFileName(IUnityObjectBase asset, string dirPath, FileSystem fileSystem)

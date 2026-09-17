@@ -7,6 +7,7 @@ using AssetRipper.Logging;
 using AssetRipper.Processing.Configuration;
 using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Classes.ClassID_48;
+using System.Runtime;
 using System.Text;
 
 namespace AssetRipper.Export.UnityProjects;
@@ -118,6 +119,11 @@ public sealed partial class ProjectExporter
 		int exportableCount = collections.Count(c => c.Exportable && !skippedCollections.Contains(c));
 		int currentExportable = 0;
 
+		// 单个资产失败不再作废整场导出：全量导出动辄数小时，任何一处反序列化/编码异常都不该让已经
+		// 完成的工作付诸东流，因此这里把异常捕获后记账并继续，只在内存彻底不够时熔断。
+		ExportFailureTracker failures = new();
+		bool aborted = false;
+
 		for (int i = 0; i < collections.Count; i++)
 		{
 			IExportCollection collection = collections[i];
@@ -126,15 +132,37 @@ public sealed partial class ProjectExporter
 			{
 				currentExportable++;
 				Logger.Info(LogCategory.ExportProgress, $"({currentExportable}/{exportableCount}) 正在导出 '{collection.Name}'");
-				bool exportedSuccessfully = collection.Export(container, options.ProjectRootPath, fileSystem);
-				if (!exportedSuccessfully)
+				try
 				{
-					Logger.Warning(LogCategory.ExportProgress, $"无法导出 '{collection.Name}' ({collection.GetType().Name})");
+					bool exportedSuccessfully = collection.Export(container, options.ProjectRootPath, fileSystem);
+					if (!exportedSuccessfully)
+					{
+						Logger.Warning(LogCategory.ExportProgress, $"无法导出 '{collection.Name}' ({collection.GetType().Name})");
+					}
+
+					// 走到这里说明内存还够用，连续 OOM 计数可以归零
+					failures.RecordSuccess();
 				}
+				catch (OutOfMemoryException ex)
+				{
+					failures.RecordMemoryFailure(collection, ex);
+				}
+				catch (Exception ex)
+				{
+					failures.RecordFailure(collection, ex);
+				}
+
+				aborted = failures.ShouldAbort;
 			}
 
 			EventExportProgressUpdated?.Invoke(i, collections.Count);
+			if (aborted)
+			{
+				break;
+			}
 		}
+
+		failures.LogSummary(currentExportable, exportableCount, aborted);
 
 		EventExportFinished?.Invoke();
 	}
@@ -589,5 +617,156 @@ public sealed partial class ProjectExporter
 		}
 
 		return best;
+	}
+
+	/// <summary>
+	/// 导出期的失败记账与内存熔断策略。
+	/// </summary>
+	/// <remarks>
+	/// 现实是几十万个集合里总会有个别资产在解码/序列化时抛异常。让这些异常冒泡的代价是整场导出作废
+	/// （本机实测：59 GB 托管堆下一次原生缓冲分配失败，报废了前面 11 小时的全部成果），因此这里把它们
+	/// 降级为"记账 + 继续"。
+	/// 只有 <see cref="OutOfMemoryException"/> 例外：它意味着进程已经拿不到可提交的内存（典型表现是
+	/// FastPng 之类原生缓冲分配失败），继续跑大概率一路失败，所以在连续/累计到阈值后主动熔断，
+	/// 并明确区分"内存不够"与"资产有问题"。
+	/// </remarks>
+	private sealed class ExportFailureTracker
+	{
+		/// <summary>
+		/// 连续 OOM 达到该次数即熔断。连续发生说明这不是某个巨无霸资产造成的偶发尖峰，
+		/// 而是系统级内存不足，重试没有意义。
+		/// </summary>
+		private const int MaxConsecutiveMemoryFailures = 5;
+
+		/// <summary>
+		/// 累计 OOM 达到该次数即熔断。用于兜住"失败几次又成功一次"的形态：
+		/// 该形态下连续计数会被成功清掉，但每次都注定失败，且每次都要付一次 LOH 压缩的代价。
+		/// </summary>
+		private const int MaxTotalMemoryFailures = 20;
+
+		/// <summary>汇总里列出的失败样例条数上限，避免几十万条失败把日志刷爆。</summary>
+		private const int MaxFailureSamples = 20;
+
+		/// <summary>按异常类型名聚合的失败次数。</summary>
+		private readonly Dictionary<string, int> failuresByExceptionType = new();
+		/// <summary>失败资产样例（首次出现的若干个），用于事后定位。</summary>
+		private readonly List<string> failureSamples = new();
+
+		/// <summary>失败总数（含内存不足）。</summary>
+		private int failureCount;
+		/// <summary>其中因内存不足导致的失败数。</summary>
+		private int memoryFailureCount;
+		/// <summary>连续内存不足次数，遇到一次成功即归零。</summary>
+		private int consecutiveMemoryFailureCount;
+
+		/// <summary>是否应终止导出；true 表示已判定"继续跑没有意义"。</summary>
+		public bool ShouldAbort => consecutiveMemoryFailureCount >= MaxConsecutiveMemoryFailures
+			|| memoryFailureCount >= MaxTotalMemoryFailures;
+
+		/// <summary>记录一次成功，用于重置"连续内存不足"判定。</summary>
+		public void RecordSuccess()
+		{
+			consecutiveMemoryFailureCount = 0;
+		}
+
+		/// <summary>记录一次非内存原因的失败。</summary>
+		public void RecordFailure(IExportCollection collection, Exception exception)
+		{
+			LogFailure(collection, exception);
+		}
+
+		/// <summary>
+		/// 记录一次内存不足失败，并顺势降压。
+		/// 降压放在这里而不是统一放到循环末尾，是因为只有 OOM 才需要它——
+		/// LOH 压缩是一次昂贵的 stop-the-world，不该在正常路径上反复付这个成本。
+		/// </summary>
+		public void RecordMemoryFailure(IExportCollection collection, Exception exception)
+		{
+			consecutiveMemoryFailureCount++;
+			memoryFailureCount++;
+			LogFailure(collection, exception);
+			RelieveMemoryPressure();
+		}
+
+		/// <summary>整场导出结束后统一汇报失败情况。</summary>
+		/// <param name="attemptedCount">实际尝试导出的集合数。</param>
+		/// <param name="exportableCount">需要导出的集合总数。</param>
+		/// <param name="aborted">是否因内存不足提前终止。</param>
+		public void LogSummary(int attemptedCount, int exportableCount, bool aborted)
+		{
+			if (aborted)
+			{
+				Logger.Error(LogCategory.ExportProgress,
+					$"内存不足连续/累计失败已达上限，已在第 {attemptedCount}/{exportableCount} 个集合处提前终止导出。"
+					+ "这通常意味着进程可提交内存已被耗尽；请增大页面文件或物理内存，或改用按资产类型分批导出后重跑。");
+			}
+
+			if (failureCount == 0)
+			{
+				if (!aborted)
+				{
+					Logger.Info(LogCategory.ExportProgress, $"导出完成：{attemptedCount}/{exportableCount} 个集合全部成功。");
+				}
+
+				return;
+			}
+
+			Logger.Warning(LogCategory.ExportProgress,
+				$"导出失败汇总：共 {failureCount} 个集合失败（其中内存不足 {memoryFailureCount} 个），已处理 {attemptedCount}/{exportableCount}。");
+			foreach (KeyValuePair<string, int> pair in failuresByExceptionType.OrderByDescending(p => p.Value))
+			{
+				Logger.Warning(LogCategory.ExportProgress, $"    按异常聚合：{pair.Key} × {pair.Value}");
+			}
+
+			Logger.Warning(LogCategory.ExportProgress, $"    失败样例：{string.Join(" | ", failureSamples)}");
+		}
+
+		/// <summary>
+		/// 输出单条失败明细：一行摘要每条都输出，完整堆栈只在某类异常首次出现时输出。
+		/// 这样既有定位问题所需的调用栈，又不会被几十万条堆栈淹没。
+		/// </summary>
+		private void LogFailure(IExportCollection collection, Exception exception)
+		{
+			failureCount++;
+			string exceptionTypeName = exception.GetType().Name;
+			failuresByExceptionType.TryGetValue(exceptionTypeName, out int previousCount);
+			failuresByExceptionType[exceptionTypeName] = previousCount + 1;
+
+			string description = $"{collection.Name} ({collection.GetType().Name})";
+			if (previousCount == 0)
+			{
+				Logger.Error(LogCategory.Export, $"导出失败 '{description}'（{exceptionTypeName}），该类异常的首条附带完整堆栈：", exception);
+			}
+			else
+			{
+				Logger.Error(LogCategory.Export, $"导出失败 '{description}'（{exceptionTypeName}: {exception.Message}）");
+			}
+
+			if (failureSamples.Count < MaxFailureSamples)
+			{
+				failureSamples.Add($"{description} [{exceptionTypeName}]");
+			}
+		}
+
+		/// <summary>
+		/// 内存不足后的降压：请求一次 LargeObjectHeap 压缩后再走两轮 GC。
+		/// 只动 LOH 是因为 OOM 的元凶基本都是大数组/大缓冲留下的碎片
+		/// （本机实测碎片占堆的 16.5%，而 Server GC 默认不整理 LOH）。
+		/// </summary>
+		private static void RelieveMemoryPressure()
+		{
+			try
+			{
+				GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+				GC.Collect();
+				GC.WaitForPendingFinalizers();
+				GC.Collect();
+			}
+			catch (Exception ex)
+			{
+				// 降压自身失败不该盖掉原始的导出失败，如实记录后继续
+				Logger.Warning(LogCategory.Export, $"内存降压失败（{ex.GetType().Name}: {ex.Message}）");
+			}
+		}
 	}
 }
