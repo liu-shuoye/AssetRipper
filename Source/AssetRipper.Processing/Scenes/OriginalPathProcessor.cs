@@ -2,6 +2,7 @@ using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Generics;
+using AssetRipper.Assets.Metadata;
 using AssetRipper.Processing.Configuration;
 using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Classes.ClassID_142;
@@ -95,7 +96,8 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 	{
 		foreach (AccessPairBase<Utf8String, IPPtr_Object> kvp in manager.Container)
 		{
-			IUnityObjectBase? asset = kvp.Value.TryGetAsset(manager.Collection);
+			// 单对象反序列化：只加载该 PPtr 指向的资产，避免触发整集合的 EnsureAssetsLoaded
+			IUnityObjectBase? asset = TryGetAssetOnly(kvp.Value, manager.Collection);
 			if (asset is null)
 			{
 				continue;
@@ -143,7 +145,9 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 				continue;
 			}
 
-			IUnityObjectBase? asset = kvp.Value.Asset.TryGetAsset(bundle.Collection);
+			// 上面已跳过 FileID != 0（共享资产），FileID == 0 表示对象就在本集合内，
+			// 直接用单对象反序列化取回，避免走 TryGetAsset 触发整集合物化
+			IUnityObjectBase? asset = bundle.Collection.TryGetAssetOnly(kvp.Value.Asset.PathID);
 			if (asset is null)
 			{
 				continue;
@@ -186,6 +190,40 @@ public sealed class OriginalPathProcessor(BundledAssetsExportMode bundledAssetsE
 		}
 
 		return outAssetPath ?? string.Empty;
+	}
+
+	/// <summary>
+	/// 单对象反序列化：先解析 PPtr 指向的集合（FileID == 0 为传入的默认集合，否则为对应依赖集合），
+	/// 再只反序列化目标 PathID，避免 <see cref="IPPtr{T}.TryGetAsset"/> 触发 <c>EnsureAssetsLoaded</c> 全量物化。
+	/// </summary>
+	/// <param name="pptr">要解析的引用。</param>
+	/// <param name="defaultCollection">FileID == 0 时对象所在的集合。</param>
+	private static IUnityObjectBase? TryGetAssetOnly(IPPtr pptr, AssetCollection defaultCollection)
+	{
+		AssetCollection? target = pptr.FileID == 0
+			? defaultCollection
+			: ResolveDependency(defaultCollection, pptr.FileID);
+		if (target is null)
+		{
+			return null;
+		}
+		IUnityObjectBase? asset = target.TryGetAssetOnly(pptr.PathID);
+		// 与 TryGetAsset 的既有语义对齐：PathID 存在但对象为 NullObject（如未识别的 MonoBehaviour）
+		// 时，按"未找到"处理，避免对 NullObject 绑定 OriginalPath
+		return asset is NullObject ? null : asset;
+	}
+
+	/// <summary>
+	/// 按 FileID 解析 PPtr 指向的依赖集合，边界检查与 <see cref="AssetCollection.TryGetAsset(int, long)"/> 一致。
+	/// </summary>
+	private static AssetCollection? ResolveDependency(AssetCollection collection, int fileID)
+	{
+		int index = fileID - 1;
+		if (index < 0 || index >= collection.Dependencies.Count)
+		{
+			return null;
+		}
+		return collection.Dependencies[index];
 	}
 
 	private static string EnsureDoesNotEndWithBundleExtension(string path)
