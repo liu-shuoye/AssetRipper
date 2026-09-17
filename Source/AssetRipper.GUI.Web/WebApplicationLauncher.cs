@@ -85,6 +85,7 @@ public static class WebApplicationLauncher
 		}
 		Logger.LogSystemInformation("AssetRipper");
 		Logger.Add(new ConsoleLogger());
+		GcConfiguration.LogCurrentConfiguration();
 
 		Localization.LoadLanguage(GameFileLoader.Settings.LanguageCode);
 

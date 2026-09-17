@@ -273,3 +273,127 @@ EditorBuildSettings、UserAsset、Unreadable/Unknown）不在覆盖范围内**�
 **尚未做真实导出验证**——需要一次完整跑批（或至少跑到出现失败资产）才能确认汇总行与熔断行为；
 判定成功的标志是日志末尾出现 `导出完成：N/N 个集合全部成功。` 或 `导出失败汇总：……`。
 
+### P0-2 OriginalPathProcessor 两处容器遍历改单对象反序列化 —— 已完成（2026-09-17）
+
+改动文件：`Source/AssetRipper.Processing/Scenes/OriginalPathProcessor.cs`
+
+| 位置 | 改动 |
+|---|---|
+| `SetOriginalPaths(IResourceManager)` 容器遍历（原 L96） | `kvp.Value.TryGetAsset(manager.Collection)` → 新增私有辅助 `TryGetAssetOnly(IPPtr, AssetCollection)` |
+| `SetOriginalPaths(IAssetBundle, …)` 容器遍历（原 L146） | `kvp.Value.Asset.TryGetAsset(bundle.Collection)` → `bundle.Collection.TryGetAssetOnly(kvp.Value.Asset.PathID)`（该处前面已 `continue` 掉 FileID != 0，必为当前集合内对象） |
+
+实现要点：
+
+- **新增 `TryGetAssetOnly(IPPtr, AssetCollection)`**：先按 `pptr.FileID` 解析目标集合（0 → 默认集合，否则按 `FileID - 1` 索引 `Dependencies`，边界检查与 `AssetCollection.TryGetDependency` 一致），再只反序列化该 PathID。
+- **NullObject 语义对齐**：原 `TryGetAsset` 在 T 为 `IUnityObjectBase` 时对 NullObject 返回 null；辅助方法把 `TryGetAssetOnly` 返回的 NullObject 转成 null，避免对未识别 MonoBehaviour 的 NullObject 绑定 OriginalPath，行为与改造前等价。
+- **加载范围收敛**：容器里有 n 个条目时，只反序列化这些条目指向的目标对象，不再因容器遍历而连带物化同集合其余资产；配合 P0-3 的 ClassID 过滤可进一步收敛。
+
+验证情况：`AssetRipper.Processing` 与 `AssetRipper.GUI.Free` 均编译通过（0 error）。
+**尚未做真实导出验证**——预期 `Process 后 - OriginalPathProcessor` 阶段增量（原 +36,642 MB）显著下降，
+复跑后对比 `Export 前` 托管堆（基线 59,061 MB）与 `共 561,204,450 个对象` 行确认。
+
+### P0-3 EditorFormatProcessor 按 ClassID 过滤后再反序列化 —— 已完成（2026-09-17）
+
+改动文件：`Source/AssetRipper.Processing/Editor/EditorFormatProcessor.cs`
+
+| 位置 | 改动 |
+|---|---|
+| 类级静态字段 | 新增 `RequiredClassIDs`（`CollectRequiredClassIDs()` 反射收集） |
+| `GetReleaseAssets`（原 L106-109） | `GetReleaseCollections(gameData).SelectMany(c => c)` → 元数据枚举 + ClassID 预筛 + `TryGetAssetOnly` 单对象反序列化，命中才 `yield return` |
+| `Convert` / `ConvertAsync` | 未改动，switch 保持原样作为最终判定 |
+
+与清单做法的差异（做法 3）：没有手写 ClassID 列表，而是**反射源生成程序集，按"实现任一目标接口"收集**——目标接口与两个 switch 的 case 一一对应（16 个接口 + PlayerSettings 129 特判）。理由：Renderer 系列（23/26/95-old/137/161/199/212/227/331/73398921/483693784/1120581460/1931382933/1931382934/1971053207 等）以及"旧版 Animator 恰好实现 IPlayableDirector"这类历史版本变体，手写列表极易与 switch 漂移；反射以运行时类型为准，天然对齐。
+
+- **129 特判原因**：`case TypeTreeObject { IsPlayerSettings: true }` 的判定实为 `ClassID == 129`（`TypeTreeObject.IsPlayerSettings`），而 TypeTreeObject 是 NullObject 子类（位于 AssetRipper.Import），不在源生成程序集内，反射扫不到，显式补充。
+- **Nikki4 自定义类**：`Mesh_Nikki4`/`AnimationClip_Nikki4` 复用生成类 ClassID（43/74），已被反射收录，过滤对其同样成立。
+
+验证情况：
+
+- `AssetRipper.Processing` 与 `AssetRipper.GUI.Free` 编译通过（0 error）。
+- 用临时反射工具（引 0Bins 已编译 DLL，已清理）验证集合共 **35 个 ClassID**：清单必含项 20 个全部在场
+  （1/4/23/129/137/142/157/196/199/212/218/320/30/47/19/43/74/310/687078895/850595691）；
+  反例 28（Texture2D）/83（AudioClip）/33（MeshFilter，当前 switch 无 IMeshFilter case）均未误收；
+  额外项逐一核对均为命中 target 接口的合法成员（如 26 ParticleRenderer→IRenderer、224 RectTransform→ITransform、
+  95 Animator_5_2/5_5→IPlayableDirector、1108 PreviewAnimationClip→IAnimationClip）。
+  相比清单"写单元测试"的建议，该验证直接断言了真实产物，且无需引入测试项目。
+
+**尚未做真实导出验证**——预期 `Process 后 - EditorFormatProcessor` 阶段增量（原 +15,701 MB）显著下降，
+复跑后对比 `Export 前` 托管堆与对象数确认。
+
+### P1-1 Process 结束与导出期做 LOH 压缩 —— 已完成（2026-09-17）
+
+改动文件：
+
+| 文件 | 改动 |
+|---|---|
+| `Source/AssetRipper.Export.UnityProjects/ProjectExporter.cs` | 把原 `ExportFailureTracker` 嵌套类内的私有 `RelieveMemoryPressure()` 提升为 `ProjectExporter` 的 `public static RelieveMemoryPressure()`，OOM 熔断分支改为调用同一方法 |
+| `Source/AssetRipper.Export.UnityProjects/ExportHandler.cs` | `Export` 开头（版本信息之后、创建 ProjectExporter 之前）调用一次，打印压缩前后的托管堆/工作集 |
+
+做法与清单一致：`GCSettings.LargeObjectHeapCompactionMode = CompactOnce; GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();`。
+
+实现要点：
+
+- **位置选择**：`ExportHandler.Export` 开头正是 "Process 结束 → 进入导出" 的临界点，此刻 R4（LOH 碎片）最多、尚未开始物化导出集合，一次压缩的收益最大；此后导出循环中不再主动压缩，OOM 分支（P0-1）的降压依然兜底。
+- **复用而非复制**：P0-1 的 OOM 降压逻辑提升为公共静态方法后两个调用点共用一份实现，避免三行逻辑两处漂移。
+- **可观测**：压缩前后打日志（托管堆 MB / 工作集 MB），可直接对照 1.2 阶段曲线验证 R4 是否被回收、堆段是否归还给 OS。
+
+验证情况：`AssetRipper.Export.UnityProjects` 与 `AssetRipper.GUI.Free` 均编译通过（0 error）。
+**尚未做真实导出验证**——预期复跑日志出现 `导出前内存整理（LOH 压缩）...` 与 `内存整理完成：…` 两行，
+整堆快照里 `Free` 从 8,467 MB（16.5%）明显下降（对照"四、如何验证修好了"第 5 条）。
+
+### P1-2 导出期内存看门狗 —— 已完成（2026-09-17）
+
+改动文件：`Source/AssetRipper.Export.UnityProjects/ProjectExporter.cs`
+
+| 位置 | 改动 |
+|---|---|
+| 导出循环内（`Export`） | 每个集合导出完（`aborted` 判定后）检查 `currentExportable == 1 \|\| currentExportable % 500 == 0`，命中则 `WatchdogLogAndRelieve` |
+| 类级新增 | `MemoryWatchdogCheckInterval = 500`、`MemoryWatchdogThresholdMb`（环境变量 `RURI_EXPORT_HEAP_WATCHDOG_MB` 覆盖，默认 24_000 MB）、`WatchdogLogAndRelieve(...)` |
+| `ExportFailureTracker` | 新增只读属性 `FailureCount` / `MemoryFailureCount` 供看门狗采样 |
+
+行为：
+
+- **周期快照**：每导出 500 个集合（以及第 1 个）打印 `[看门狗] 已处理 N/M 个集合：托管堆 X MB，工作集 Y MB，失败累计 F（内存不足 M）`，崩溃前即可在日志中看到内存拐点，而非事后翻整场日志。
+- **超阈值预判**：托管堆超过阈值时打 `Warning` 并主动做一次 `RelieveMemoryPressure()`；告警文案直指常见根因（"若反复触发说明白名单未生效，请检查 EffectiveImportAssetTypes"），天然暴露 R3 类回归。
+- **与 P0-1 / P1-1 的分工**：看门狗是"预判"（周期性看趋势、超阈值先压一步），OOM 分支是"抢救"（失败后熔断降压），导出开头压缩是"进场整理"。三者共用同一个 `RelieveMemoryPressure()`。
+- **阈值可配**：默认 24 GB 针对本机（32 GB 物理内存、原峰值 59 GB 托管堆）设定，不同规格主机可用环境变量覆盖，避免硬编码失准。
+- **成本控制**：正常路径只付一次 `GC.GetTotalMemory` / `Environment.WorkingSet` 的采样与字符串日志，压缩只发生在超阈值时，不违背 P0-1 "正常路径不付 stop-the-world"的取舍。
+
+验证情况：`AssetRipper.Export.UnityProjects` 与 `AssetRipper.GUI.Free` 均编译通过（0 error）。
+**尚未做真实导出验证**——预期复跑日志每 500 个集合出现一行 `[看门狗] …`；若某阶段持续超阈值并打印告警，
+即为"白名单未生效/仍在物化"的直接证据。
+
+### P1-3 GC 配置评估 —— 已完成（2026-09-17）
+
+改动文件：
+
+| 文件 | 改动 |
+|---|---|
+| `Source/AssetRipper.GUI.Web/GcConfiguration.cs`（新增） | `[ModuleInitializer]` 按环境变量 `RURI_GC_LATENCY_MODE` 在 Main 之前应用 `GCSettings.LatencyMode`（Batch / Interactive / SustainedLowLatency，非法值回退 Interactive）；`LogCurrentConfiguration()` 打印生效的 GC 配置与已设置的 `DOTNET_*` 环境变量 |
+| `Source/AssetRipper.GUI.Web/WebApplicationLauncher.cs` | `Logger` 就绪后调用 `GcConfiguration.LogCurrentConfiguration()` |
+
+关键认识（决定本项的交付形态）：
+
+- **Server/Workstation GC、ConserveMemory、RetainVM、HeapHardLimit 都是进程启动前配置**（runtimeconfig.json / `DOTNET_*` 环境变量），代码无法在进程启动后修改；且 .NET 的优先级是 **环境变量覆盖 runtimeconfig**，所以"在 AssetRipper.GUI.Free 上单变量对比"不需要改任何代码——启动进程前设 `DOTNET_gcServer=0` / `DOTNET_GC_ConserveMemory=9` / `DOTNET_GC_RetainVM=0` / `DOTNET_GC_HeapHardLimit=…` 即可。唯一能运行时切换的 GC 旋钮是 `GCSettings.LatencyMode`，本项目提供环境变量开关。
+- **默认不改变任何 GC 行为**：不设 LatencyMode 时与改动前完全一致（Interactive + Server GC），避免未经实测就把默认配置换掉（清单标注"需实测、可能换吞吐下降"）。
+- **诊断先行**：`LogCurrentConfiguration` 输出 `服务器GC 是/否、延迟模式、LOH 压缩模式`，并回显已设置的 `DOTNET_gcServer / DOTNET_GC_Concurrent / DOTNET_GC_ConserveMemory / DOTNET_GC_RetainVM / DOTNET_GC_HeapHardLimit / DOTNET_GC_HeapHardLimitPercent / RURI_GC_LATENCY_MODE`。单变量对比时日志里能看到"这次跑的是什么配置"，复现内存曲线不会张冠李戴。
+
+冒烟验证（GUI.Free headless 实测）：
+
+- 默认启动：日志 `GC 配置：服务器GC 是，延迟模式 Interactive，LOH 压缩模式 Default` ✓
+- `RURI_GC_LATENCY_MODE=Batch` 启动：日志 `服务器GC 是，延迟模式 Batch` + `GC 环境变量 RURI_GC_LATENCY_MODE=Batch` ✓（ModuleInitializer 生效）
+
+推荐对比方案（待实测后决定是否固化默认值）：
+
+```powershell
+# 关 Server GC，换 Workstation GC（吞吐换内存的激进对比）
+set DOTNET_gcServer=0
+# ConserveMemory=9 让 GC 更积极回收（9 为最高档，代价是停顿略增）
+set DOTNET_GC_ConserveMemory=9
+# 导出期用 Batch 延迟模式（禁用并发 GC，吞吐优先）
+set RURI_GC_LATENCY_MODE=Batch
+# 需要给 FastPng 等原生分配留硬预算时（按物理内存 32 GB 的 70% ≈ 0x119400000 或 70%）
+set DOTNET_GC_HeapHardLimitPercent=70
+```
+判定标准：复跑对比 `Export 前` 托管堆（当前基线 59,061 MB）与导出速率；若 Server GC 关闭后峰值显著下降且速率可接受，可考虑把 csproj 的 `<ServerGarbageCollection>true</ServerGarbageCollection>` 调整为按环境变量覆盖的默认。
+
