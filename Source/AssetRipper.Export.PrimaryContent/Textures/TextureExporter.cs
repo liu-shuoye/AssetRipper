@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.Modules.Textures;
 using AssetRipper.SourceGenerated.Classes.ClassID_189;
@@ -33,20 +33,21 @@ public sealed class TextureExporter(ImageExportFormat imageFormat, bool placehol
 
 	public bool Export(IUnityObjectBase asset, string path, FileSystem fileSystem)
 	{
-		if (PlaceholderMode && asset is ITexture2D placeholderTexture
-			&& TextureConverter.TryCreatePlaceholderBitmap(placeholderTexture, out DirectBitmap placeholder))
-		{
-			// 数据已在加载阶段剥离，跳过解码直接生成占位图；
-			// 格式沿用 ImageFormat，保证内容与文件扩展名一致
-			using Stream stream = fileSystem.File.Create(path);
-			placeholder.Save(stream, ImageFormat, path);
-			return true;
-		}
+		// 占位模式：导出前补回被剥离的内嵌像素数据（流式纹理凭保留的 StreamData 懒读），
+		// 方法结束立即再次清除（用完即弃）；回读失败才降级为白色占位图
+		using AssetDataRestoreHandle? restore = PlaceholderMode && asset is ITexture2D texture ? StrippedAssetData.TryAcquire(texture) : null;
 
 		if (TextureConverter.TryConvertToBitmap((IImageTexture)asset, out DirectBitmap bitmap))
 		{
 			using Stream stream = fileSystem.File.Create(path);
 			bitmap.Save(stream, ImageFormat, path);
+			return true;
+		}
+		else if (PlaceholderMode && asset is ITexture2D placeholderTexture
+			&& TextureConverter.TryCreatePlaceholderBitmap(placeholderTexture, out DirectBitmap placeholder))
+		{
+			using Stream stream = fileSystem.File.Create(path);
+			placeholder.Save(stream, ImageFormat, path);
 			return true;
 		}
 		else

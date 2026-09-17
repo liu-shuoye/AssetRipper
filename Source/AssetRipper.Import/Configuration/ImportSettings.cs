@@ -63,23 +63,26 @@ public sealed record class ImportSettings
 	public string? Il2CppDumpPath { get; set; }
 
 	/// <summary>
-	/// 加载时剥离 Texture2D 的图像数据（内嵌 m_ImageData 与 m_StreamData 流引用），
-	/// 大幅降低批量加载全部资源时的内存占用；导出时为每个 Texture2D 生成白色同尺寸占位图，
-	/// 保持文件名与 .meta 引用不丢失。更改此选项后需重新加载资源文件才能生效。
+	/// 加载时剥离 Texture2D 的内嵌像素数据（保留 m_StreamData 流引用），
+	/// 大幅降低批量加载全部资源时的内存占用；导出时按需回读真实数据（流式懒读 .resS /
+	/// 完全内嵌者从原始序列化文件重建对象补回），用完即弃，回读失败才降级白色占位图。
+	/// 更改此选项后需重新加载资源文件才能生效。
 	/// </summary>
 	public bool StripTexture2DData { get; set; } = false;
 
 	/// <summary>
-	/// 加载时剥离 Mesh 的顶点数据、索引缓冲与外部流引用以降低内存占用；
-	/// 导出时生成不含网格数据的占位文件（工程模式为空网格 YAML，主内容模式为空 GLB），
-	/// 保持文件名与引用不丢失。更改此选项后需重新加载资源文件才能生效。
+	/// 加载时剥离 Mesh 的内嵌顶点数据与索引缓冲（保留 m_StreamData 流引用）以降低内存占用；
+	/// 导出时按需回读真实数据（索引缓冲等从原始序列化文件重建对象补回，流式顶点懒读 .resS），
+	/// 用完即弃，回读失败才生成占位文件（工程模式空网格 YAML / 主内容模式空 GLB）。
+	/// 更改此选项后需重新加载资源文件才能生效。
 	/// </summary>
 	public bool StripMeshData { get; set; } = false;
 
 	/// <summary>
-	/// 加载时剥离 AudioClip 的音频数据引用；
-	/// 导出时生成空占位音频文件，保持文件名与引用不丢失。
-	/// AudioClip 数据本身是懒加载流，此项不降低加载内存，仅用于统一生成占位文件。
+	/// 加载时剥离 AudioClip 的内嵌音频数据（保留 m_Resource 流引用）；
+	/// 导出时按需回读真实数据解码（流式懒读 .resource / 内嵌者重建对象补回），用完即弃，
+	/// 解码失败才生成空占位音频文件，保持文件名与引用不丢失。
+	/// AudioClip 数据本身是懒加载流，此项主要削减对象驻留体积，而非加载内存。
 	/// 更改此选项后需重新加载资源文件才能生效。
 	/// </summary>
 	public bool StripAudioClipData { get; set; } = false;

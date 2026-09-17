@@ -42,16 +42,19 @@ public class LightmapTextureAssetExporter : BinaryAssetExporter
 		ITexture2D texture = (ITexture2D)asset;
 		if (PlaceholderMode)
 		{
-			// 数据已在加载阶段剥离，跳过完整性与解码检查直接生成占位图
-			if (TextureConverter.TryCreatePlaceholderBitmap(texture, out DirectBitmap placeholder))
+			// 导出时回读真实数据（流式懒读 / 内嵌重建补回），用完即弃；失败才降级白色占位图
+			using AssetDataRestoreHandle restore = StrippedAssetData.TryAcquire(texture);
+			if (ExportReal(texture, path, fileSystem))
 			{
-				using Stream stream = fileSystem.File.Create(path);
-				placeholder.Save(stream, ImageExportFormat, path);
 				return true;
 			}
-			return false;
+			return ExportPlaceholder(texture, path, fileSystem);
 		}
+		return ExportReal(texture, path, fileSystem);
+	}
 
+	private bool ExportReal(ITexture2D texture, string path, FileSystem fileSystem)
+	{
 		if (!texture.CheckAssetIntegrity())
 		{
 			Logger.Log(LogType.Warning, LogCategory.Export, $"Can't export '{texture.Name}' because resources file '{texture.StreamData_C28?.Path}' hasn't been found");
@@ -69,6 +72,20 @@ public class LightmapTextureAssetExporter : BinaryAssetExporter
 			Logger.Log(LogType.Warning, LogCategory.Export, $"Unable to convert '{texture.Name}' to bitmap");
 			return false;
 		}
+	}
+
+	/// <summary>
+	/// 生成同尺寸纯白占位图：回读真实数据失败的兜底，保持文件名与引用不丢失。
+	/// </summary>
+	private bool ExportPlaceholder(ITexture2D texture, string path, FileSystem fileSystem)
+	{
+		if (TextureConverter.TryCreatePlaceholderBitmap(texture, out DirectBitmap placeholder))
+		{
+			using Stream stream = fileSystem.File.Create(path);
+			placeholder.Save(stream, ImageExportFormat, path);
+			return true;
+		}
+		return false;
 	}
 
 	private sealed class LightmapExportCollection(LightmapTextureAssetExporter exporter, ITexture2D lightmap) : AssetExportCollection<ITexture2D>(exporter, lightmap)

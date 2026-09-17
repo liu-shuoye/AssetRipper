@@ -240,6 +240,14 @@ public abstract class AssetCollection : IReadOnlyCollection<IUnityObjectBase>, I
 	}
 
 	/// <summary>
+	/// 重新解析指定 PathID 的对象本体并物化完整数据，不加入集合缓存（用完即弃，调用方用完即可丢弃由 GC 回收）。
+	/// 占位模式下加载期剥离的数据无法从对象原地回读，导出阶段用此方法重建对象取回真实数据。
+	/// 默认实现返回 null；子类（如 <see cref="SerializedAssetCollection"/>）按各自数据源重读原始字节并解析。
+	/// 注意返回的是全新对象：它不参与集合的依赖/引用解析，仅作为临时数据源使用。
+	/// </summary>
+	public virtual IUnityObjectBase? MaterializeAssetOnly(long pathID) => null;
+
+	/// <summary>
 	/// 在 collection 级别持久化 OriginalDirectory，避免反序列化 asset 实例即可设置路径。
 	/// </summary>
 	public void SetOriginalDirectory(long pathID, string directory)

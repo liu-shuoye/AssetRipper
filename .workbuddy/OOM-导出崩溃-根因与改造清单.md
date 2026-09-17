@@ -219,7 +219,9 @@ bool exportedSuccessfully = collection.Export(container, options.ProjectRootPath
 
 ### P2-3 纹理侧
 
-- `StripTexture2DData`（占位模式，`TextureAssetExporter.cs:47-58`）可削减 181,912 个 Texture2D 的 `Byte[]` 占用；代价是导出的是同尺寸纯白占位图，取决于这次导出的目的。
+- `StripTexture2DData` 等占位模式已升级为「清除 + 导出时回读真实数据 + 用完即弃」（2026-09-18）：
+  加载期只剥离内嵌大数组并保留流式引用，导出期按需懒读 .resS/.resource，完全内嵌者经
+  `MaterializeAssetOnly` 重建对象补回，`StrippedAssetData` 句柄用完即清，导出产物为真实数据而非占位文件。
 - 另一个可选方向：对超过某像素预算的纹理**跳过 fpng**（回落到 `StbImageWriteSharp`）或直接降低单次编码的并行度，以降低 2N 的原生尖峰。注意 stb 的 PNG 写同样是内存内缓冲，收益有限——**这一层只是缓冲，不是解法**，优先级应低于 P0/P1。
 
 ---

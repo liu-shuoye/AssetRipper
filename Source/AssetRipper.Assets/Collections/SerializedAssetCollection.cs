@@ -241,6 +241,38 @@ public sealed class SerializedAssetCollection : AssetCollection
 	}
 
 	/// <summary>
+	/// 重新解析指定 PathID 的对象本体并物化完整数据（不剥离、不加入集合缓存）。
+	/// 与 <see cref="TryGetAssetOnly"/> 的区别：不从 assets 字典取对象、解析结果也不入字典——
+	/// 占位模式下集合里存的是剥离数据的对象，此处从原始序列化文件重读字节、以"materialize"模式重建
+	/// 一个数据完整的沙箱对象，供导出阶段回读真实数据；调用方用完即弃，对象随 GC 回收。
+	/// </summary>
+	public override IUnityObjectBase? MaterializeAssetOnly(long pathID)
+	{
+		SerializedFile? file = _sourceFile;
+		AssetFactoryBase? factory = _factory;
+		if (file is null || factory is null)
+		{
+			return null;
+		}
+
+		// 按 PathID 定位 ObjectInfo，重读原始字节再解析；
+		// 生成类资产（Texture2D/Mesh/AudioClip 等）的解析不依赖类型树，类型树释放后仍可重建
+		ReadOnlySpan<ObjectInfo> objects = file.Objects;
+		for (int i = 0; i < objects.Length; i++)
+		{
+			ObjectInfo info = objects[i];
+			if (info.FileID != pathID)
+			{
+				continue;
+			}
+			int classID = info.TypeID < 0 ? 114 : info.TypeID;
+			AssetInfo assetInfo = new AssetInfo(this, info.FileID, classID);
+			return factory.ReadAssetWithData(assetInfo, info.LoadObjectData(), info.Type);
+		}
+		return null;
+	}
+
+	/// <summary>
 	/// 清空已反序列化的资产对象，但保留 <see cref="_sourceFile"/> 与 <see cref="_factory"/> 引用，
 	/// 以便再次访问时通过 <see cref="EnsureAssetsLoaded"/> 重新反序列化。
 	/// </summary>

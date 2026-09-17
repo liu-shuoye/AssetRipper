@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.SourceGenerated.Classes.ClassID_189;
 using AssetRipper.SourceGenerated.Classes.ClassID_43;
 using AssetRipper.SourceGenerated.Extensions;
@@ -23,6 +23,10 @@ public sealed class YamlStreamedAssetExportCollection : AssetExportCollection<IU
 
 	private bool ExportMesh(IExportContainer container, string filePath, string dirPath, IMesh mesh, FileSystem fileSystem)
 	{
+		// 占位模式：索引缓冲（及完全内嵌网格的顶点数据）在加载期被剥离，
+		// 此处从原始序列化文件重建对象补回再导出，方法结束立即再次清除（用完即弃）。
+		// 流式网格的顶点数据仍由下方 GetContent 懒读 .resS；非剥离网格索引非空，TryAcquire 免恢复。
+		using AssetDataRestoreHandle restore = StrippedAssetData.TryAcquire(mesh);
 		if (!mesh.Has_StreamData())
 		{
 			return base.ExportInner(container, filePath, dirPath, fileSystem);

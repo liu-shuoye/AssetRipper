@@ -48,9 +48,9 @@ namespace AssetRipper.Import.AssetCreation;
 /// </summary>
 /// <param name="assemblyManager"></param>
 /// <param name="gameType"></param>
-/// <param name="stripTexture2DData">占位模式：加载时剥离 Texture2D 图像数据，配合导出阶段的白色占位图以降低内存占用。</param>
-/// <param name="stripMeshData">占位模式：加载时剥离 Mesh 网格数据，配合导出阶段的占位文件。</param>
-/// <param name="stripAudioClipData">占位模式：加载时剥离 AudioClip 数据引用，配合导出阶段的占位文件。</param>
+/// <param name="stripTexture2DData">占位模式：加载时剥离 Texture2D 内嵌像素数据（保留流式引用），导出阶段按需回读真实数据，用完即弃。</param>
+/// <param name="stripMeshData">占位模式：加载时剥离 Mesh 网格数据（保留流式引用），导出阶段按需回读真实数据，用完即弃。</param>
+/// <param name="stripAudioClipData">占位模式：加载时剥离 AudioClip 内嵌数据引用（保留流式引用），导出阶段按需回读真实数据，用完即弃。</param>
 /// <param name="allowedAssetTypes">
 /// 导入类型白名单。非空时，只有归属这些大类的资产会被解析，
 /// 其余类型在读取入口直接跳过（不做任何反序列化）。
@@ -68,14 +68,15 @@ public sealed class GameAssetFactory(
 
 	/// <summary>
 	/// 占位模式开关；由 <see cref="Configuration.ImportSettings"/> 的同名 Strip 选项驱动。
+	/// 仅剥离内嵌大数组以削减加载/处理期内存，导出阶段仍可回读真实数据（见 <see cref="StrippedAssetData"/>）。
 	/// 默认参数值保持旧调用点（如独立工具）无需感知该选项。
 	/// </summary>
 	private bool StripTexture2DData { get; } = stripTexture2DData;
 
-	/// <summary>占位模式：剥离 Mesh 数据。</summary>
+	/// <summary>占位模式：剥离 Mesh 内嵌数据（保留流式引用）。</summary>
 	private bool StripMeshData { get; } = stripMeshData;
 
-	/// <summary>占位模式：剥离 AudioClip 数据引用。</summary>
+	/// <summary>占位模式：剥离 AudioClip 内嵌数据（保留流式引用）。</summary>
 	private bool StripAudioClipData { get; } = stripAudioClipData;
 
 	/// <summary>
@@ -90,6 +91,20 @@ public sealed class GameAssetFactory(
 
 
 	public override IUnityObjectBase? ReadAsset(AssetInfo assetInfo, ReadOnlyArraySegment<byte> assetData, SerializedType? assetType)
+	{
+		return ReadAssetCore(assetInfo, assetData, assetType, materializeData: false);
+	}
+
+	/// <summary>
+	/// 以"materialize"模式解析：跳过剥离逻辑，返回数据完整的对象。
+	/// 占位模式下导出阶段用它重建对象回读被剥离的真实数据，不参与集合缓存。
+	/// </summary>
+	public override IUnityObjectBase? ReadAssetWithData(AssetInfo assetInfo, ReadOnlyArraySegment<byte> assetData, SerializedType? assetType)
+	{
+		return ReadAssetCore(assetInfo, assetData, assetType, materializeData: true);
+	}
+
+	private IUnityObjectBase? ReadAssetCore(AssetInfo assetInfo, ReadOnlyArraySegment<byte> assetData, SerializedType? assetType, bool materializeData)
 	{
 		if (!ImportAssetTypeExtensions.IsClassIdAllowed(assetInfo.ClassID, AllowedAssetTypes))
 		{
@@ -111,7 +126,7 @@ public sealed class GameAssetFactory(
 		}
 		else
 		{
-			return ReadNormalObject(assetInfo, assetData);
+			return ReadNormalObject(assetInfo, assetData, materializeData);
 		}
 	}
 
@@ -152,9 +167,9 @@ public sealed class GameAssetFactory(
 		return monoBehaviour;
 	}
 
-	private IUnityObjectBase ReadNormalObject(AssetInfo assetInfo, ReadOnlyArraySegment<byte> assetData)
+	private IUnityObjectBase ReadNormalObject(AssetInfo assetInfo, ReadOnlyArraySegment<byte> assetData, bool materializeData)
 	{
-		IUnityObjectBase asset = TryReadNormalObject(assetInfo, assetData, assetInfo.Collection.Version, out string? error);
+		IUnityObjectBase asset = TryReadNormalObject(assetInfo, assetData, assetInfo.Collection.Version, out string? error, materializeData);
 		if (error is null)
 		{
 			return asset;
@@ -178,7 +193,7 @@ public sealed class GameAssetFactory(
 		{
 			UnityVersion oldVersion = assetInfo.Collection.Version;
 			UnityVersion newVersion = new UnityVersion(oldVersion.Major, oldVersion.Minor, unchecked((ushort)(oldVersion.Build + 1u)));
-			IUnityObjectBase newAsset = TryReadNormalObject(assetInfo, assetData, newVersion, out string? newError);
+			IUnityObjectBase newAsset = TryReadNormalObject(assetInfo, assetData, newVersion, out string? newError, materializeData);
 			if (newError is null)
 			{
 				return newAsset;
@@ -192,7 +207,7 @@ public sealed class GameAssetFactory(
 	}
 
 
-	private IUnityObjectBase TryReadNormalObject(AssetInfo assetInfo, ReadOnlySpan<byte> assetData, UnityVersion version, out string? error)
+	private IUnityObjectBase TryReadNormalObject(AssetInfo assetInfo, ReadOnlySpan<byte> assetData, UnityVersion version, out string? error, bool materializeData)
 	{
 		IUnityObjectBase? asset = CreateAsset(assetInfo, version);
 		if (asset is null)
@@ -205,39 +220,28 @@ public sealed class GameAssetFactory(
 		try
 		{
 			asset.Read(ref reader);
-			if (StripTexture2DData && asset is ITexture2D texture2D)
+			if (!materializeData)
 			{
-				// 占位模式：内嵌图像数据与流引用一并清除，二者缺一不可——
-				// 只清 ImageData_C28 时 GetImageData() 会回退读取 StreamData 指向的 .resS 流，
-				// 导出阶段仍会把全部流数据读回内存（OOM 复现）并解码出真实图片而非占位图。
-				// 生成的 StreamData_C28 是只读属性（内部持有固定实例），故用 ClearValues 清空其 Path/Offset/Size；
-				// 清空后 IsSet()=false，GetImageData() 返回空数组，导出阶段据此生成白色占位图。
-				texture2D.ImageData_C28 = [];
-				texture2D.StreamData_C28?.ClearValues();
-			}
-			if (StripMeshData && asset is IMesh mesh)
-			{
-				// 占位模式：内嵌顶点数据与索引缓冲是 Mesh 加载期的主要内存占用，
-				// 外部流引用同样必须清空，否则导出阶段会回读 .resS 流。
-				// 工程模式的 YAML 导出对空数据天然容错，直接写出空网格占位文件。
-				mesh.VertexData.Data = [];
-				mesh.IndexBuffer = [];
-				mesh.StreamData?.ClearValues();
-			}
-			if (StripAudioClipData && asset is IAudioClip audioClip)
-			{
-				// 占位模式：音频数据本体在 .resource 外部流（懒加载，不占加载内存），
-				// 此处剥离仅为了让导出阶段生成空占位文件；
-				// IStreamedResource 没有 ClearValues 扩展，按 YamlAudioExportCollection 的先例手工清空三个字段。
-				if (audioClip.Has_AudioData())
+				// 占位模式剥离数据。只清内嵌大数组（加载期内存大头）而保留流式引用
+				// （StreamData/Resource 的 path/offset/size）：导出阶段 GetImageData/GetAudioData
+				// 等访问器据此懒读 .resS/.resource 即回读真实数据（用完即弃）；
+				// 完全内嵌且被剥离的资产由导出端的重建对象补回（见 StrippedAssetData）。
+				if (StripTexture2DData && asset is ITexture2D texture2D)
 				{
-					audioClip.AudioData = [];
+					texture2D.ImageData_C28 = [];
 				}
-				if (audioClip.Has_Resource() && audioClip.Resource is not null)
+				if (StripMeshData && asset is IMesh mesh)
 				{
-					audioClip.Resource.Source = Utf8String.Empty;
-					audioClip.Resource.Offset = 0;
-					audioClip.Resource.Size = 0;
+					// 索引缓冲总内嵌在序列化体内，导出阶段按需重建对象补回（见 StrippedAssetData）
+					mesh.VertexData.Data = [];
+					mesh.IndexBuffer = [];
+				}
+				if (StripAudioClipData && asset is IAudioClip audioClip)
+				{
+					if (audioClip.Has_AudioData())
+					{
+						audioClip.AudioData = [];
+					}
 				}
 			}
 			if (reader.Position != reader.Length)
