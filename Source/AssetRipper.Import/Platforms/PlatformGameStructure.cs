@@ -413,8 +413,8 @@ public abstract partial class PlatformGameStructure
 		int startCount = files.Count;
 		for (int i = 0; i < scanned.Count; i++)
 		{
-			// 与 AddAssetBundle 的每 1000 个一次保持一致，只是改为在批量收集后统一计算
-			if ((startCount + i + 1) % 1000 == 0)
+			// 与 AddAssetBundle 的每 10000 个一次保持一致，只是改为在批量收集后统一计算
+			if ((startCount + i + 1) % 10000 == 0)
 			{
 				Logger.Info(LogCategory.Import, $"已找到资源包 {startCount + i + 1}:'{scanned[i].Key}'");
 			}

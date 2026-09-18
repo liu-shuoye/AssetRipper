@@ -88,7 +88,7 @@ partial class GameBundle
 			string path = pathArray[i];
 			loadedFiles[i] = LoadFileSafely(path, fileSystem); // 不同索引写入互不冲突，线程安全
 			int n = Interlocked.Increment(ref completed);
-			if (n % 100000 == 0)
+			if (n % 10000 == 0)
 			{
 				Logger.Info(LogCategory.Import, $"{n} 正在加载文件：'{path}'");
 			}
