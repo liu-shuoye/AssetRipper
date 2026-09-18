@@ -6,7 +6,6 @@ using AssetRipper.Logging;
 using AssetRipper.Import.Structure.Assembly.Managers;
 using AssetRipper.Import.Structure.Assembly.Serializable;
 using AssetRipper.IO.Files.SerializedFiles;
-using AssetRipper.Processing.AnimationClips;
 using AssetRipper.Processing.Configuration;
 using AssetRipper.SourceGenerated.Classes.ClassID_1;
 using AssetRipper.SourceGenerated.Classes.ClassID_142;
@@ -60,7 +59,6 @@ public class EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMo
 	private ITagManager? tagManager;
 	private readonly BundledAssetsExportMode bundledAssetsExportMode = bundledAssetsExportMode;
 	private IAssemblyManager? assemblyManager;
-	private PathChecksumCache? checksumCache;
 
 	public void Process(GameData gameData)
 	{
@@ -87,7 +85,6 @@ public class EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMo
 			}
 		}
 		assemblyManager = gameData.AssemblyManager;
-		checksumCache = new PathChecksumCache(gameData);
 
 		//Sequential processing
 		foreach (IUnityObjectBase asset in GetReleaseAssets(gameData))
@@ -98,7 +95,6 @@ public class EditorFormatProcessor(BundledAssetsExportMode bundledAssetsExportMo
 		//Parallel processing
 		Parallel.ForEach(GetReleaseAssets(gameData), ConvertAsync);
 
-	checksumCache = null;
 	assemblyManager = null;
 	tagManager = null;
 }
@@ -120,7 +116,7 @@ private static HashSet<int> CollectRequiredClassIDs()
 		typeof(IGameObject),
 		typeof(IRenderer),
 		typeof(ISpriteAtlas),
-		typeof(IAnimationClip),
+		// IAnimationClip 的曲线转换已延迟到导出阶段，Process 阶段无需再物化动画剪辑
 		typeof(INavMeshSettings),
 		typeof(ITransform),
 		typeof(IMesh),
@@ -223,9 +219,8 @@ private static IEnumerable<IUnityObjectBase> GetReleaseAssets(GameData gameData)
 			case ISpriteAtlas spriteAtlas:
 				spriteAtlas.ConvertToEditorFormat();
 				break;
-			case IAnimationClip animationClip:
-				AnimationClipConverter.Process(animationClip, checksumCache!.Value);
-				break;
+			// IAnimationClip 的 EditorFormat 曲线转换已延迟到导出 .anim 时按需执行（AnimationClipYamlExporter），
+			// 避免 Process 阶段一次性生成 14.4GB 的 Vector3f/Quaternionf/Keyframe 曲线对象，降低内存峰值。
 			case INavMeshSettings navMeshSettings:
 				navMeshSettings.ConvertToEditorFormat();
 				break;

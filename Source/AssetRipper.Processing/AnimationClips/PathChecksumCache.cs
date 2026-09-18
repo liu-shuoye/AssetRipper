@@ -24,10 +24,18 @@ namespace AssetRipper.Processing.AnimationClips;
 /// </remarks>
 public readonly struct PathChecksumCache
 {
-	public PathChecksumCache(GameData gameData)
+	public PathChecksumCache(GameData gameData) : this(gameData.GameBundle.FetchAssetCollections(), gameData.AssemblyManager)
 	{
-		this.assemblyManager = gameData.AssemblyManager;
-		BuildPathsCache(gameData.GameBundle);
+	}
+
+	/// <summary>
+	/// 从一组资产集合构建路径哈希缓存。供处理阶段（<see cref="GameData"/>）与导出阶段
+	/// （延迟转换时按需重建）共用：导出端没有 <see cref="GameData"/>，只有可达的集合与程序集管理器。
+	/// </summary>
+	public PathChecksumCache(IEnumerable<AssetCollection> collections, IAssemblyManager assemblyManager)
+	{
+		this.assemblyManager = assemblyManager;
+		BuildPathsCache(collections);
 	}
 
 	private readonly Dictionary<string, uint> cachedPropertyNames = new() { { string.Empty, 0 } };
@@ -98,11 +106,11 @@ public readonly struct PathChecksumCache
 		}
 	}
 
-	private void BuildPathsCache(GameBundle bundle)
+	private void BuildPathsCache(IEnumerable<AssetCollection> collections)
 	{
 		// 用元数据枚举避免 bundle.FetchAssets() 触发全量反序列化。
 		// 仅对 IAvatar (90) / IAnimator (95) / IAnimation (111) 调用 TryGetAssetOnly 做单对象反序列化。
-		foreach (AssetCollection collection in bundle.FetchAssetCollections())
+		foreach (AssetCollection collection in collections)
 		{
 			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
 			{

@@ -1,6 +1,7 @@
 using AssetRipper.Assets;
 using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects.AnimatorControllers;
+using AssetRipper.Export.UnityProjects.AnimationClips;
 using AssetRipper.Export.UnityProjects.Audio;
 using AssetRipper.Export.UnityProjects.AudioMixers;
 using AssetRipper.Export.UnityProjects.DeletedAssets;
@@ -54,6 +55,7 @@ using AssetRipper.SourceGenerated.Classes.ClassID_49;
 using AssetRipper.SourceGenerated.Classes.ClassID_6;
 using AssetRipper.SourceGenerated.Classes.ClassID_687078895;
 using AssetRipper.SourceGenerated.Classes.ClassID_72;
+using AssetRipper.SourceGenerated.Classes.ClassID_74;
 using AssetRipper.SourceGenerated.Classes.ClassID_83;
 using AssetRipper.SourceGenerated.Classes.ClassID_94;
 
@@ -64,6 +66,9 @@ partial class ProjectExporter
 	public ProjectExporter(FullConfiguration settings, IAssemblyManager assemblyManager)
 	{
 		OverrideExporter<IUnityObjectBase>(new DefaultYamlExporter(), true);
+
+		// 动画剪辑的曲线转换延迟到导出时执行（Process 阶段不再批量转换），需专用导出器在序列化前补做转换
+		OverrideExporter<IAnimationClip>(new AnimationClipYamlExporter(assemblyManager), true);
 
 		ManagerAssetExporter managerExporter = new();
 		OverrideExporter<IGlobalGameManager>(managerExporter, true);

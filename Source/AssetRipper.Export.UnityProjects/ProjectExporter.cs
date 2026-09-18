@@ -7,6 +7,7 @@ using AssetRipper.Logging;
 using AssetRipper.Processing.Configuration;
 using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Classes.ClassID_48;
+using AssetRipper.SourceGenerated.Classes.ClassID_74;
 using System.Runtime;
 using System.Text;
 
@@ -263,6 +264,13 @@ public sealed partial class ProjectExporter
 		foreach (IExportCollection collection in collections)
 		{
 			if (collection is SceneExportCollection)
+			{
+				continue;
+			}
+
+			// 动画曲线的 EditorFormat 转换已延迟到导出阶段，此刻内容哈希不含曲线字段，
+			// 参与去重会把实际不同的动画误判为重复而合并，故整集合跳过（重复动画各自导出，正确性优先）
+			if (collection.Assets.Any(asset => asset is IAnimationClip))
 			{
 				continue;
 			}
