@@ -31,20 +31,20 @@ public static class FileTypeScanner
 	/// </remarks>
 	private static readonly HashSet<string> DefinitelyNotUnityContent = new(StringComparer.OrdinalIgnoreCase)
 	{
-		// 图片
-		".png", ".jpg", ".jpeg", ".bmp", ".tga", ".tif", ".tiff", ".psd", ".gif", ".webp", ".exr", ".hdr",
-		// 音频
-		".wav", ".mp3", ".ogg", ".m4a", ".aac", ".flac", ".wem", ".bnk",
-		// 视频
-		".mp4", ".webm", ".mov", ".avi", ".bk2", ".usm",
-		// 文本与配置
-		".txt", ".json", ".xml", ".yaml", ".yml", ".csv", ".ini", ".md", ".html", ".htm", ".css", ".js",
-		// 字体
-		".otf", ".ttf", ".ttc", ".woff", ".woff2",
-		// 数据库与缓存
-		".db", ".sqlite", ".cache", ".log", ".tmp", ".bak", ".pid", ".lock",
-		// 元数据侧车文件
-		".meta", ".manifest",
+		// // 图片
+		// ".png", ".jpg", ".jpeg", ".bmp", ".tga", ".tif", ".tiff", ".psd", ".gif", ".webp", ".exr", ".hdr",
+		// // 音频
+		// ".wav", ".mp3", ".ogg", ".m4a", ".aac", ".flac", ".wem", ".bnk",
+		// // 视频
+		// ".mp4", ".webm", ".mov", ".avi", ".bk2", ".usm",
+		// // 文本与配置
+		// ".txt", ".json", ".xml", ".yaml", ".yml", ".csv", ".ini", ".md", ".html", ".htm", ".css", ".js",
+		// // 字体
+		// ".otf", ".ttf", ".ttc", ".woff", ".woff2",
+		// // 数据库与缓存
+		// ".db", ".sqlite", ".cache", ".log", ".tmp", ".bak", ".pid", ".lock",
+		// // 元数据侧车文件
+		// ".meta", ".manifest",
 	};
 
 	/// <summary>

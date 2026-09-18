@@ -1,4 +1,4 @@
-﻿using AssetRipper.Assets.Generics;
+using AssetRipper.Assets.Generics;
 using AssetRipper.Assets.Metadata;
 using AssetRipper.IO.Endian;
 using AssetRipper.SourceGenerated.Classes.ClassID_74;
@@ -68,6 +68,11 @@ public class AnimationClip_Nikki4 : AnimationClip_2018_3
 		Clip.Data.ConstantClip?.ReadRelease(ref reader);
 
 		this.m_ACLClip.ReadRelease(ref reader);
+		// Nikki4 魔改引擎在标准 MuscleClip 之外附加了一份 ACL 压缩动画数据（m_ACLClip 及 cache）。
+		// 本 fork 的动画曲线由标准 MuscleClip 经 AnimationClipConverter 转换导出，这些字段除
+		// ReadRelease 外无任何消费端（grep 确认），读取后立即释放，避免 2957 万 UInt4StorageAligned
+		// 等对象驻留堆上（约 1GB）。TODO 若未来实现 ACL 解压导出，需在此恢复数据。
+		StripAclData();
 
 		this.MuscleClip_C74.StartTime = reader.ReadSingle();
 		this.MuscleClip_C74.StopTime = reader.ReadSingle();
@@ -101,5 +106,23 @@ public class AnimationClip_Nikki4 : AnimationClip_2018_3
 		this.HasGenericRootTransform_C74 = reader.ReadBoolean();
 		this.HasMotionFloatCurves_C74 = reader.ReadRelease_BooleanAlign();
 		this.Events_C74.ReadRelease_ArrayAlign_Asset<AnimationEvent_5>(ref reader);
+	}
+
+	/// <summary>
+	/// 释放 ACL 压缩动画数据：m_aclTransformCache/m_aclScalarCache 原始字节、轨道映射数组，
+	/// 以及 m_ACLClip 内的压缩轨道与 LOD 列表。这些对象仅本次反序列化使用，之后不被任何
+	/// 导出/处理代码读取，立即清空让 GC 回收，降低动画剪辑的内存驻留。
+	/// </summary>
+	private void StripAclData()
+	{
+		m_aclTransformCache.Clear();
+		m_aclScalarCache.Clear();
+		m_aclTransformTrackId2CurveId.Clear();
+		m_aclScalarTrackId2CurveId.Clear();
+		m_ACLClip.CompressedTransformTracks.Clear();
+		m_ACLClip.CompressedScalarTracks.Clear();
+		m_ACLClip.AclTransformTrackIDToBindingCurveID.Clear();
+		m_ACLClip.AclScalarTrackIDToBindingCurveID.Clear();
+		m_ACLClip.decompressTrackLOD.Clear();
 	}
 }

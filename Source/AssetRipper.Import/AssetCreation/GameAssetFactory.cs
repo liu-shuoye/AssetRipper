@@ -51,6 +51,11 @@ namespace AssetRipper.Import.AssetCreation;
 /// <param name="stripTexture2DData">占位模式：加载时剥离 Texture2D 内嵌像素数据（保留流式引用），导出阶段按需回读真实数据，用完即弃。</param>
 /// <param name="stripMeshData">占位模式：加载时剥离 Mesh 网格数据（保留流式引用），导出阶段按需回读真实数据，用完即弃。</param>
 /// <param name="stripAudioClipData">占位模式：加载时剥离 AudioClip 内嵌数据引用（保留流式引用），导出阶段按需回读真实数据，用完即弃。</param>
+/// <param name="stripMonoBehaviourData">
+/// 占位模式：加载时不立即解析 MonoBehaviour 的脚本结构（保留未解析字节切片），
+/// 导出阶段按需解析回读真实字段，用完即弃。可削减海量复杂脚本的 SerializableStructure 驻留内存；
+/// 解析依据由类型树切换为脚本程序集反射（<see cref="UnloadedStructure"/>），需脚本类可解析方可导出字段。
+/// </param>
 /// <param name="allowedAssetTypes">
 /// 导入类型白名单。非空时，只有归属这些大类的资产会被解析，
 /// 其余类型在读取入口直接跳过（不做任何反序列化）。
@@ -62,6 +67,7 @@ public sealed class GameAssetFactory(
 	bool stripTexture2DData = false,
 	bool stripMeshData = false,
 	bool stripAudioClipData = false,
+	bool stripMonoBehaviourData = false,
 	IReadOnlyCollection<ImportAssetType>? allowedAssetTypes = null) : AssetFactoryBase
 {
 	private IAssemblyManager AssemblyManager { get; } = assemblyManager ?? throw new ArgumentNullException(nameof(assemblyManager));
@@ -78,6 +84,11 @@ public sealed class GameAssetFactory(
 
 	/// <summary>占位模式：剥离 AudioClip 内嵌数据（保留流式引用）。</summary>
 	private bool StripAudioClipData { get; } = stripAudioClipData;
+
+	/// <summary>
+	/// 占位模式：延迟解析 MonoBehaviour 脚本结构（保留字节切片，导出时经 <see cref="UnloadedStructure"/> 回读解析）。
+	/// </summary>
+	private bool StripMonoBehaviourData { get; } = stripMonoBehaviourData;
 
 	/// <summary>
 	/// 导入类型白名单；null 表示不过滤。判定逻辑见 <see cref="ImportAssetTypeExtensions.IsClassIdAllowed"/>。
@@ -122,7 +133,7 @@ public sealed class GameAssetFactory(
 		}
 		else if (assetInfo.ClassID == (int)ClassIDType.MonoBehaviour)
 		{
-			return ReadMonoBehaviour(MonoBehaviour.Create(assetInfo), assetData, AssemblyManager, assetType);
+			return ReadMonoBehaviour(MonoBehaviour.Create(assetInfo), assetData, AssemblyManager, assetType, StripMonoBehaviourData);
 		}
 		else
 		{
@@ -130,14 +141,16 @@ public sealed class GameAssetFactory(
 		}
 	}
 
-	private static IMonoBehaviour ReadMonoBehaviour(IMonoBehaviour monoBehaviour, ReadOnlyArraySegment<byte> assetData, IAssemblyManager assemblyManager, SerializedType? type)
+	private static IMonoBehaviour ReadMonoBehaviour(IMonoBehaviour monoBehaviour, ReadOnlyArraySegment<byte> assetData, IAssemblyManager assemblyManager, SerializedType? type, bool stripMonoBehaviourData)
 	{
 		EndianSpanReader reader = new EndianSpanReader(assetData, monoBehaviour.Collection.EndianType);
 		try
 		{
 			monoBehaviour.Read(ref reader);
 			SerializableStructure? structure;
-			if (type is not null && TypeTreeNodeStruct.TryMakeFromTypeTree(type.OldType, out TypeTreeNodeStruct rootNode))
+			// 占位模式（StripMonoBehaviourData）下跳过类型树解析：MonoBehaviour 的脚本结构改为懒加载，
+			// 保留未解析字节切片，导出时才经 UnloadedStructure 从脚本程序集反射解析，降低加载期内存驻留
+			if (!stripMonoBehaviourData && type is not null && TypeTreeNodeStruct.TryMakeFromTypeTree(type.OldType, out TypeTreeNodeStruct rootNode))
 			{
 				structure = SerializableTreeType.FromRootNode(rootNode, true).CreateSerializableStructure();
 				if (structure.Type.Fields.Count > 0 && structure.Type.Fields[^1] is { Type.Name: "ManagedReferencesRegistry", Name: "references" })

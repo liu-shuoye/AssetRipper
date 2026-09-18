@@ -4,14 +4,14 @@ namespace AssetRipper.Processing.Configuration;
 
 public sealed record class ProcessingSettings
 {
-	public bool EnablePrefabOutlining { get; set; } = false;
+	public bool EnablePrefabOutlining { get; set; } = true;
 	public bool EnableStaticMeshSeparation { get; set; } = true;
-	public bool EnableAssetDeduplication { get; set; } = false;
+	public bool EnableAssetDeduplication { get; set; } = true;
 	/// <summary>
 	/// 开启后导出时不再随机生成 GUID，而是基于资产稳定标识计算确定性 GUID。
 	/// 这样同一资源在分批导出时始终保持同一 GUID，跨批次引用不会丢失。
 	/// </summary>
-	public bool EnableDeterministicGuids { get; set; } = false;
+	public bool EnableDeterministicGuids { get; set; } = true;
 	public bool RemoveNullableAttributes { get; set; } = false;
 	public bool PublicizeAssemblies { get; set; } = false;
 	public BundledAssetsExportMode BundledAssetsExportMode { get; set; } = BundledAssetsExportMode.MainAssetFolder;

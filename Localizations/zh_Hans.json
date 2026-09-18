@@ -281,6 +281,7 @@
     "strip_audio_clip_data": "不导出 AudioClip（生成空占位文件）",
     "strip_mesh_data": "不导出 Mesh（生成占位文件）",
     "strip_texture_2d_data": "不导出 Texture2D（生成白色占位图）",
+    "strip_mono_behaviour_data": "延迟解析 MonoBehaviour 脚本结构（降低内存占用）",
     "filter": "筛选",
     "install_unity_editor": "安装 Unity 编辑器",
     "install_unity_hub": "安装 Unity Hub",

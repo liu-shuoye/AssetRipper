@@ -270,6 +270,10 @@ public sealed partial class SettingsPage : DefaultPage
 								{
 									WriteCheckBoxForStripAudioClipData(writer, Localization.StripAudioClipData);
 								}
+								using (new Div(writer).WithClass("col").End())
+								{
+									WriteCheckBoxForStripMonoBehaviourData(writer, Localization.StripMonoBehaviourData);
+								}
 							}
 
 							using (new Div(writer).WithClass("row").End())

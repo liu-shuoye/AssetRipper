@@ -292,6 +292,7 @@
     "strip_audio_clip_data": "Skip AudioClip Export (Generate Empty Placeholder Files)",
     "strip_mesh_data": "Skip Mesh Export (Generate Placeholder Files)",
     "strip_texture_2d_data": "Skip Texture2D Export (Generate White Placeholder Images)",
+    "strip_mono_behaviour_data": "Defer MonoBehaviour Structure Parsing (Reduce Memory)",
     "submesh_count": "Submesh Count",
     "success": "Success!",
     "supported": "Supported",

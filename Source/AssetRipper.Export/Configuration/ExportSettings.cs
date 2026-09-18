@@ -56,7 +56,7 @@ public sealed record class ExportSettings
 
 	public bool ExportUnreadableAssets { get; set; } = false;
 
-	public bool SaveSettingsToDisk { get; set; }
+	public bool SaveSettingsToDisk { get; set; } = true;
 
 	public string? LanguageCode { get; set; }
 

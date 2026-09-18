@@ -61,6 +61,7 @@ public sealed class GameStructure : IDisposable
 			configuration.ImportSettings.StripTexture2DData,
 			configuration.ImportSettings.StripMeshData,
 			configuration.ImportSettings.StripAudioClipData,
+			configuration.ImportSettings.StripMonoBehaviourData,
 			configuration.ImportSettings.EffectiveImportAssetTypes,
 			dependencyMap);
 
@@ -88,11 +89,11 @@ public sealed class GameStructure : IDisposable
 
 	/// <summary> 初始化游戏文件集合。 </summary>
 	[MemberNotNull(nameof(FileCollection))]
-	private void InitializeGameCollection(UnityVersion defaultVersion, UnityVersion targetVersion, GameType gameType, bool stripTexture2DData, bool stripMeshData, bool stripAudioClipData, IReadOnlyCollection<ImportAssetType>? allowedAssetTypes, DependencyMap? dependencyMap)
+	private void InitializeGameCollection(UnityVersion defaultVersion, UnityVersion targetVersion, GameType gameType, bool stripTexture2DData, bool stripMeshData, bool stripAudioClipData, bool stripMonoBehaviourData, IReadOnlyCollection<ImportAssetType>? allowedAssetTypes, DependencyMap? dependencyMap)
 	{
 		Logger.SendStatusChange("loading_step_create_file_collection");
 
-		GameAssetFactory assetFactory = new(AssemblyManager, gameType, stripTexture2DData, stripMeshData, stripAudioClipData, allowedAssetTypes);
+		GameAssetFactory assetFactory = new(AssemblyManager, gameType, stripTexture2DData, stripMeshData, stripAudioClipData, stripMonoBehaviourData, allowedAssetTypes);
 
 		IEnumerable<string> filePaths;
 		if (PlatformStructure is null || MixedStructure is null)

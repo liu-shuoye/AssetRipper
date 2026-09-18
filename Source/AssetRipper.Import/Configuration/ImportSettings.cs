@@ -68,7 +68,7 @@ public sealed record class ImportSettings
 	/// 完全内嵌者从原始序列化文件重建对象补回），用完即弃，回读失败才降级白色占位图。
 	/// 更改此选项后需重新加载资源文件才能生效。
 	/// </summary>
-	public bool StripTexture2DData { get; set; } = false;
+	public bool StripTexture2DData { get; set; } = true;
 
 	/// <summary>
 	/// 加载时剥离 Mesh 的内嵌顶点数据与索引缓冲（保留 m_StreamData 流引用）以降低内存占用；
@@ -76,7 +76,7 @@ public sealed record class ImportSettings
 	/// 用完即弃，回读失败才生成占位文件（工程模式空网格 YAML / 主内容模式空 GLB）。
 	/// 更改此选项后需重新加载资源文件才能生效。
 	/// </summary>
-	public bool StripMeshData { get; set; } = false;
+	public bool StripMeshData { get; set; } = true;
 
 	/// <summary>
 	/// 加载时剥离 AudioClip 的内嵌音频数据（保留 m_Resource 流引用）；
@@ -85,13 +85,22 @@ public sealed record class ImportSettings
 	/// AudioClip 数据本身是懒加载流，此项主要削减对象驻留体积，而非加载内存。
 	/// 更改此选项后需重新加载资源文件才能生效。
 	/// </summary>
-	public bool StripAudioClipData { get; set; } = false;
+	public bool StripAudioClipData { get; set; } = true;
+
+	/// <summary>
+	/// 加载时延迟解析 MonoBehaviour 的脚本结构（保留未解析字节切片，不立即物化 SerializableStructure 树），
+	/// 导出时按需经脚本程序集反射回读真实字段，用完即弃。
+	/// 开启后导入期内存显著下降（海量复杂脚本场景），但脚本结构解析依据由类型树切换为脚本程序集反射，
+	/// 个别 dump 缺失的脚本在导出时可能退化为空结构，需按游戏验证。
+	/// 更改此选项后需重新加载资源文件才能生效。
+	/// </summary>
+	public bool StripMonoBehaviourData { get; set; } = false;
 
 	/// <summary>
 	/// 内存拆解口径：控制加载/处理阶段输出资源占用拆解日志时的统计方式。
 	/// 默认按已反序列化对象的序列化字节数统计（廉价）；live 反射估算真实托管堆；clrmd 抓取整堆快照。
 	/// </summary>
-	public MemoryBreakdownMode MemoryBreakdownMode { get; set; } = MemoryBreakdownMode.Serialized;
+	public MemoryBreakdownMode MemoryBreakdownMode { get; set; } = MemoryBreakdownMode.ClrMd;
 
 	/// <summary>
 	/// 导入类型白名单：只解析并导出这里列出的资产大类，未列出的类型在
@@ -143,6 +152,7 @@ public sealed record class ImportSettings
 		Logger.Info(LogCategory.General, $"{nameof(StripTexture2DData)}: {StripTexture2DData}");
 		Logger.Info(LogCategory.General, $"{nameof(StripMeshData)}: {StripMeshData}");
 		Logger.Info(LogCategory.General, $"{nameof(StripAudioClipData)}: {StripAudioClipData}");
+		Logger.Info(LogCategory.General, $"{nameof(StripMonoBehaviourData)}: {StripMonoBehaviourData}");
 		Logger.Info(LogCategory.General, $"{nameof(MemoryBreakdownMode)}: {MemoryBreakdownMode}");
 		Logger.Info(LogCategory.General, $"{nameof(EnableImportAssetTypeFilter)}: {EnableImportAssetTypeFilter}");
 		Logger.Info(LogCategory.General, $"{nameof(ImportAssetTypes)}: {(ImportAssetTypes.Count == 0 ? "(all)" : string.Join(", ", ImportAssetTypes.OrderBy(t => t)))}");
