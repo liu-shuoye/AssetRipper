@@ -78,30 +78,27 @@ partial class GameBundle
 	/// <summary> 加载文件及其依赖项。 </summary>
 	private static List<FileBase> LoadFilesAndDependencies(IEnumerable<string> paths, FileSystem fileSystem, IDependencyProvider? dependencyProvider)
 	{
-		List<FileBase> files = new();
-		HashSet<string> serializedFileNames = new(); //包含缺失的依赖项
-		foreach (string path in paths)
+		// 并行加载所有主路径文件：每个 path 的加载完全独立（各自打开流、解压、展开容器），
+		// 结果按原索引写回数组，之后顺序收集，保证 files 的添加顺序与改造前一致。
+		string[] pathArray = paths.ToArray();
+		FileBase?[] loadedFiles = new FileBase?[pathArray.Length];
+		int completed = 0;
+		Parallel.For(0, pathArray.Length, i =>
 		{
-			if (files.Count % 100000 == 0)
+			string path = pathArray[i];
+			loadedFiles[i] = LoadFileSafely(path, fileSystem); // 不同索引写入互不冲突，线程安全
+			int n = Interlocked.Increment(ref completed);
+			if (n % 100000 == 0)
 			{
-				Logger.Info(LogCategory.Import, $"{files.Count} 正在加载文件：'{path}'");
+				Logger.Info(LogCategory.Import, $"{n} 正在加载文件：'{path}'");
 			}
-			FileBase? file;
-			try
-			{
-				file = SchemeReader.LoadFile(path, fileSystem);
-				file.ReadContentsRecursively();
-			}
-			catch (Exception ex)
-			{
-				file = new FailedFile() { Name = fileSystem.Path.GetFileName(path), FilePath = path, StackTrace = ex.ToString(), };
-			}
+		});
 
-			while (file is CompressedFile compressedFile)
-			{
-				file = compressedFile.UncompressedFile;
-			}
-
+		// 每个 path 恰好产出一个 FileBase，预分配容量避免依赖加载时反复扩容
+		List<FileBase> files = new(pathArray.Length);
+		HashSet<string> serializedFileNames = new(); //包含缺失的依赖项
+		foreach (FileBase? file in loadedFiles)
+		{
 			if (file is ResourceFile or FailedFile)
 			{
 				files.Add(file);
@@ -166,5 +163,32 @@ partial class GameBundle
 			dependency.ReadContentsRecursively();
 			files.Add(dependency);
 		}
+	}
+
+	/// <summary>
+	/// 加载单个文件并展开其内容：读取/解析失败时降级为 <see cref="FailedFile"/>（不中断整体加载），
+	/// 压缩文件（gzip/brotli）逐层解包后返回实际内容。
+	/// 该方法无共享可变状态，可在并行加载线程中安全调用。
+	/// </summary>
+	private static FileBase? LoadFileSafely(string path, FileSystem fileSystem)
+	{
+		FileBase? file;
+		try
+		{
+			file = SchemeReader.LoadFile(path, fileSystem);
+			file.ReadContentsRecursively();
+		}
+		catch (Exception ex)
+		{
+			file = new FailedFile() { Name = fileSystem.Path.GetFileName(path), FilePath = path, StackTrace = ex.ToString(), };
+		}
+
+		// 解包压缩层：文件内容可能被 gzip/brotli 压缩，逐层展开后调用方才能识别其真实类型
+		while (file is CompressedFile compressedFile)
+		{
+			file = compressedFile.UncompressedFile;
+		}
+
+		return file;
 	}
 }

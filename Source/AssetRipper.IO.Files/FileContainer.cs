@@ -110,15 +110,34 @@ public abstract class FileContainer : FileBase
 
 	public override void ReadContents()
 	{
-		if (m_resourceFiles is { Count: > 0 })
+		if (m_resourceFiles is not { Count: > 0 })
 		{
-			ResourceFile[] resourceFiles = m_resourceFiles.ToArray();
-			m_resourceFiles.Clear();
-			foreach (ResourceFile resourceFile in resourceFiles)
+			return;
+		}
+		ResourceFile[] resourceFiles = m_resourceFiles.ToArray();
+		m_resourceFiles.Clear();
+		FileBase[] parsed = new FileBase[resourceFiles.Length];
+		if (resourceFiles.Length >= ParallelThreshold)
+		{
+			// 内部文件较多时并行解析：每个 ResourceFile 持有独立的 SmartStream（RandomAccessStream 按偏移读取），
+			// 互不共享可变状态，可安全并行；解析完成后统一顺序合并。
+			Parallel.For(0, resourceFiles.Length, i =>
 			{
-				FileBase fileBase = SchemeReader.ReadFile(resourceFile);
-				AddFile(fileBase);
+				parsed[i] = SchemeReader.ReadFile(resourceFiles[i]);
+			});
+		}
+		else
+		{
+			// 内部文件较少时并行调度开销大于收益，保持串行
+			for (int i = 0; i < resourceFiles.Length; i++)
+			{
+				parsed[i] = SchemeReader.ReadFile(resourceFiles[i]);
 			}
+		}
+		// AddFile 会修改内部 List（非线程安全），必须在并行解析完成后单线程顺序合并
+		foreach (FileBase file in parsed)
+		{
+			AddFile(file);
 		}
 	}
 
@@ -166,4 +185,7 @@ public abstract class FileContainer : FileBase
 	private List<FileContainer>? m_fileLists;
 	private List<ResourceFile>? m_resourceFiles;
 	private List<FailedFile>? m_failedFiles;
+
+	/// <summary>内部文件数达到该值时并行解析内部文件，避免小数组的并行调度开销。</summary>
+	private const int ParallelThreshold = 8;
 }
