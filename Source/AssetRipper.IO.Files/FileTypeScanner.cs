@@ -102,7 +102,11 @@ public static class FileTypeScanner
 	public static List<KeyValuePair<string, string>> ScanSerializedFiles(FileSystem fileSystem, string directory)
 	{
 		List<KeyValuePair<string, string>> files = [];
-		foreach (string path in CollectCandidates(fileSystem, directory, static size => CouldBeSerializedFile(size)))
+		foreach (string path in CollectCandidates(
+			fileSystem,
+			directory,
+			static size => CouldBeSerializedFile(size),
+			static (buffer, length, fileSize) => HeaderProbe.MatchesSerializedFile(buffer, length, fileSize)))
 		{
 			string name = MultiFileStream.GetFileName(path);
 			files.Add(new(name, path));
@@ -116,7 +120,11 @@ public static class FileTypeScanner
 	public static List<KeyValuePair<string, string>> ScanBundles(FileSystem fileSystem, string directory)
 	{
 		List<KeyValuePair<string, string>> files = [];
-		foreach (string path in CollectCandidates(fileSystem, directory, static size => CouldBeBundle(size)))
+		foreach (string path in CollectCandidates(
+			fileSystem,
+			directory,
+			static size => CouldBeBundle(size),
+			static (buffer, length, fileSize) => HeaderProbe.MatchesBundle(buffer, length)))
 		{
 			string name = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
 			files.Add(new(name, path));
@@ -130,10 +138,20 @@ public static class FileTypeScanner
 	/// <param name="fileSystem">用于访问文件。</param>
 	/// <param name="directory">待扫描目录。</param>
 	/// <param name="sizePredicate">基于文件大小的可能性判断，返回 <see langword="false"/> 的文件不会被读取。</param>
+	/// <param name="headerPredicate">
+	/// 基于文件头的判定，决定该文件是否属于本次要收集的种类。
+	/// 参数为读到的字节、读到的字节数以及文件实际大小——序列化文件的判定需要拿头部声明的大小
+	/// 与实际大小比对，而批量读头只读取前 <see cref="HeaderProbeLength"/> 个字节，拿不到真实大小。
+	/// </param>
 	/// <returns>通过类型判定的文件路径。</returns>
-	private static IEnumerable<string> CollectCandidates(FileSystem fileSystem, string directory, Func<long, bool> sizePredicate)
+	private static IEnumerable<string> CollectCandidates(
+		FileSystem fileSystem,
+		string directory,
+		Func<long, bool> sizePredicate,
+		Func<byte[], int, long, bool> headerPredicate)
 	{
 		List<string> candidates = [];
+		List<long> sizes = [];
 		foreach (FileSystem.FileEntryInfo entry in fileSystem.Directory.EnumerateFileInfos(directory))
 		{
 			if (IsDefinitelyNotUnityContent(entry.Path) || !sizePredicate(entry.Length))
@@ -142,6 +160,7 @@ public static class FileTypeScanner
 			}
 
 			candidates.Add(entry.Path);
+			sizes.Add(entry.Length);
 		}
 
 		if (candidates.Count == 0)
@@ -149,13 +168,21 @@ public static class FileTypeScanner
 			return [];
 		}
 
-		return FilterByHeader(fileSystem, candidates);
+		return FilterByHeader(fileSystem, candidates, sizes, headerPredicate);
 	}
 
 	/// <summary>
-	/// 并发读取候选文件的头部并判断其真实类型，读头结果同时用于两种类型判定，因此每个文件只读一次。
+	/// 并发读取候选文件的头部并按指定种类判定，因此每个文件只读一次。
 	/// </summary>
-	private static List<string> FilterByHeader(FileSystem fileSystem, List<string> candidates)
+	/// <remarks>
+	/// 判定必须**只针对本次收集的种类**：同一份读头结果会同时用于序列化文件与资源包两种扫描，
+	/// 若在这里取两者的并集，同一个资源包会被两次收集、进而被加载两遍，内存与耗时直接翻倍。
+	/// </remarks>
+	private static List<string> FilterByHeader(
+		FileSystem fileSystem,
+		List<string> candidates,
+		List<long> sizes,
+		Func<byte[], int, long, bool> headerPredicate)
 	{
 		byte[][] buffers = new byte[candidates.Count][];
 		for (int i = 0; i < buffers.Length; i++)
@@ -176,7 +203,7 @@ public static class FileTypeScanner
 				continue;
 			}
 
-			if (HeaderProbe.MatchesSerializedFile(buffers[i], length) || HeaderProbe.MatchesBundle(buffers[i], length))
+			if (headerPredicate(buffers[i], length, sizes[i]))
 			{
 				results.Add(candidates[i]);
 			}

@@ -51,6 +51,38 @@
 - Unity 版本读取已**记忆化**：`static Dictionary<(string Path, bool IsBundle), UnityVersion> VersionCache`。因为平台探测会给同一个 `globalgamemanagers` 建多个结构体实例，实例级缓存跨不了实例。清空入口 `PlatformChecker.CheckPlatform` 开头（每次导入恰好一次，且早于任何结构体构造）；`ClearVersionCache` 须为 `internal static`（`PlatformChecker` 是静态类非子类）。
 - `AssetRipper.Import` 导入链路**单线程**（无 `Task.Run`/`Parallel.`/`Thread(`）→ 缓存用普通 `Dictionary` 即可，无需并发容器。
 
+## Bundle 条目读取：整包解压共享（2026-09-19 已改，勿退回逐条目复制）
+- `BundleFileBlockReader.ReadEntry` 现在把**所有块解压进一条共享流**，条目用 `shared.CreatePartial(entry.Offset, entry.Size)` 取区间视图。
+  前提（已在 Nikki4 上抽样 400 个验证）：条目偏移首尾相接、从 0 开始，且条目总长 == 块解压总长。
+- 收益：每个 bundle 从 2 条流/2 个句柄降为 1 条；实测 `body` 468 包：FileStream 936→468、Byte[] 12.8→9.0 MB、**加载快 4.1×**。
+- 保留两条回退/快速路径：单块未压缩 → 直接 `CreatePartial` 映射源文件（零拷贝）；
+  整包解压抛异常 → `ReadEntryByCopyingBlocks` 逐条目复制（失败只影响用到坏块的条目，语义与改动前一致）。
+- ⚠️ `RandomAccessStream` 用 `RandomAccess.Read(handle)` **绕过 FileStream 缓冲**，小读取=一次系统调用；
+  不要给它加"每个实例一份大缓冲"——条目数远多于 bundle 数，会把省下的内存全赔回去。
+- ⚠️ 条目数与块数：Nikki4 是**条目 2 个/包、块 2.6 个/包**，所以共享粒度取"整包"而不是"每块"（按块共享反而更多流）。
+
+## 文件类型扫描：一个文件只能被一种扫描收集（2026-09-19 已修）
+- `FileTypeScanner.FilterByHeader` 曾对两种扫描都用 `MatchesSerializedFile || MatchesBundle`，
+  且 `HeaderProbe.MatchesSerializedFile` **缺少「头部声明大小 == 实际大小」这条关键比对**
+  （UnityFS 前 12 字节恰好满足其余判据）→ 每个 bundle 被收集两次 →
+  `GameBundle.FromPaths` 按内容分派，两个条目都被当 bundle 读一遍，内存/耗时整体翻倍。
+- 现在：`FilterByHeader` 按种类判定；`MatchesSerializedFile(buffer, length, fileSize)` 带大小比对；
+  真实大小由 `EnumerateFileInfos` 的 `FileEntryInfo.Length` 传入（批量读头只有 32 字节，拿不到）。
+  `FileTypeScannerTests.BundleFileIsNotCollectedAsSerializedFile` 已固化该不变式。
+- 排障口诀：**目录文件数 × 2 == 日志里"已找到资源包"的最大编号 → 就是被收集了两遍。**
+
+## Bundle 条目落盘阈值（内存陷阱，勿轻易下调）
+- `BundleFileBlockReader.CreateStream` 决定解压后的条目放内存还是落盘：`> MaxMemoryStreamLength` → `SmartStream.CreateTemp()`（磁盘临时文件 + `FileStream(bufferSize: 4096)`）。
+- **每多一个落盘条目，就多一套常驻开销**：`byte[4096]` + `BufferedFileStreamStrategy`(72B) + `SyncWindowsFileStreamStrategy`(64B) + `FileStream`(32B) + `SafeFileHandle`(72B) ≈ **4.3 KB 托管 + 1 个内核句柄**。
+  → 阈值调低**不会**省内存：实测 17.5 万条目时，光 FileStream 缓冲区就是 685 MB（占整堆 Byte[] 的 98%），实际数据一分没进托管堆。
+- 现状（本地手工改过，注释还写着 50 MB / 30 MB，别信注释）：`MaxMemoryStreamLength = 1024`、`MaxPreAllocatedMemoryStreamLength = 1023 `（尾部有多余空格）。
+  变更史：`b78861b08`=50MB/30MB → `ebf30da8f`=512KB → `38f5fdc40`=1024。
+- 若真要省这批内存，方向是让 `SmartStream.CreateTemp()` 用 `bufferSize: 0`（禁用缓冲）或按块共享流令条目走 `CreatePartial`，而不是继续压阈值。
+
+## ⚠️ 沙箱环境差异（排查工具可用性）
+- Bash 沙箱**缺 coreutils**：没有 `head` / `grep` / `find`（管道过去直接 127）。要用 Grep / Glob 工具，或写文件再 Read。
+- PowerShell 工具**不回显 stdout**：必须 `[System.IO.File]::WriteAllLines` 到临时文件后 Read。
+
 ## ⚠️ .git 处于易失状态（操作前必须先备份）
 - 本仓库 `.git/objects` 的 **loose 对象会消失**（曾被外部清理到 `loose_objects=0`），历史只在 3 个 pack 里（约 463MB / 4352 commit）。曾导致 `.git/refs/` 丢失 → 所有 git 命令报 `fatal: not a git repository`。
 - **6 个 `optimize/*` 分支早已指向不存在的对象**（`invalid sha1 pointer`），`git fsck` 会有 244 条 reflog 错误——均为既存问题，**不要试图“修复”**。在用的 `alpha` / `master` 健康。

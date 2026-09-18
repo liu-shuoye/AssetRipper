@@ -38,7 +38,7 @@ public sealed class MainAssetFolderProcessor : IAssetProcessor
 
 	public void Process(GameData gameData)
 	{
-		Logger.Info(LogCategory.Processing, "Main Asset Folder Assignment");
+		Logger.Info(LogCategory.Processing, "主资源文件夹分配");
 		Dictionary<Bundle, string> bundleDirectories = CollectBundleMainAssetDirectories(gameData);
 
 		foreach (AssetCollection collection in gameData.GameBundle.FetchAssetCollections())

@@ -149,7 +149,7 @@ public sealed class FileStreamBundleFile : FileContainer
 			stream.Align(16);
 		}
 
-		using BundleFileBlockReader blockReader = new BundleFileBlockReader(stream, BlocksInfo);
+		using BundleFileBlockReader blockReader = new BundleFileBlockReader(stream, BlocksInfo, NameFixed);
 		foreach (FileStreamNode entry in DirectoryInfo.Nodes)
 		{
 			try

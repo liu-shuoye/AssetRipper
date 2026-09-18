@@ -8,11 +8,12 @@ namespace AssetRipper.IO.Files.BundleFiles.FileStream;
 
 internal sealed class BundleFileBlockReader : IDisposable
 {
-	public BundleFileBlockReader(SmartStream stream, BlocksInfo blocksInfo)
+	public BundleFileBlockReader(SmartStream stream, BlocksInfo blocksInfo, string name = "")
 	{
 		m_stream = stream;
 		m_blocksInfo = blocksInfo;
 		m_dataOffset = stream.Position;
+		m_name = name;
 	}
 
 	~BundleFileBlockReader()
@@ -40,6 +41,142 @@ internal sealed class BundleFileBlockReader : IDisposable
 			return m_stream.CreatePartial(m_dataOffset + entry.Offset, entry.Size);
 		}
 
+		// 整包解压一次后由所有条目共享：条目只是这条流上的一个区间视图。
+		// 逐条目复制会让一个 N 条目的 bundle 占用 N 条流与 N 个文件句柄；
+		// 而条目偏移本身就是"各块解压后首尾相接"的拼接流内偏移，因此可以零拷贝地共享同一条流。
+		if (TryGetSharedStream(out SmartStream shared))
+		{
+			if (entry.Offset + entry.Size > shared.Length)
+			{
+				throw new InvalidFormatException("Entry extends beyond the end of the stream.");
+			}
+			return shared.CreatePartial(entry.Offset, entry.Size);
+		}
+
+		return ReadEntryByCopyingBlocks(entry);
+	}
+
+	/// <summary>
+	/// 取得整包解压后的共享流；构造失败时返回 <see langword="false"/>，由调用方回退到逐条目复制。
+	/// </summary>
+	/// <remarks>
+	/// 失败必须被吞掉而不是抛出：整包解压会把任意坏块的影响扩散到整个 bundle，
+	/// 回退之后失败范围仍只落在真正用到坏块的条目上，与改动前的行为保持一致。
+	/// </remarks>
+	private bool TryGetSharedStream(out SmartStream shared)
+	{
+		if (!m_sharedAttempted)
+		{
+			m_sharedAttempted = true;
+			try
+			{
+				m_sharedStream.Move(DecompressAllBlocks());
+			}
+			catch (Exception)
+			{
+				m_sharedStream.Move(SmartStream.CreateNull());
+			}
+		}
+		shared = m_sharedStream;
+		return !shared.IsNull;
+	}
+
+	/// <summary>
+	/// 把所有块按顺序解压到同一条流中，使其等价于"各块解压后首尾相接"的拼接流。
+	/// </summary>
+	private SmartStream DecompressAllBlocks()
+	{
+		long totalSize = 0;
+		foreach (StorageBlock block in m_blocksInfo.StorageBlocks)
+		{
+			totalSize += block.UncompressedSize;
+		}
+
+		SmartStream result = CreateStream(totalSize);
+		try
+		{
+			long compressedOffset = 0;
+			foreach (StorageBlock block in m_blocksInfo.StorageBlocks)
+			{
+				m_stream.Position = m_dataOffset + compressedOffset;
+				DecompressBlock(block, result);
+				compressedOffset += block.CompressedSize;
+			}
+			result.Position = 0;
+			return result;
+		}
+		catch
+		{
+			// 半途失败时不能留下一条只写了一半的流（连同它背后的临时文件）
+			result.Dispose();
+			throw;
+		}
+	}
+
+	/// <summary>
+	/// 把单个块解压并追加写入 <paramref name="destination"/>。
+	/// </summary>
+	private void DecompressBlock(StorageBlock block, SmartStream destination)
+	{
+		CompressionType compressType = block.CompressionType;
+		switch (compressType)
+		{
+			case CompressionType.None:
+				{
+					using PartialStream partial = new(m_stream, m_stream.Position, block.UncompressedSize);
+					partial.CopyTo(destination);
+					break;
+				}
+
+			case CompressionType.Lzma:
+				LzmaCompression.DecompressLzmaStream(m_stream, block.CompressedSize, destination, block.UncompressedSize);
+				break;
+
+			case CompressionType.Lz4:
+			case CompressionType.Lz4HC:
+				{
+					uint uncompressedSize = block.UncompressedSize;
+					byte[] uncompressedBytes = new byte[uncompressedSize];
+					byte[] compressedBytes = new BinaryReader(m_stream).ReadBytes((int)block.CompressedSize);
+					int bytesWritten = LZ4Codec.Decode(compressedBytes, uncompressedBytes);
+					if (bytesWritten < 0)
+					{
+						DecompressionFailedException.ThrowNoBytesWritten(m_name, compressType);
+					}
+					else if (bytesWritten != uncompressedSize)
+					{
+						DecompressionFailedException.ThrowIncorrectNumberBytesWritten(m_name, compressType, uncompressedSize, bytesWritten);
+					}
+					destination.Write(uncompressedBytes, 0, uncompressedBytes.Length);
+					break;
+				}
+
+			case CompressionType.Lzham:
+				UnsupportedBundleDecompression.ThrowLzham(m_name);
+				break;
+
+			default:
+				if (ZstdCompression.IsZstd(m_stream))
+				{
+					ZstdCompression.DecompressStream(m_stream, block.CompressedSize, destination, block.UncompressedSize);
+				}
+				else
+				{
+					UnsupportedBundleDecompression.Throw(m_name, compressType);
+				}
+				break;
+		}
+	}
+
+	/// <summary>
+	/// 回退路径：只为当前条目解压它用到的块，并把这些数据复制进一条独立的流。
+	/// </summary>
+	/// <remarks>
+	/// 只有在整包共享流不可用时才会走到这里。它保留改动前的语义——
+	/// 失败只影响使用坏块的条目——代价是每个条目各占一条流。
+	/// </remarks>
+	private SmartStream ReadEntryByCopyingBlocks(FileStreamNode entry)
+	{
 		// 查找块偏移量
 		int blockIndex;
 		long blockCompressedOffset = 0;
@@ -74,8 +211,7 @@ internal sealed class BundleFileBlockReader : IDisposable
 			}
 			else
 			{
-				CompressionType compressType = block.CompressionType;
-				if (compressType is CompressionType.None)
+				if (block.CompressionType is CompressionType.None)
 				{
 					blockStreamOffset = m_dataOffset + blockCompressedOffset;
 					blockStream = m_stream;
@@ -86,44 +222,8 @@ internal sealed class BundleFileBlockReader : IDisposable
 					blockStreamOffset = 0;
 					m_cachedBlockIndex = blockIndex;
 					m_cachedBlockStream.Move(CreateTemporaryStream(block.UncompressedSize, out rentedArray));
-					switch (compressType)
-					{
-						case CompressionType.Lzma:
-							LzmaCompression.DecompressLzmaStream(m_stream, block.CompressedSize, m_cachedBlockStream, block.UncompressedSize);
-							break;
-
-						case CompressionType.Lz4:
-						case CompressionType.Lz4HC:
-							uint uncompressedSize = block.UncompressedSize;
-							byte[] uncompressedBytes = new byte[uncompressedSize];
-							byte[] compressedBytes = new BinaryReader(m_stream).ReadBytes((int)block.CompressedSize);
-							int bytesWritten = LZ4Codec.Decode(compressedBytes, uncompressedBytes);
-							if (bytesWritten < 0)
-							{
-								DecompressionFailedException.ThrowNoBytesWritten(entry.PathFixed, compressType);
-							}
-							else if (bytesWritten != uncompressedSize)
-							{
-								DecompressionFailedException.ThrowIncorrectNumberBytesWritten(entry.PathFixed, compressType, uncompressedSize, bytesWritten);
-							}
-							new MemoryStream(uncompressedBytes).CopyTo(m_cachedBlockStream);
-							break;
-
-						case CompressionType.Lzham:
-							UnsupportedBundleDecompression.ThrowLzham(entry.PathFixed);
-							break;
-
-						default:
-							if (ZstdCompression.IsZstd(m_stream))
-							{
-								ZstdCompression.DecompressStream(m_stream, block.CompressedSize, m_cachedBlockStream, block.UncompressedSize);
-							}
-							else
-							{
-								UnsupportedBundleDecompression.Throw(entry.PathFixed, compressType);
-							}
-							break;
-					}
+					m_stream.Position = m_dataOffset + blockCompressedOffset;
+					DecompressBlock(block, m_cachedBlockStream);
 					blockStream = m_cachedBlockStream;
 				}
 			}
@@ -165,6 +265,7 @@ internal sealed class BundleFileBlockReader : IDisposable
 	{
 		m_isDisposed = true;
 		m_cachedBlockStream.FreeReference();
+		m_sharedStream.FreeReference();
 	}
 
 	private static SmartStream CreateStream(long decompressedSize)
@@ -192,27 +293,29 @@ internal sealed class BundleFileBlockReader : IDisposable
 	}
 
 	/// <summary>
-	/// The arbitrary maximum size of a decompressed stream to be stored in RAM. 50 MB
+	/// 解压后数据允许留在内存中的最大体积（字节），超过则落到磁盘临时文件。
 	/// </summary>
 	/// <remarks>
-	/// This number can be set to any integer value, including <see cref="int.MaxValue"/>.
-	/// Previously, this was actually set to <see cref="int.MaxValue"/>, but that can cause
-	/// <see href="https://github.com/AssetRipper/AssetRipper/issues/1953">highly compressed games to use too much RAM</see>.
+	/// 这里刻意取得很小：真实项目里 bundle 数量可达数万，单个 bundle 解压后常在数百 KB，
+	/// 若放宽到 MB 级，整批数据会直接压垮托管堆，因此默认值让它们几乎全部落盘。
 	/// </remarks>
 	private const int MaxMemoryStreamLength = 1024;
 	/// <summary>
-	/// The arbitrary maximum size of a decompressed stream to be pre-allocated. 30 MB
+	/// 允许预先分配缓冲区的最大体积（字节），必须小于 <see cref="MaxMemoryStreamLength"/>。
 	/// </summary>
-	/// <remarks>
-	/// This number can be set to any integer value less than <see cref="MaxMemoryStreamLength"/>.
-	/// </remarks>
-	private const int MaxPreAllocatedMemoryStreamLength = 1023 ;
+	private const int MaxPreAllocatedMemoryStreamLength = 1023;
 	private readonly SmartStream m_stream;
 	private readonly BlocksInfo m_blocksInfo = new();
 	private readonly long m_dataOffset;
+	private readonly string m_name;
 
 	private readonly SmartStream m_cachedBlockStream = SmartStream.CreateNull();
 	private int m_cachedBlockIndex = -1;
+
+	/// <summary>整包解压后的共享流，该 bundle 的所有条目共用。</summary>
+	private readonly SmartStream m_sharedStream = SmartStream.CreateNull();
+	/// <summary>共享流是否已尝试构造过；失败后不再重试，避免每个条目都白跑一遍解压。</summary>
+	private bool m_sharedAttempted;
 
 	private bool m_isDisposed = false;
 }

@@ -89,6 +89,28 @@ public class FileTypeScannerTests
 	}
 
 	/// <summary>
+	/// 资源包不得被序列化文件扫描收集。
+	/// </summary>
+	/// <remarks>
+	/// 头部前 16 字节的取值范围很宽，若不拿「头部声明大小 == 实际大小」做比对，
+	/// UnityFS 资源包会因为字段值恰好落在合法区间而被误判成序列化文件，
+	/// 于是同一个文件被两种扫描各收集一次、随后被加载两遍，内存与耗时全部翻倍。
+	/// </remarks>
+	[Test]
+	public void BundleFileIsNotCollectedAsSerializedFile()
+	{
+		using TempDirectory temp = new();
+
+		string bundle = temp.WriteFile("bundle_a.unity3d", CreateBundleBytes());
+		temp.WriteFile("sample.assets", CreateSerializedFileBytes());
+
+		List<string> scanned = [.. FileTypeScanner.ScanSerializedFiles(temp.FileSystem, temp.Path).Select(pair => pair.Value)];
+
+		Assert.That(scanned, Does.Not.Contain(bundle), "资源包不应被序列化文件扫描收集");
+		Assert.That(scanned, Has.Count.EqualTo(1), "只有真正的序列化文件应被收集");
+	}
+
+	/// <summary>
 	/// 扩展名与体积筛选只允许排除「不可能命中」的文件，不能漏掉任何真实命中项。
 	/// </summary>
 	[Test]

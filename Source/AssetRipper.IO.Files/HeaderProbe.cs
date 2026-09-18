@@ -52,8 +52,14 @@ public static class HeaderProbe
 	/// </summary>
 	/// <param name="buffer">文件开头若干字节。</param>
 	/// <param name="length">缓冲区中有效字节数。</param>
+	/// <param name="fileSize">文件实际字节数；为 <see cref="FileSystem.UnknownSize"/> 时跳过大小比对。</param>
 	/// <returns>满足全部头部约束时为 <see langword="true"/>。</returns>
-	public static bool MatchesSerializedFile(ReadOnlySpan<byte> buffer, int length)
+	/// <remarks>
+	/// 「声明的文件大小必须等于实际大小」是最关键的一条约束：头部前 16 字节的取值相当自由，
+	/// 缺少这条比对时，UnityFS 资源包之类的文件会因为字段值恰好落在合法区间而被误判成序列化文件。
+	/// 误判的代价很大——同一个文件会同时被序列化文件扫描与资源包扫描收集，进而被加载两遍。
+	/// </remarks>
+	public static bool MatchesSerializedFile(ReadOnlySpan<byte> buffer, int length, long fileSize)
 	{
 		if (length < SerializedFileHeaderMinSize)
 		{
@@ -82,7 +88,8 @@ public static class HeaderProbe
 		}
 
 		return metadataSize >= MetadataMinSize
-			&& headerDefinedFileSize >= SerializedFileHeaderMinSize + MetadataMinSize;
+			&& headerDefinedFileSize >= SerializedFileHeaderMinSize + MetadataMinSize
+			&& (fileSize == FileSystem.UnknownSize || headerDefinedFileSize == (ulong)fileSize);
 	}
 
 	/// <summary>
