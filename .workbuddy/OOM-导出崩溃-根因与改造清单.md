@@ -350,16 +350,16 @@ EditorBuildSettings、UserAsset、Unreadable/Unknown）不在覆盖范围内**�
 | 位置 | 改动 |
 |---|---|
 | 导出循环内（`Export`） | 每个集合导出完（`aborted` 判定后）检查 `currentExportable == 1 \|\| currentExportable % 500 == 0`，命中则 `WatchdogLogAndRelieve` |
-| 类级新增 | `MemoryWatchdogCheckInterval = 500`、`MemoryWatchdogThresholdMb`（环境变量 `RURI_EXPORT_HEAP_WATCHDOG_MB` 覆盖，默认 24_000 MB）、`WatchdogLogAndRelieve(...)` |
+| 类级新增 | `MemoryWatchdogCheckInterval = 500`、`MemoryWatchdogGrowthThresholdMb`（环境变量 `RURI_EXPORT_HEAP_WATCHDOG_DELTA_MB` 覆盖，默认 2_000 MB）、`WatchdogLogAndRelieve(...)`（内含上一次采样基线 `_lastWatchdogHeapMb`） |
 | `ExportFailureTracker` | 新增只读属性 `FailureCount` / `MemoryFailureCount` 供看门狗采样 |
 
 行为：
 
 - **周期快照**：每导出 500 个集合（以及第 1 个）打印 `[看门狗] 已处理 N/M 个集合：托管堆 X MB，工作集 Y MB，失败累计 F（内存不足 M）`，崩溃前即可在日志中看到内存拐点，而非事后翻整场日志。
-- **超阈值预判**：托管堆超过阈值时打 `Warning` 并主动做一次 `RelieveMemoryPressure()`；告警文案直指常见根因（"若反复触发说明白名单未生效，请检查 EffectiveImportAssetTypes"），天然暴露 R3 类回归。
-- **与 P0-1 / P1-1 的分工**：看门狗是"预判"（周期性看趋势、超阈值先压一步），OOM 分支是"抢救"（失败后熔断降压），导出开头压缩是"进场整理"。三者共用同一个 `RelieveMemoryPressure()`。
-- **阈值可配**：默认 24 GB 针对本机（32 GB 物理内存、原峰值 59 GB 托管堆）设定，不同规格主机可用环境变量覆盖，避免硬编码失准。
-- **成本控制**：正常路径只付一次 `GC.GetTotalMemory` / `Environment.WorkingSet` 的采样与字符串日志，压缩只发生在超阈值时，不违背 P0-1 "正常路径不付 stop-the-world"的取舍。
+- **增长触发**：托管堆比**上一次采样**增长达到阈值时打 `Warning` 并主动做一次 `RelieveMemoryPressure()`。相比绝对阈值，增长阈值能捕获"某窗口内持续上涨"的趋势——即使堆本身没到高位，只有涨得够快也会被提前干预；压缩完成后重新采样作为新基准，若压缩后仍在上涨，每涨一个阈值就会再触发一次，而不是相对压缩前的高水位永远"涨不到"。告警文案直指常见根因（"若反复触发说明白名单未生效，请检查 EffectiveImportAssetTypes"），天然暴露 R3 类回归。
+- **与 P0-1 / P1-1 的分工**：看门狗是"预判"（周期性看趋势、增量超阈值先压一步），OOM 分支是"抢救"（失败后熔断降压），导出开头压缩是"进场整理"。三者共用同一个 `RelieveMemoryPressure()`。
+- **阈值可配**：默认 2 GB / 500 集合（本机 32 GB 物理内存下属明显异常信号），可用环境变量 `RURI_EXPORT_HEAP_WATCHDOG_DELTA_MB` 覆盖，不同规格主机不失准。
+- **成本控制**：正常路径只付一次 `GC.GetTotalMemory` / `Environment.WorkingSet` 的采样与字符串日志，压缩只发生在增量超阈值时，不违背 P0-1 "正常路径不付 stop-the-world"的取舍。
 
 验证情况：`AssetRipper.Export.UnityProjects` 与 `AssetRipper.GUI.Free` 均编译通过（0 error）。
 **尚未做真实导出验证**——预期复跑日志每 500 个集合出现一行 `[看门狗] …`；若某阶段持续超阈值并打印告警，

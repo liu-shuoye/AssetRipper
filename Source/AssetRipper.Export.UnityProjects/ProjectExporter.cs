@@ -634,23 +634,31 @@ public sealed partial class ProjectExporter
 		return best;
 	}
 
-	/// <summary>看门狗检查间隔：每导出这么多集合打一次内存快照并做阈值判定。</summary>
-	private const int MemoryWatchdogCheckInterval = 500;
+	/// <summary>看门狗检查间隔：每导出这么多集合打一次内存快照并做增长判定。</summary>
+	private const int MemoryWatchdogCheckInterval = 1000;
 
-	/// <summary>托管堆超过该阈值（MB）时看门狗主动做一次 LOH 压缩并告警；可用环境变量 RURI_EXPORT_HEAP_WATCHDOG_MB 覆盖默认值。</summary>
-	private static readonly long MemoryWatchdogThresholdMb = GetWatchdogThresholdMb();
+	/// <summary>
+	/// 与上一次采样相比，托管堆增长达到该值（MB）时看门狗主动做一次 LOH 压缩并告警；
+	/// 可用环境变量 RURI_EXPORT_HEAP_WATCHDOG_DELTA_MB 覆盖默认值。
+	/// 相比绝对阈值，增长阈值能捕获"某段窗口内持续上涨"的趋势——即使堆本身还没到高位，
+	/// 只要涨得过快就说明仍在大量物化，趁早压缩比等它顶到天花板更有意义。
+	/// </summary>
+	private static readonly long MemoryWatchdogGrowthThresholdMb = GetWatchdogGrowthThresholdMb();
 
-	private static long GetWatchdogThresholdMb()
+	/// <summary>上一次看门狗采样时的托管堆（MB）；-1 表示尚无基准（首次采样只记录不判定）。</summary>
+	private static long _lastWatchdogHeapMb = -1;
+
+	private static long GetWatchdogGrowthThresholdMb()
 	{
-		// 默认取 24 GB：本机 32 GB 物理内存 + 59 GB 托管堆上限下，24 GB 已是明显偏高的信号。
+		// 默认取 1 GB：本机 32 GB 物理内存下，两个采样点之间（默认 1000 个集合）涨 1 GB 已属明显异常。
 		// 不同机器可经环境变量覆盖，避免硬编码阈值在不同规格主机上失准。
-		const long DefaultThresholdMb = 24_000;
-		string? raw = Environment.GetEnvironmentVariable("RURI_EXPORT_HEAP_WATCHDOG_MB");
-		return long.TryParse(raw, out long value) && value > 0 ? value : DefaultThresholdMb;
+		const long DefaultGrowthThresholdMb = 1_000;
+		string? raw = Environment.GetEnvironmentVariable("RURI_EXPORT_HEAP_WATCHDOG_DELTA_MB");
+		return long.TryParse(raw, out long value) && value > 0 ? value : DefaultGrowthThresholdMb;
 	}
 
 	/// <summary>
-	/// 看门狗采样：打印内存与失败累计快照；托管堆超过阈值时主动压缩降压并告警。
+	/// 看门狗采样：打印内存与失败累计快照；托管堆比上一次采样增长达到阈值时主动压缩降压并告警。
 	/// 注意与 OOM 分支（<see cref="RelieveMemoryPressure"/>）的分工：这里是"预判"，OOM 那里是"抢救"。
 	/// </summary>
 	private static void WatchdogLogAndRelieve(ExportFailureTracker failures, int currentExportable, int exportableCount)
@@ -660,15 +668,30 @@ public sealed partial class ProjectExporter
 		Logger.Info(LogCategory.ExportProgress,
 			$"[看门狗] 已处理 {currentExportable}/{exportableCount} 个集合：托管堆 {heapMb:N0} MB，工作集 {workingSetMb:N0} MB，"
 			+ $"失败累计 {failures.FailureCount}（内存不足 {failures.MemoryFailureCount}）");
-		if (heapMb <= MemoryWatchdogThresholdMb)
+		if (_lastWatchdogHeapMb < 0)
 		{
+			// 首次采样没有可对比的基准，只记录不判定
+			_lastWatchdogHeapMb = heapMb;
+			return;
+		}
+
+		long growthMb = heapMb - _lastWatchdogHeapMb;
+		if (growthMb < MemoryWatchdogGrowthThresholdMb)
+		{
+			if(heapMb<_lastWatchdogHeapMb)
+			{
+				_lastWatchdogHeapMb = heapMb;
+			}
 			return;
 		}
 
 		Logger.Warning(LogCategory.ExportProgress,
-			$"[看门狗] 托管堆 {heapMb:N0} MB 超过阈值 {MemoryWatchdogThresholdMb:N0} MB，主动做一次 LOH 压缩降压；"
-			+ "若反复触发说明导出阶段仍在大量物化资产（例如导入类型白名单未生效），请检查 ImportSettings.EffectiveImportAssetTypes。");
+			$"[看门狗] 托管堆比上次采样增长 {growthMb:N0} MB（阈值 {MemoryWatchdogGrowthThresholdMb:N0} MB），主动做一次 LOH 压缩降压；"
+			+ "若反复触发说明导出阶段仍在快速物化资产（例如导入类型白名单未生效），请检查 ImportSettings.EffectiveImportAssetTypes。");
 		RelieveMemoryPressure();
+		// 压缩后重新采样作为新基准：若压缩后仍在持续上涨，每涨一个阈值就会再触发一次，
+		// 而不是相对压缩前的高水位永远"涨不到"
+		_lastWatchdogHeapMb = GC.GetTotalMemory(false) / 1024 / 1024;
 	}
 
 	/// <summary>
