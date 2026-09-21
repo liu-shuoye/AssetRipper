@@ -97,6 +97,15 @@ public sealed record class ImportSettings
 	public bool StripMonoBehaviourData { get; set; } = false;
 
 	/// <summary>
+	/// 加载时剥离 ParticleSystem 的全部曲线关键帧（AnimationCurve/MinMaxCurve 的 Keyframe 列表，保留标量/模式/引用信息），
+	/// 削减海量特效对象在加载/处理期的驻留内存；导出时按 Pose/Prefab/Scene 集合写出前从原始序列化文件重建对象
+	/// 一键回补曲线数据，写完即弃（见 <see cref="AssetRipper.SourceGenerated.Extensions.ParticleSystemRestoreScope"/>）。
+	/// 处理期（Process 阶段）没有任何处理器消费曲线数据，剥离不影响处理结果。
+	/// 更改此选项后需重新加载资源文件才能生效。
+	/// </summary>
+	public bool StripParticleSystemData { get; set; } = true;
+
+	/// <summary>
 	/// 内存拆解口径：控制加载/处理阶段输出资源占用拆解日志时的统计方式。
 	/// 默认按已反序列化对象的序列化字节数统计（廉价）；live 反射估算真实托管堆；clrmd 抓取整堆快照。
 	/// </summary>
@@ -153,6 +162,7 @@ public sealed record class ImportSettings
 		Logger.Info(LogCategory.General, $"{nameof(StripMeshData)}: {StripMeshData}");
 		Logger.Info(LogCategory.General, $"{nameof(StripAudioClipData)}: {StripAudioClipData}");
 		Logger.Info(LogCategory.General, $"{nameof(StripMonoBehaviourData)}: {StripMonoBehaviourData}");
+		Logger.Info(LogCategory.General, $"{nameof(StripParticleSystemData)}: {StripParticleSystemData}");
 		Logger.Info(LogCategory.General, $"{nameof(MemoryBreakdownMode)}: {MemoryBreakdownMode}");
 		Logger.Info(LogCategory.General, $"{nameof(EnableImportAssetTypeFilter)}: {EnableImportAssetTypeFilter}");
 		Logger.Info(LogCategory.General, $"{nameof(ImportAssetTypes)}: {(ImportAssetTypes.Count == 0 ? "(all)" : string.Join(", ", ImportAssetTypes.OrderBy(t => t)))}");

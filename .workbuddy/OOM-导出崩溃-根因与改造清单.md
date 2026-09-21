@@ -399,3 +399,27 @@ set DOTNET_GC_HeapHardLimitPercent=70
 ```
 判定标准：复跑对比 `Export 前` 托管堆（当前基线 59,061 MB）与导出速率；若 Server GC 关闭后峰值显著下降且速率可接受，可考虑把 csproj 的 `<ServerGarbageCollection>true</ServerGarbageCollection>` 调整为按环境变量覆盖的默认。
 
+### 追加修复：StripMonoBehaviourData 布局不匹配日志降级（2026-09-19）
+
+现象：开启 `StripMonoBehaviourData=True` 导出时日志大量出现
+`Import [Error] : Unable to read MonoBehaviour Structure, because script UnityEngine.Timeline.ControlPlayableAsset layout mismatched binary content (read 40 bytes, expected 68 bytes).`
+
+根因（非新问题，是既有降级路径的日志级别误导）：
+
+- Strip 模式下加载期不解析 MonoBehaviour，保留字节切片为 `UnloadedStructure`；导出回读时 `UnloadedStructure.LoadStructure()` 用**脚本程序集反射布局**解析（`GetBehaviourType` → `SerializableStructure.TryRead`）。
+- 引擎内置程序集（UnityEngine.Timeline 等）的 .NET 反射字段布局与实际 Unity 序列化二进制**常常不匹配**（此处反射布局只读 40 字节，实际数据 68 字节）→ `TryRead` 判定失败 → `MonoBehaviour.Structure = null`，该资产按**空壳**（仅 m_Script）导出。
+- 该路径本就设计为"尽力而为、失败降级"，导出流程不受影响；但原实现打的是 `Logger.Error`，把"单资产降级"误报成"导出失败"。
+
+改动：`Source/AssetRipper.Import/Structure/Assembly/Serializable/SerializableStructure.cs`
+
+| 位置 | 改动 |
+|---|---|
+| `LogMonoBehaviourMismatch`（位置不匹配） | `Logger.Error` → `Logger.Warning`，消息追加 "will be exported as an empty shell" 说明降级后果 |
+| `LogMonoBehaviorReadException`（读取抛异常） | 同上降级为 `Warning` |
+
+取舍：与真正需要 Error 的场景（`GameAssetFactory.LogMonoBehaviorReadException`，MonoBehaviour 本体读取崩溃）保持区分；`TryRead` 的"布局不匹配"在加载路径（非 Strip）同样存在，统一降级一致。
+
+注意：此修复只解决"误报"，不改变 ControlPlayableAsset 等资产被解析失败的现状——需要完整字段时请关闭 StripMonoBehaviourData（该模式下类型树已释放，无法改用类型树回读）。
+
+验证情况：`AssetRipper.Import` 与 `AssetRipper.GUI.Free` 编译通过（0 error）。待真实导出确认该行以 `[Warn]` 出现且不再打断导出。
+

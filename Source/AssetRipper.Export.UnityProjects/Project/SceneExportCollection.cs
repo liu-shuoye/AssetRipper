@@ -5,6 +5,7 @@ using AssetRipper.Processing.Prefabs;
 using AssetRipper.Processing.Scenes;
 using AssetRipper.SourceGenerated.Classes.ClassID_1030;
 using AssetRipper.SourceGenerated.Classes.ClassID_3;
+using AssetRipper.SourceGenerated.Extensions;
 
 namespace AssetRipper.Export.UnityProjects.Project;
 
@@ -48,6 +49,8 @@ public class SceneExportCollection : ExportCollection, IComparer<IUnityObjectBas
 		}
 
 		fileSystem.Directory.Create(folderPath);
+		// 写出 .unity 前批量回补场景内 ParticleSystem 的曲线数据（占位模式），写完统一释放（用完即弃）
+		using ParticleSystemRestoreScope restore = ParticleSystemRestoreScope.Create(componentArray);
 		return ExportScene(container, folderPath, filePath, Scene.Name, fileSystem);
 	}
 

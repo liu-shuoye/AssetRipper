@@ -132,7 +132,7 @@ public sealed partial class ProjectExporter
 			if (collection.Exportable && !skippedCollections.Contains(collection))
 			{
 				currentExportable++;
-				Logger.Info(LogCategory.ExportProgress, $"({currentExportable}/{exportableCount}) 正在导出 '{collection.Name}'");
+				// Logger.Info(LogCategory.ExportProgress, $"({currentExportable}/{exportableCount}) 正在导出 '{collection.Name}'");
 				try
 				{
 					bool exportedSuccessfully = collection.Export(container, options.ProjectRootPath, fileSystem);
@@ -635,7 +635,7 @@ public sealed partial class ProjectExporter
 	}
 
 	/// <summary>看门狗检查间隔：每导出这么多集合打一次内存快照并做增长判定。</summary>
-	private const int MemoryWatchdogCheckInterval = 1000;
+	private const int MemoryWatchdogCheckInterval = 500;
 
 	/// <summary>
 	/// 与上一次采样相比，托管堆增长达到该值（MB）时看门狗主动做一次 LOH 压缩并告警；
@@ -652,7 +652,7 @@ public sealed partial class ProjectExporter
 	{
 		// 默认取 1 GB：本机 32 GB 物理内存下，两个采样点之间（默认 1000 个集合）涨 1 GB 已属明显异常。
 		// 不同机器可经环境变量覆盖，避免硬编码阈值在不同规格主机上失准。
-		const long DefaultGrowthThresholdMb = 1_000;
+		const long DefaultGrowthThresholdMb = 500;
 		string? raw = Environment.GetEnvironmentVariable("RURI_EXPORT_HEAP_WATCHDOG_DELTA_MB");
 		return long.TryParse(raw, out long value) && value > 0 ? value : DefaultGrowthThresholdMb;
 	}

@@ -1,10 +1,11 @@
-﻿using AssetRipper.Assets;
+using AssetRipper.Assets;
 using AssetRipper.IO.Files.SerializedFiles;
 using AssetRipper.Processing.Prefabs;
 using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Classes.ClassID_1;
 using AssetRipper.SourceGenerated.Classes.ClassID_1001;
 using AssetRipper.SourceGenerated.Classes.ClassID_468431735;
+using AssetRipper.SourceGenerated.Extensions;
 using AssetRipper.SourceGenerated.MarkerInterfaces;
 
 namespace AssetRipper.Export.UnityProjects.Project;
@@ -61,6 +62,15 @@ public class PrefabExportCollection : AssetsExportCollection<IPrefabInstance>
 				yield return asset;
 			}
 		}
+	}
+
+	/// <summary>
+	/// 写出 .prefab 前批量回补集合内 ParticleSystem 的曲线数据（占位模式），写完统一释放（用完即弃）。
+	/// </summary>
+	protected override bool ExportInner(IExportContainer container, string filePath, string dirPath, FileSystem fileSystem)
+	{
+		using ParticleSystemRestoreScope restore = ParticleSystemRestoreScope.Create(ExportableAssets);
+		return base.ExportInner(container, filePath, dirPath, fileSystem);
 	}
 
 	/// <summary>

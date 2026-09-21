@@ -274,6 +274,10 @@ public sealed partial class SettingsPage : DefaultPage
 								{
 									WriteCheckBoxForStripMonoBehaviourData(writer, Localization.StripMonoBehaviourData);
 								}
+								using (new Div(writer).WithClass("col").End())
+								{
+									WriteCheckBoxForStripParticleSystemData(writer, Localization.StripParticleSystemData);
+								}
 							}
 
 							using (new Div(writer).WithClass("row").End())

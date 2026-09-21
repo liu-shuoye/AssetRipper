@@ -89,6 +89,7 @@ partial class SettingsPage
 		{ nameof(ImportSettings.StripMeshData), (value) => { Configuration.ImportSettings.StripMeshData = value; } },
 		{ nameof(ImportSettings.StripAudioClipData), (value) => { Configuration.ImportSettings.StripAudioClipData = value; } },
 		{ nameof(ImportSettings.StripMonoBehaviourData), (value) => { Configuration.ImportSettings.StripMonoBehaviourData = value; } },
+		{ nameof(ImportSettings.StripParticleSystemData), (value) => { Configuration.ImportSettings.StripParticleSystemData = value; } },
 		{ nameof(ImportSettings.EnableImportAssetTypeFilter), (value) => { Configuration.ImportSettings.EnableImportAssetTypeFilter = value; } },
 		{ nameof(ImportSettings.EnableFileScanCache), (value) => { Configuration.ImportSettings.EnableFileScanCache = value; } },
 		{ nameof(ProcessingSettings.EnablePrefabOutlining), (value) => { Configuration.ProcessingSettings.EnablePrefabOutlining = value; } },
@@ -145,6 +146,11 @@ partial class SettingsPage
 	private static void WriteCheckBoxForStripMonoBehaviourData(TextWriter writer, string label, bool disabled = false)
 	{
 		WriteCheckBox(writer, label, Configuration.ImportSettings.StripMonoBehaviourData, nameof(ImportSettings.StripMonoBehaviourData), disabled);
+	}
+
+	private static void WriteCheckBoxForStripParticleSystemData(TextWriter writer, string label, bool disabled = false)
+	{
+		WriteCheckBox(writer, label, Configuration.ImportSettings.StripParticleSystemData, nameof(ImportSettings.StripParticleSystemData), disabled);
 	}
 
 	private static void WriteDropDownForMemoryBreakdownMode(TextWriter writer)

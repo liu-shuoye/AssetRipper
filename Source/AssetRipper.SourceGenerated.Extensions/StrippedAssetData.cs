@@ -1,8 +1,14 @@
 using AssetRipper.Assets;
+using AssetRipper.SourceGenerated.Classes.ClassID_198;
 using AssetRipper.SourceGenerated.Classes.ClassID_28;
 using AssetRipper.SourceGenerated.Classes.ClassID_43;
 using AssetRipper.SourceGenerated.Classes.ClassID_83;
+using AssetRipper.SourceGenerated.Subclasses.AnimationCurve_Single;
+using AssetRipper.SourceGenerated.Subclasses.MinMaxCurve;
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Reflection;
 
 namespace AssetRipper.SourceGenerated.Extensions;
 
@@ -126,5 +132,170 @@ public static class StrippedAssetData
 			return new AssetDataRestoreHandle(audioClip.ClearEmbeddedData);
 		}
 		return AssetDataRestoreHandle.None;
+	}
+
+	// ============================ ParticleSystem 曲线剥离/回补 ============================
+
+	/// <summary>
+	/// 清空 ParticleSystem 全部曲线关键帧（AnimationCurve/MinMaxCurve 的 Keyframe 列表）。
+	/// 只清内嵌关键帧数组（加载期内存大头），保留标量/模式/PPtr 等瘦身结构。
+	/// </summary>
+	public static void ClearEmbeddedData(this IParticleSystem particleSystem)
+	{
+		foreach (IMinMaxCurve curve in EnumerateMinMaxCurves(particleSystem))
+		{
+			curve.MinCurve.Curve.Clear();
+			curve.MaxCurve.Curve.Clear();
+		}
+	}
+
+	/// <summary>
+	/// 是否存在任意一条非空曲线。用于免恢复判定：有数据即认为未剥离，直接跳过重建。
+	/// </summary>
+	public static bool HasAnyCurveData(this IParticleSystem particleSystem)
+	{
+		foreach (IMinMaxCurve curve in EnumerateMinMaxCurves(particleSystem))
+		{
+			if (curve.MinCurve.Curve.Count != 0 || curve.MaxCurve.Curve.Count != 0)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/// <summary>
+	/// 导出前回补 ParticleSystem 曲线数据并取得用完即弃句柄。
+	/// 曲线尚在（未剥离）时免恢复；被剥离时重建对象，把各曲线关键帧按同构索引拷回当前对象，
+	/// Dispose 时再次清空。重建对象不参与集合缓存，由 GC 回收（见 <see cref="AssetCollection.MaterializeAssetOnly"/>）。
+	/// </summary>
+	public static AssetDataRestoreHandle TryAcquire(IParticleSystem particleSystem)
+	{
+		// 曲线非空说明数据完整（未剥离资产），免恢复
+		if (particleSystem.HasAnyCurveData())
+		{
+			return AssetDataRestoreHandle.None;
+		}
+		if (particleSystem.Collection.MaterializeAssetOnly(particleSystem.PathID) is IParticleSystem materialized)
+		{
+			CopyCurveData(materialized, particleSystem);
+			if (particleSystem.HasAnyCurveData())
+			{
+				return new AssetDataRestoreHandle(particleSystem.ClearEmbeddedData);
+			}
+		}
+		return AssetDataRestoreHandle.None;
+	}
+
+	/// <summary>
+	/// 逐条曲线把源对象的关键帧列表搬进目标对象（两者为同一运行类型，枚举顺序一致，按序号对齐）。
+	/// 回补期间对象只读（YAML 序列化），共享 Keyframe 实例安全；Dispose 清空后即无残留引用。
+	/// </summary>
+	private static void CopyCurveData(IParticleSystem source, IParticleSystem target)
+	{
+		foreach ((IMinMaxCurve sourceCurve, IMinMaxCurve targetCurve) in ZipMinMaxCurves(source, target))
+		{
+			CopyAnimationCurve(sourceCurve.MinCurve, targetCurve.MinCurve);
+			CopyAnimationCurve(sourceCurve.MaxCurve, targetCurve.MaxCurve);
+		}
+	}
+
+	private static void CopyAnimationCurve(IAnimationCurve_Single source, IAnimationCurve_Single target)
+	{
+		target.Curve.Clear();
+		// 源与目标为同一运行类型，Curve 的元素类型一致，直接复用实例（导出期只读，Dispose 清空后无残留引用）。
+		// var 推断的 Keyframe 类型与 target.Curve 的元素类型一致，无需 dynamic，兼容 AOT/修剪
+		foreach (var keyframe in source.Curve)
+		{
+			target.Curve.Add(keyframe);
+		}
+	}
+
+	/// <summary>
+	/// 同时枚举源/目标对象的全部 IMinMaxCurve，按同构顺序成对返回。
+	/// 剥离/回补共用同一枚举逻辑，天然对称，不会漏字段。
+	/// </summary>
+	private static IEnumerable<(IMinMaxCurve, IMinMaxCurve)> ZipMinMaxCurves(IParticleSystem a, IParticleSystem b)
+	{
+		List<IMinMaxCurve> first = CollectMinMaxCurves(a);
+		List<IMinMaxCurve> second = CollectMinMaxCurves(b);
+		int count = Math.Min(first.Count, second.Count);
+		for (int i = 0; i < count; i++)
+		{
+			yield return (first[i], second[i]);
+		}
+	}
+
+	private static List<IMinMaxCurve> CollectMinMaxCurves(IParticleSystem ps)
+	{
+		List<IMinMaxCurve> list = [];
+		foreach (IMinMaxCurve curve in EnumerateMinMaxCurves(ps))
+		{
+			list.Add(curve);
+		}
+		return list;
+	}
+
+	/// <summary>
+	/// 枚举 ParticleSystem 及其全部模块上的 IMinMaxCurve 字段。
+	/// 所有曲线字段（含 VelocityModule 等以具体类 MinMaxCurve_2018 暴露的字段）都实现 <see cref="IMinMaxCurve"/>，
+	/// 属性按运行时类型 + 元数据顺序稳定，故用反射过滤而不用手写几十条字段路径。
+	/// </summary>
+	private static IEnumerable<IMinMaxCurve> EnumerateMinMaxCurves(IParticleSystem particleSystem)
+	{
+		// 顶层 StartDelay 本身就是一个 IMinMaxCurve，与各模块分开枚举
+		if (particleSystem.StartDelay_MinMaxCurve is { } startDelay)
+		{
+			yield return startDelay;
+		}
+		foreach (object module in EnumerateModules(particleSystem))
+		{
+			foreach (IMinMaxCurve curve in EnumerateCurveProperties(module))
+			{
+				yield return curve;
+			}
+		}
+	}
+
+	private static IEnumerable<object> EnumerateModules(IParticleSystem ps)
+	{
+		// null（模块未启用/未读取）直接跳过；顺序与源/目标对象一致（同类型读取顺序相同）
+		object?[] modules =
+		[
+			ps.InitialModule, ps.ShapeModule, ps.EmissionModule, ps.SizeModule, ps.RotationModule,
+			ps.ColorModule, ps.UVModule, ps.VelocityModule, ps.InheritVelocityModule, ps.ForceModule,
+			ps.ExternalForcesModule, ps.ClampVelocityModule, ps.NoiseModule, ps.SizeBySpeedModule,
+			ps.RotationBySpeedModule, ps.ColorBySpeedModule, ps.CollisionModule, ps.TriggerModule,
+			ps.SubModule, ps.LightsModule, ps.TrailModule, ps.CustomDataModule,
+		];
+		foreach (object? module in modules)
+		{
+			if (module is not null)
+			{
+				yield return module;
+			}
+		}
+	}
+
+	/// <summary>
+	/// 反射枚举对象上所有声明类型实现 <see cref="IMinMaxCurve"/> 的属性值；属性元数据按类型缓存，避免每次反射。
+	/// </summary>
+	private static readonly ConcurrentDictionary<Type, PropertyInfo[]> CurvePropertyCache = new();
+
+	private static IEnumerable<IMinMaxCurve> EnumerateCurveProperties(object module)
+	{
+		Type type = module.GetType();
+		if (!CurvePropertyCache.TryGetValue(type, out PropertyInfo[]? properties))
+		{
+			properties = type.GetProperties().Where(p => typeof(IMinMaxCurve).IsAssignableFrom(p.PropertyType)).ToArray();
+			CurvePropertyCache[type] = properties;
+		}
+		foreach (PropertyInfo property in properties)
+		{
+			if (property.GetValue(module) is IMinMaxCurve curve)
+			{
+				yield return curve;
+			}
+		}
 	}
 }

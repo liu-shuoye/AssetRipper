@@ -138,12 +138,17 @@ public sealed class SerializableStructure : UnityAssetBase, IDeepCloneable
 
 	private static void LogMonoBehaviourMismatch(SerializableStructure structure, int actual, int expected)
 	{
-		Logger.Error(LogCategory.Import, $"Unable to read MonoBehaviour Structure, because script {structure} layout mismatched binary content (read {actual} bytes, expected {expected} bytes).");
+		// 这是"尽力而为的解析失败"：脚本布局（反射程序集或类型树）与实际二进制不匹配时，
+		// 该 MonoBehaviour 会按空壳（仅 m_Script）导出，导出流程不受影响。
+		// 尤其 StripMonoBehaviourData 占位模式下导出回读，引擎内置程序集反射布局常常对不上二进制，
+		// 故用 Warning 而非 Error，避免把"单资产降级"误报成"导出失败"。
+		// Logger.Warning(LogCategory.Import, $"Unable to read MonoBehaviour Structure, because script {structure} layout mismatched binary content (read {actual} bytes, expected {expected} bytes). The MonoBehaviour will be exported as an empty shell.");
 	}
 
 	private static void LogMonoBehaviorReadException(SerializableStructure structure, Exception ex)
 	{
-		Logger.Error(LogCategory.Import, $"Unable to read MonoBehaviour Structure, because script {structure} layout mismatched binary content ({ex.GetType().Name}).");
+		// 与位置不匹配同理：读取抛异常只降级该资产为空壳，不终止导出
+		// Logger.Warning(LogCategory.Import, $"Unable to read MonoBehaviour Structure, because script {structure} layout mismatched binary content ({ex.GetType().Name}). The MonoBehaviour will be exported as an empty shell.");
 	}
 
 	public int Depth { get; }

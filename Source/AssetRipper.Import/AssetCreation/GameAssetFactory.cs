@@ -14,6 +14,7 @@ using AssetRipper.IO.Files.SerializedFiles.Parser;
 using AssetRipper.SerializationLogic;
 using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Classes.ClassID_114;
+using AssetRipper.SourceGenerated.Classes.ClassID_198;
 using AssetRipper.SourceGenerated.Classes.ClassID_28;
 using AssetRipper.SourceGenerated.Classes.ClassID_43;
 using AssetRipper.SourceGenerated.Classes.ClassID_48;
@@ -56,6 +57,10 @@ namespace AssetRipper.Import.AssetCreation;
 /// 导出阶段按需解析回读真实字段，用完即弃。可削减海量复杂脚本的 SerializableStructure 驻留内存；
 /// 解析依据由类型树切换为脚本程序集反射（<see cref="UnloadedStructure"/>），需脚本类可解析方可导出字段。
 /// </param>
+/// <param name="stripParticleSystemData">
+/// 占位模式：加载时剥离 ParticleSystem 的全部曲线关键帧（保留标量/模式/引用），
+/// 导出阶段按 Prefab/Scene 集合批量回补曲线数据后写出、写完即弃（见 <see cref="StrippedAssetData"/>）。
+/// </param>
 /// <param name="allowedAssetTypes">
 /// 导入类型白名单。非空时，只有归属这些大类的资产会被解析，
 /// 其余类型在读取入口直接跳过（不做任何反序列化）。
@@ -68,6 +73,7 @@ public sealed class GameAssetFactory(
 	bool stripMeshData = false,
 	bool stripAudioClipData = false,
 	bool stripMonoBehaviourData = false,
+	bool stripParticleSystemData = false,
 	IReadOnlyCollection<ImportAssetType>? allowedAssetTypes = null) : AssetFactoryBase
 {
 	private IAssemblyManager AssemblyManager { get; } = assemblyManager ?? throw new ArgumentNullException(nameof(assemblyManager));
@@ -89,6 +95,9 @@ public sealed class GameAssetFactory(
 	/// 占位模式：延迟解析 MonoBehaviour 脚本结构（保留字节切片，导出时经 <see cref="UnloadedStructure"/> 回读解析）。
 	/// </summary>
 	private bool StripMonoBehaviourData { get; } = stripMonoBehaviourData;
+
+	/// <summary>占位模式：剥离 ParticleSystem 曲线关键帧（导出时按集合批量回补）。</summary>
+	private bool StripParticleSystemData { get; } = stripParticleSystemData;
 
 	/// <summary>
 	/// 导入类型白名单；null 表示不过滤。判定逻辑见 <see cref="ImportAssetTypeExtensions.IsClassIdAllowed"/>。
@@ -255,6 +264,12 @@ public sealed class GameAssetFactory(
 					{
 						audioClip.AudioData = [];
 					}
+				}
+				if (StripParticleSystemData && asset is IParticleSystem particleSystem)
+				{
+					// 曲线关键帧是全对象驻留内存的最大头；清空后对象仅剩标量/模式/引用等瘦身结构。
+					// 导出阶段按集合回补（见 StrippedAssetData.TryAcquire / ParticleSystemRestoreScope）。
+					particleSystem.ClearEmbeddedData();
 				}
 			}
 			if (reader.Position != reader.Length)
