@@ -1,90 +1,84 @@
 # AssetRipper 项目长期记忆
 
+> 历史细节见 `memory/2026-09-*.md` 日志；本文件只保留仍然有效的硬约束与结论。
+
+## 构建与运行环境
+- net10.0；.NET 10.0.301 已装。**优先 Rider MCP**（`build_solution_start` → `build_solution_state --sessionId`）。
+  - ⚠️ Rider MCP 偶尔**假失败**：`buildIsSuccess:false` + `problems:[]` + "Build failed without diagnostic output"，而 `get_project_problems` 只有无关警告 → **改用 dotnet CLI 复核**。
+  - CLI 复核走沙箱 bash：`export APPDATA/ProgramData/LOCALAPPDATA` 后 `dotnet build --no-restore -v m > out.txt 2>&1`，Read 该文件（GBK 编码，`errors='replace'` 读后按 `错误|警告|->` 过滤）。比 PowerShell 可靠（PowerShell 工具不回显 stdout）。
+- 沙箱 bash 里 `dotnet restore` 必崩（NuGet path1 null）；用 `--no-restore` 前须 `export APPDATA/ProgramData/LOCALAPPDATA`（缺任一项报 NETSDK1060）。沙箱**缺 coreutils**（`head`/`grep`/`find`/`ls` 都可能 127）→ 用内置 Grep/Glob 或写文件再 Read。
+- 新增工程/引用后必须先真实 restore，否则 NU1105。csc.exe 在黑名单。跨盘符绝对路径 ProjectReference 必失败，须同盘相对路径。
+- 快速复现：`0Bins/AssetRipper.GUI.Free/Debug/AssetRipper.GUI.Free.exe --port <N> --headless`（Ookii POSIX 风格参数）。
+  - POST `/Settings/Update` 的表单字段名是**不带类名前缀**的 `nameof(...)`：`GameType=Nikki4&MemoryBreakdownMode=ClrMd`；写 `ImportSettings.GameType` 会静默无效（302 但不生效）。`/LoadFolder` 用 `Path=`。加载同步阻塞，客户端须只发请求不读响应。
+  - GET `/Collections/View`、`/Assets/Json|Yaml`。用 `--noproxy curl` 或 python urllib。
+- `AssetRipper.GUI.Free` 是 `PublishAot=true`（本机 AOT publish 因缺 advapi32.lib 失败）。临时验证工程放 temp、勿落仓库；拷进 0Bins 的验证文件跑完必须删（`Remove-Item` 被 safe-delete 拦，用 `[System.IO.File]::Delete`）。
+
 ## 设置/持久化（GUI Web）
 - GUI = 本地 ASP.NET Core Web（Vue 前端 + C# 生成 HTML，`AssetRipper.GUI.Web`）。设置模型 `FullConfiguration`(Export/Processing/Import) → `AssetRipper.Settings.json`，仅 `ExportSettings.SaveSettingsToDisk` 勾选才落盘。
 - **禁止往 `ExportSettings` 加"始终记住"的字段**：`SettingsPageGenerator` 反射其全部 public 属性生成设置页，会多出控件。→ 放独立文件（参考 `LastExportSettings`）。
+- **导入阶段的行为放 `ImportSettings`，不要放 `ExportSettings`**：设置页只在未加载资源时可编辑（导出页反之），
+  放 Import 侧用户才能在导入前配置。`ImportSettings` **不能反向引用 `GUI.Web`**（枚举/类型要放 `AssetRipper.Import`）。
+- **"导入后自动导出"的硬约束**（`GameFileLoader.ExportAfterLoadAuto`）：自动流程无法弹窗让用户确认清空目录，
+  因此**必须强制追加时间戳子文件夹**，否则会静默删掉用户既有导出文件。别为了"与手动一致"去掉这一层。
+  子文件夹命名统一走 `GameFileLoader.AppendTimestampedSubfolder`，勿在 `Commands` 与 `GameFileLoader` 各写一份。
 - `SettingsPage.g.cs` 是**预生成静态文件**，构建不会更新。改设置字段后必须跑 `0Bins/Other/AssetRipper.GUI.SourceGenerator/Debug/*.exe`（顺带重排 en_US.json），或手工补 booleanProperties 条目 + WriteXxxFor。
-  - ⚠️ **该 exe 用的是它自己输出目录里那份 `AssetRipper.Import.dll`，构建不会自动刷新它** → 直接跑会**静默产出不含新属性的文件（无报错）**。正确顺序：先 dotnet 构建 `AssetRipper.Import` → 把新的 `AssetRipper.Import.dll/.pdb` 复制进生成器目录（先备份，用完还原）→ 再跑 exe。
+  - ⚠️ **该 exe 用的是它自己输出目录里那份 `AssetRipper.Import.dll`** → 直接跑会**静默产出不含新属性的文件（无报错）**。正确顺序：先构建 `AssetRipper.Import` → 把新的 `AssetRipper.Import.dll/.pdb` 复制进生成器目录（先备份，用完还原）→ 再跑 exe。
 - 新增 Import/Processing 设置项的完整清单：字段 + `Log()` 一行 + `SettingsPage.cs` 手写控件 + 跑生成器 + `Localizations/{en_US,zh_Hans,zh_Hant}.json` 三个 key（`xxx` / `xxx_description`）；**仅 en_US 参与生成**，其余语言缺失即回退英文。
 - 设置**下发时机**：`GameStructure` 构造函数里 `PlatformStructure`/`MixedStructure` 赋值后、`CollectFiles(...)` **之前**（`ApplyScanCacheSettings`）。晚于 CollectFiles 则入口处的缓存读写看到的还是默认值。
 - 前端初值：`VuePage.WriteScriptReferences` 里在 Vue 脚本前注入 `<script>window.x = {JSON};</script>`，JS 用 `window.x ?? default`；路径必须 `JsonSerializer.Serialize`（Windows 反斜杠）。
+- 诊断口径没有环境变量，只能靠设置；日志开头的 `Configuration Settings:` 是启动时打印的，不能判断本次 POST 是否生效。
+
+## 架构分层（硬约束）
+- `AssetRipper.Logging` **零依赖**（禁止加任何 ProjectReference/重包，否则成环）；csproj 需 AllowUnsafeBlocks。取执行目录用 `AppContext.BaseDirectory`。Cpp2IL 桥接在 `Import/Logging/Cpp2ILBridge.cs`（ModuleInitializer）。
+- `AssetRipper.Diagnostics`（含 `Memory.*`）：依赖 Logging + Assets + SourceGenerated 包 + ClrMD，**只被导出/入口层引用**。**不能放进 Assets**（SourceGenerated 反向引用 Assets 会成环，且会拖入 ClrMD）。
+- ClrMD 锁 **3.1.512801**（4.x 拖 Azure.Identity）。自快照可用；**不要**用 `AttachToProcess(suspend:false)` 读活进程。
+- 拆解的数据源是**显式参数** `IEnumerable<AssetCollection>?`，勿改静态注册（会钉住 GameData 致 Reset 后泄漏）。
+- `MemoryDiagnostics.LogMemoryDiagnostics(stage, collections)`：先双轮 GC 再快照；增长 ≥ `RURI_MEM_BREAKDOWN_GROWTH_MB`（默认 1024）自动拆解，基线前移。口径 `RURI_MEM_BREAKDOWN_MODE`：默认=序列化字节数 / `live`=反射估算 / `clrmd`=整堆快照。另有 `RURI_MEM_BREAKDOWN_DUMP`、`_MAX_OBJECTS`。
+- 生成类全名 `AssetRipper.SourceGenerated.Classes.ClassID_<n>.<类名>`（NuGet 包，仓库无源码），数字即 Unity ClassID。
 
 ## Nikki4 专属类（AssetCreation/Nikki4）
 - 手写专属类**必须复写 `ClassName`**（生成类由 AssemblyDumper Pass110 注入），否则继承基类名致 GUI/搜索/导出错乱。
 - 组合/委托模式（如 Shader_Nikki4 内含 sealed 生成类）须 override WalkStandard/WalkEditor/WalkRelease 委托给内层，否则 YAML/JSON 只剩空壳基类字段。
 - Nikki4 对象数据通常无 Object 头（hideFlags/PPtr），从名字字段直接开始。
 
-## 构建与运行环境
-- net10.0；.NET 10.0.301 已装。**PowerShell 的 `dotnet` 可用**（不回显 stdout → 写文件再 Read）。**优先走 Rider MCP**（`build_solution_start` → `build_solution_state --sessionId`）。
-  - ⚠️ Rider MCP 偶尔**假失败**：返回 `buildIsSuccess:false` + `problems:[]` + “Build failed without diagnostic output”，而 `get_project_problems` 只有无关的 `SourceGenerator.Foundations.Contracts` 加载警告 → **改用 dotnet CLI 复核**。
-  - CLI 复核走沙箱 bash：`export APPDATA/ProgramData/LOCALAPPDATA` 后 `dotnet build --no-restore -v m > out.txt 2>&1`，Read 该文件（GBK 编码，用 `errors='replace'` 读再按 `错误|警告|->` 过滤）。比 PowerShell 吞 stdout 可靠。
-- 沙箱 bash 里 `dotnet restore` 必崩（NuGet path1 null）。用 `--no-restore` 前须 `export APPDATA/ProgramData/LOCALAPPDATA`（缺任一项报 NETSDK1060）。coreutils 缺失时改用 PowerShell。
-- 新增工程/引用后必须先真实 restore，否则 NU1105。csc.exe 在黑名单。跨盘符绝对路径 ProjectReference 必失败，须同盘相对路径。
-- 快速复现：`0Bins/AssetRipper.GUI.Free/Debug/AssetRipper.GUI.Free.exe --port <N> --headless`；POST /Settings/Update、/LoadFile，GET /Collections/View、/Assets/Json|Yaml。
-- `AssetRipper.GUI.Free` 是 `PublishAot=true`（本机 AOT publish 因缺 advapi32.lib 失败）。临时验证工程放 temp、勿落仓库；拷进 0Bins 的验证文件跑完必须删（`Remove-Item` 被 safe-delete 拦，用 `[System.IO.File]::Delete`）。
-
-## 架构分层（硬约束）
-- `AssetRipper.Logging` **零依赖**（禁止加任何 ProjectReference/重包，否则成环）；csproj 需 AllowUnsafeBlocks。取执行目录用 `AppContext.BaseDirectory`。Cpp2IL 桥接在 `Import/Logging/Cpp2ILBridge.cs`（ModuleInitializer）。
-- `AssetRipper.Diagnostics`（含 `Memory.*`）：依赖 Logging + Assets + SourceGenerated 包 + ClrMD，**只被导出/入口层引用**。**不能放进 Assets**（SourceGenerated 反向引用 Assets 会成环，且会拖入 ClrMD）。
-- 拆解的数据源是**显式参数** `IEnumerable<AssetCollection>?`，勿改静态注册（会钉住 GameData 致 Reset 后泄漏）。
-- `MemoryDiagnostics.LogMemoryDiagnostics(stage, collections)`：先双轮 GC 再快照；增长 ≥ `RURI_MEM_BREAKDOWN_GROWTH_MB`（默认 1024）自动拆解，基线前移。口径 `RURI_MEM_BREAKDOWN_MODE`：默认=序列化字节数 / `live`=反射估算 / `clrmd`=整堆快照。另有 `RURI_MEM_BREAKDOWN_DUMP`、`_MAX_OBJECTS`。
-- ClrMD 锁 **3.1.512801**（4.x 拖 Azure.Identity）。自快照可用；**不要**用 `AttachToProcess(suspend:false)` 读活进程。
-- 生成类全名 `AssetRipper.SourceGenerated.Classes.ClassID_<n>.<类名>`（NuGet 包，仓库无源码），数字即 Unity ClassID。
-
 ## Bundle 名称/资源解析（性能敏感，勿退回线性扫描）
 - 树形：`GameBundle`(根) → 每个 bundle 文件一个 `SerializedBundle`；松散 SerializedFile 直接进根的集合列表。大项目可达**几十万个子 Bundle**。
-- `Bundle.ResolveCollection/ResolveResource` **必须**走“一层”索引 `_levelCollectionsByName` / `_levelResourcesByName`（自身条目 + 直接子 Bundle 条目，自身优先、子 Bundle 按序、首个匹配优先）。原实现对每层都遍历全部子 Bundle → 单次解析 O(子Bundle数)，30 万子 Bundle 时单次 9.6 ms，`InitializeAllDependencyLists` 直接数小时。
+- `Bundle.ResolveCollection/ResolveResource` **必须**走"一层"索引 `_levelCollectionsByName` / `_levelResourcesByName`（自身条目 + 直接子 Bundle 条目，自身优先、子 Bundle 按序、首个匹配优先）。原实现对每层都遍历全部子 Bundle → 30 万子 Bundle 时单次 9.6 ms，`InitializeAllDependencyLists` 直接数小时。
 - 索引懒构建 + **条目数 ≤ 8 时线性扫描不建字典**（否则几十万个单集合 Bundle 各建一个微型字典）。条目数缓存用 `NotCounted = -1` 哨兵（0 是合法值）。
-- 改动集合/资源/子 Bundle（`AddCollection`/`AddResource`/`AddBundle`/`Dispose`）后必须 `InvalidateLevelIndexes()`，且 `AddCollection`/`AddResource` 还要失效**父**节点。**不能改成增量 `TryAdd`**：新条目在“一层”顺序里排在子 Bundle 之前，同名时会输给已登记的子里条目，语义就变了。
-- 语义约束（`AssetRipper.Assets.Tests/FileResolutionTests.cs` 已固化，24 例）：只向下探**一层**（孙 Bundle 的集合对根不可见）；同名取首个；资源键用 `NameFixed`（即 `FixFileIdentifier` 后的名字）。
-- 缺失依赖日志必须去重（`Bundle.DependencyInitializationContext` + `DeduplicatingDependencyProvider`），逐条打印上限 1000 / 去重统计上限 10000，另有每 5 万集合的进度行。
+- 改动集合/资源/子 Bundle（`AddCollection`/`AddResource`/`AddBundle`/`Dispose`）后必须 `InvalidateLevelIndexes()`，且 `AddCollection`/`AddResource` 还要失效**父**节点。**不能改成增量 `TryAdd`**：新条目在"一层"顺序里排在子 Bundle 之前，同名时会输给已登记的子里条目，语义就变了。
+- 语义约束（`AssetRipper.Assets.Tests/FileResolutionTests.cs` 已固化，24 例）：只向下探**一层**；同名取首个；资源键用 `NameFixed`（`FixFileIdentifier` 后的名字）。
+- 缺失依赖日志必须去重（`Bundle.DependencyInitializationContext` + `DeduplicatingDependencyProvider`），逐条上限 1000 / 去重统计上限 10000，另有每 5 万集合的进度行。
 
 ## 文件扫描（`PlatformGameStructure.CollectFiles`，性能敏感）
-- 瓶颈**不是目录枚举**，是**逐文件开关流**做类型判定（`SerializedFile.IsSerializedFile` / `BundleHeader.IsBundleHeader`）。30w 文件约半小时。
+- 瓶颈**不是目录枚举**，是**逐文件开关流**做类型判定。30w 文件约半小时。
 - 现走 `FileTypeScanner`：扩展名+体积预筛（零 syscall 排除）→ 候选批量并发读 32 字节头 → `HeaderProbe` 纯函数判定。**勿退回逐文件 `IsSerializedFile`**。
-- `HeaderProbe` 是纯函数、无磁盘依赖，可单测；批量结果与原逐文件判定**必须完全一致**（`FileTypeScannerTests` 已固化 4 例）。
-- `FileSystem.BatchReadHeaderPrefix` / `EnumerateFileInfos` 是**抽象原语**：改抽象签名写 `FileSystem.g.cs`，具体覆写写手写文件（否则再生成会丢）。`LocalFileSystem` 并发读头，基础类保持**串行**——`File.OpenRead` 的流池是进程级串行的，多线程用反而更慢。
+- `HeaderProbe` 是纯函数、无磁盘依赖，可单测；批量结果与原逐文件判定**必须完全一致**（`FileTypeScannerTests` 已固化）。
+- **一个文件只能被一种扫描收集**（已修）：`FilterByHeader` 按种类判定；`MatchesSerializedFile(buffer, length, fileSize)` 带「头部声明大小 == 实际大小」比对（UnityFS 前 12 字节恰好满足其余判据）。真实大小由 `EnumerateFileInfos` 的 `FileEntryInfo.Length` 传入。排障口诀：**目录文件数 × 2 == 日志里"已找到资源包"的最大编号 → 就是被收集了两遍。**
+- `FileSystem.BatchReadHeaderPrefix` / `EnumerateFileInfos` 是**抽象原语**：改抽象签名写 `FileSystem.g.cs`，具体覆写写手写文件（否则再生成会丢）。`LocalFileSystem` 并发读头，基础类保持**串行**——`File.OpenRead` 的流池是进程级串行的。
 - `AssetRipper.IO.Files.csproj` **零 ProjectReference**（只有 NuGet 包）→ **不能引用 `AssetRipper.Logging`**，诊断只能走可选 `Action<string>?` 回调参数。
-- 扫描结果缓存 `FileScanCache`：键=`(目录, 扫描类型)`，按目录指纹（文件数+最后写入 UTC ticks）校验，**不符即该目录重扫、绝不静默信任**。默认**关闭**（`PlatformGameStructure.ScanCacheEnabled`/`ScanCachePath`），改动集合后须注意失效。已接入设置页：`ImportSettings.EnableFileScanCache`/`FileScanCachePath` → `GameStructure.ApplyScanCacheSettings`。
-- `CollectAllSerializedFiles` 原有的“按名字去重”是**死代码**（`GameBundle.FromPaths` 只用 `Files.Values()`，名字被丢弃）→ 可安全改为 `AddRange`。
-- `RequestDependency` 走 `GetOrBuildFilesIndex()`：`_filesIndex`（`TryAdd` 保住“首个匹配优先”）+ 过期判定 `_filesIndexCount != Files.Count`（`Files` 只增不减，全仓无 `Files.Clear/Remove`）。
-- Unity 版本读取已**记忆化**：`static Dictionary<(string Path, bool IsBundle), UnityVersion> VersionCache`。因为平台探测会给同一个 `globalgamemanagers` 建多个结构体实例，实例级缓存跨不了实例。清空入口 `PlatformChecker.CheckPlatform` 开头（每次导入恰好一次，且早于任何结构体构造）；`ClearVersionCache` 须为 `internal static`（`PlatformChecker` 是静态类非子类）。
-- `AssetRipper.Import` 导入链路**单线程**（无 `Task.Run`/`Parallel.`/`Thread(`）→ 缓存用普通 `Dictionary` 即可，无需并发容器。
+- 扫描结果缓存 `FileScanCache`：键=`(目录, 扫描类型)`，按目录指纹（文件数+最后写入 UTC ticks）校验，**不符即该目录重扫、绝不静默信任**。默认**关闭**。已接入设置页：`ImportSettings.EnableFileScanCache`/`FileScanCachePath` → `GameStructure.ApplyScanCacheSettings`。
+- `RequestDependency` 走 `GetOrBuildFilesIndex()`：`_filesIndex`（`TryAdd` 保住"首个匹配优先"）+ 过期判定 `_filesIndexCount != Files.Count`（`Files` 只增不减）。
+- Unity 版本读取已**记忆化**：`static Dictionary<(string Path, bool IsBundle), UnityVersion> VersionCache`。清空入口 `PlatformChecker.CheckPlatform` 开头（每次导入恰好一次）；`ClearVersionCache` 须为 `internal static`。
+- `AssetRipper.Import` 导入链路**单线程**（无 `Task.Run`/`Parallel.`/`Thread(`）→ 缓存用普通 `Dictionary` 即可。
 
 ## Bundle 条目读取：整包解压共享（2026-09-19 已改，勿退回逐条目复制）
-- `BundleFileBlockReader.ReadEntry` 现在把**所有块解压进一条共享流**，条目用 `shared.CreatePartial(entry.Offset, entry.Size)` 取区间视图。
-  前提（已在 Nikki4 上抽样 400 个验证）：条目偏移首尾相接、从 0 开始，且条目总长 == 块解压总长。
-- 收益：每个 bundle 从 2 条流/2 个句柄降为 1 条；实测 `body` 468 包：FileStream 936→468、Byte[] 12.8→9.0 MB、**加载快 4.1×**。
-- 保留两条回退/快速路径：单块未压缩 → 直接 `CreatePartial` 映射源文件（零拷贝）；
-  整包解压抛异常 → `ReadEntryByCopyingBlocks` 逐条目复制（失败只影响用到坏块的条目，语义与改动前一致）。
-- ⚠️ `RandomAccessStream` 用 `RandomAccess.Read(handle)` **绕过 FileStream 缓冲**，小读取=一次系统调用；
-  不要给它加"每个实例一份大缓冲"——条目数远多于 bundle 数，会把省下的内存全赔回去。
-- ⚠️ 条目数与块数：Nikki4 是**条目 2 个/包、块 2.6 个/包**，所以共享粒度取"整包"而不是"每块"（按块共享反而更多流）。
-
-## 文件类型扫描：一个文件只能被一种扫描收集（2026-09-19 已修）
-- `FileTypeScanner.FilterByHeader` 曾对两种扫描都用 `MatchesSerializedFile || MatchesBundle`，
-  且 `HeaderProbe.MatchesSerializedFile` **缺少「头部声明大小 == 实际大小」这条关键比对**
-  （UnityFS 前 12 字节恰好满足其余判据）→ 每个 bundle 被收集两次 →
-  `GameBundle.FromPaths` 按内容分派，两个条目都被当 bundle 读一遍，内存/耗时整体翻倍。
-- 现在：`FilterByHeader` 按种类判定；`MatchesSerializedFile(buffer, length, fileSize)` 带大小比对；
-  真实大小由 `EnumerateFileInfos` 的 `FileEntryInfo.Length` 传入（批量读头只有 32 字节，拿不到）。
-  `FileTypeScannerTests.BundleFileIsNotCollectedAsSerializedFile` 已固化该不变式。
-- 排障口诀：**目录文件数 × 2 == 日志里"已找到资源包"的最大编号 → 就是被收集了两遍。**
+- `BundleFileBlockReader.ReadEntry` 把所有块解压进**一条共享流**，条目用 `shared.CreatePartial(entry.Offset, entry.Size)` 取区间视图。
+  前提（Nikki4 抽样 400 验证）：条目偏移首尾相接、从 0 开始，条目总长 == 块解压总长。
+- 收益：每 bundle 从 2 条流/2 句柄降为 1 条；实测 `body` 468 包：FileStream 936→468、Byte[] 12.8→9.0 MB、**加载快 4.1×**。
+- 保留两条回退/快速路径：单块未压缩 → 直接 `CreatePartial` 映射源文件（零拷贝）；整包解压抛异常 → `ReadEntryByCopyingBlocks` 逐条目复制。
+- ⚠️ `RandomAccessStream` 用 `RandomAccess.Read(handle)` **绕过 FileStream 缓冲**，小读取=一次系统调用；不要给每个实例加大缓冲——条目数远多于 bundle 数。
+- ⚠️ Nikki4 是**条目 2 个/包、块 2.6 个/包**，共享粒度取"整包"而非"每块"。
 
 ## Bundle 条目落盘阈值（内存陷阱，勿轻易下调）
-- `BundleFileBlockReader.CreateStream` 决定解压后的条目放内存还是落盘：`> MaxMemoryStreamLength` → `SmartStream.CreateTemp()`（磁盘临时文件 + `FileStream(bufferSize: 4096)`）。
-- **每多一个落盘条目，就多一套常驻开销**：`byte[4096]` + `BufferedFileStreamStrategy`(72B) + `SyncWindowsFileStreamStrategy`(64B) + `FileStream`(32B) + `SafeFileHandle`(72B) ≈ **4.3 KB 托管 + 1 个内核句柄**。
-  → 阈值调低**不会**省内存：实测 17.5 万条目时，光 FileStream 缓冲区就是 685 MB（占整堆 Byte[] 的 98%），实际数据一分没进托管堆。
+- `BundleFileBlockReader.CreateStream`：`> MaxMemoryStreamLength` → `SmartStream.CreateTemp()`（磁盘临时文件 + `FileStream(bufferSize: 4096)`）。
+- **每多一个落盘条目就多一套常驻开销**：`byte[4096]` + `BufferedFileStreamStrategy`(72B) + `SyncWindowsFileStreamStrategy`(64B) + `FileStream`(32B) + `SafeFileHandle`(72B) ≈ **4.3 KB 托管 + 1 个内核句柄**。
+  → 阈值调低**不会**省内存：实测 17.5 万条目时，光 FileStream 缓冲区就 685 MB（占整堆 Byte[] 的 98%），实际数据没进托管堆。
 - 现状（本地手工改过，注释还写着 50 MB / 30 MB，别信注释）：`MaxMemoryStreamLength = 1024`、`MaxPreAllocatedMemoryStreamLength = 1023 `（尾部有多余空格）。
   变更史：`b78861b08`=50MB/30MB → `ebf30da8f`=512KB → `38f5fdc40`=1024。
-- 若真要省这批内存，方向是让 `SmartStream.CreateTemp()` 用 `bufferSize: 0`（禁用缓冲）或按块共享流令条目走 `CreatePartial`，而不是继续压阈值。
-
-## ⚠️ 沙箱环境差异（排查工具可用性）
-- Bash 沙箱**缺 coreutils**：没有 `head` / `grep` / `find`（管道过去直接 127）。要用 Grep / Glob 工具，或写文件再 Read。
-- PowerShell 工具**不回显 stdout**：必须 `[System.IO.File]::WriteAllLines` 到临时文件后 Read。
+- 若真要省这批内存，方向是 `SmartStream.CreateTemp()` 用 `bufferSize: 0`，而不是继续压阈值。
 
 ## ⚠️ .git 处于易失状态（操作前必须先备份）
-- 本仓库 `.git/objects` 的 **loose 对象会消失**（曾被外部清理到 `loose_objects=0`），历史只在 3 个 pack 里（约 463MB / 4352 commit）。曾导致 `.git/refs/` 丢失 → 所有 git 命令报 `fatal: not a git repository`。
-- **6 个 `optimize/*` 分支早已指向不存在的对象**（`invalid sha1 pointer`），`git fsck` 会有 244 条 reflog 错误——均为既存问题，**不要试图“修复”**。在用的 `alpha` / `master` 健康。
-- 做任何 git 操作前，**先把改动文件复制到仓库外**；**不要用 `git stash`**（它要扫描全部对象，一遇缺失就整体失败且会留下半残状态）。
-- 若再遇 `not a git repository`：`.git/refs/` 很可能被删。修复=从 `.git/logs/refs/**` reflog **最后一行第 2 个字段**取 SHA 重建 refs（注意 reflog 相对路径已含 `refs/`，别拼成 `refs/refs/`）；顶端对象若丢失，`git update-ref` 指回可读的父提交，再 `git read-tree <有效commit>` 重建索引（`reset --mixed` 会因索引引用缺失对象而失败）。
+- 本仓库 `.git/objects` 的 **loose 对象会消失**（曾被外部清理到 `loose_objects=0`），历史只在 3 个 pack 里（约 463MB / 4352 commit）。曾导致 `.git/refs/` 丢失 → `fatal: not a git repository`。
+- **6 个 `optimize/*` 分支早已指向不存在的对象**（`invalid sha1 pointer`），`git fsck` 会有 244 条 reflog 错误——既存问题，**不要试图"修复"**。在用的 `alpha` / `master` 健康。
+- 做任何 git 操作前，**先把改动文件复制到仓库外**；**不要用 `git stash`**（要扫描全部对象，一遇缺失就整体失败）。
+- 若遇 `not a git repository`：从 `.git/logs/refs/**` reflog **最后一行第 2 个字段**取 SHA 重建 refs（reflog 相对路径已含 `refs/`）；顶端对象若丢失，`git update-ref` 指回可读父提交，再 `git read-tree <有效commit>` 重建索引（`reset --mixed` 会因索引引用缺失对象而失败）。

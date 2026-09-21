@@ -148,6 +148,17 @@ public sealed record class ImportSettings
 	/// </summary>
 	public string? FileScanCachePath { get; set; }
 
+	/// <summary>
+	/// 导入完成后自动执行的导出方式。默认关闭，保持"导入后手动点击导出"的原有行为。
+	/// </summary>
+	/// <remarks>
+	/// 放在 ImportSettings 而非 ExportSettings 是刻意的：本项描述的是导入流程何时结束，
+	/// 属于导入阶段的行为；且设置页只在未加载资源时可编辑，导出页则在加载后才可用。
+	/// 导出位置优先取上次记住的导出目录，否则取导入目录的同级目录，
+	/// 并强制追加时间戳子文件夹，避免自动导出覆盖用户既有文件。
+	/// </remarks>
+	public AutoExportKind AutoExportKind { get; set; } = AutoExportKind.None;
+
 	public void Log()
 	{
 		Logger.Info(LogCategory.General, $"{nameof(ScriptContentLevel)}: {ScriptContentLevel}");
@@ -168,6 +179,7 @@ public sealed record class ImportSettings
 		Logger.Info(LogCategory.General, $"{nameof(ImportAssetTypes)}: {(ImportAssetTypes.Count == 0 ? "(all)" : string.Join(", ", ImportAssetTypes.OrderBy(t => t)))}");
 		Logger.Info(LogCategory.General, $"{nameof(EnableFileScanCache)}: {EnableFileScanCache}");
 		Logger.Info(LogCategory.General, $"{nameof(FileScanCachePath)}: {FileScanCachePath}");
+		Logger.Info(LogCategory.General, $"{nameof(AutoExportKind)}: {AutoExportKind}");
 	}
 
 	/// <summary>

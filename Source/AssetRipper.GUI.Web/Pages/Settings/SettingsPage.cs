@@ -141,6 +141,15 @@ public sealed partial class SettingsPage : DefaultPage
 							}
 						}
 
+						// 导入后自动导出：选择导出方式后，导入一结束就按该方式导出，无需再手动点击导出
+						using (new Div(writer).WithClass("row").End())
+						{
+							using (new Div(writer).WithClass("col").End())
+							{
+								WriteDropDownForAutoExportKind(writer);
+							}
+						}
+
 						using (new Div(writer).WithClass("row").End())
 						{
 							using (new Div(writer).WithClass("col").End())

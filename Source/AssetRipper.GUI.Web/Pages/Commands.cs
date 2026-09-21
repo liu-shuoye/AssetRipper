@@ -57,6 +57,9 @@ public static class Commands
 			if (paths is { Length: > 0 })
 			{
 				GameFileLoader.LoadAndProcess(paths);
+				// 这里刻意传 null 表示"没有可用的导入目录"：单文件导入无法唯一确定工作目录，
+				// 位置只能依赖上次记住的导出目录，没有就放弃自动导出
+				await GameFileLoader.ExportAfterLoadAuto(GameFileLoader.Settings.ImportSettings.AutoExportKind, null);
 			}
 			return null;
 		}
@@ -85,6 +88,8 @@ public static class Commands
 			if (paths is { Length: > 0 })
 			{
 				GameFileLoader.LoadAndProcess(paths);
+				GameFileLoader.RememberImportPath(paths);
+				await GameFileLoader.ExportAfterLoadAuto(GameFileLoader.Settings.ImportSettings.AutoExportKind, GameFileLoader.LastExport.ImportPath);
 			}
 			return null;
 		}
@@ -190,16 +195,13 @@ public static class Commands
 		}
 	}
 
+	/// <summary>
+	/// 按用户的"创建子文件夹"选项拼出最终导出目录。自动导出复用同一方法，
+	/// 以保证自动与手动导出生成的目录名规则一致。
+	/// </summary>
 	private static string MaybeAppendTimestampedSubfolder(string path, bool append)
 	{
-		if (append)
-		{
-			string timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
-			string subfolder = $"AssetRipper_export_{timestamp}";
-			return Path.Combine(path, subfolder);
-		}
-
-		return path;
+		return GameFileLoader.AppendTimestampedSubfolder(path, append);
 	}
 
 	public readonly struct Reset : ICommand

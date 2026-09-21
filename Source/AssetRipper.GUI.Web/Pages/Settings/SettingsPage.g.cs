@@ -42,6 +42,9 @@ partial class SettingsPage
 			case nameof(ImportSettings.FileScanCachePath):
 				Configuration.ImportSettings.FileScanCachePath = value;
 				break;
+			case nameof(ImportSettings.AutoExportKind):
+				Configuration.ImportSettings.AutoExportKind = TryParseEnum<AutoExportKind>(value);
+				break;
 			case nameof(ProcessingSettings.BundledAssetsExportMode):
 				Configuration.ProcessingSettings.BundledAssetsExportMode = TryParseEnum<BundledAssetsExportMode>(value);
 				break;
@@ -156,6 +159,11 @@ partial class SettingsPage
 	private static void WriteDropDownForMemoryBreakdownMode(TextWriter writer)
 	{
 		WriteDropDown(writer, MemoryBreakdownModeDropDownSetting.Instance, Configuration.ImportSettings.MemoryBreakdownMode, nameof(ImportSettings.MemoryBreakdownMode));
+	}
+
+	private static void WriteDropDownForAutoExportKind(TextWriter writer)
+	{
+		WriteDropDown(writer, AutoExportKindDropDownSetting.Instance, Configuration.ImportSettings.AutoExportKind, nameof(ImportSettings.AutoExportKind));
 	}
 
 	private static void WriteCheckBoxForEnableImportAssetTypeFilter(TextWriter writer, string label, bool disabled = false)
