@@ -297,8 +297,8 @@ public static class MemoryDiagnostics
 		LogRankingBySize(Prefix, stage, snapshot.Types, snapshot.TotalSize);
 		Logger.Info(LogCategory.Processing, "======================================================== 数量 ==================================================================");
 		LogRankingByCount(Prefix, stage, snapshot.Types, snapshot.TotalCount);
-		Logger.Info(LogCategory.Processing, "======================================================== 平均占用 ==================================================================");
-		LogRankingByAverage(Prefix, stage, snapshot.Types, "堆占用");
+		// Logger.Info(LogCategory.Processing, "======================================================== 平均占用 ==================================================================");
+		// LogRankingByAverage(Prefix, stage, snapshot.Types, "堆占用");
 		Logger.Info(LogCategory.Processing, "======================================================== Unity类型 ==================================================================");
 		LogUnityTypeView(Prefix, stage, snapshot.Types);
 		Logger.Info(LogCategory.Processing, "======================================================== 命名空间分组 ==================================================================");

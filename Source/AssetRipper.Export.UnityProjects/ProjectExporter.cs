@@ -564,7 +564,7 @@ public sealed partial class ProjectExporter
 		IUnityObjectBase? currentAsset = current.Assets.FirstOrDefault();
 		double currentScore = NameMatchScore(currentAsset);
 		// 两个得分均由同一确定性算法算出，可直接比较相等性。
-		Logger.Warning(LogCategory.ExportProgress, $"比较 {candidateAsset?.OriginalPath}/{candidateAsset?.GetBestName()} 得分 {candidateScore} , {currentAsset?.OriginalPath}/{currentAsset?.GetBestName()} 得分 {currentScore}");
+		// Logger.Warning(LogCategory.ExportProgress, $"比较 {candidateAsset?.OriginalPath}/{candidateAsset?.GetBestName()} 得分 {candidateScore} , {currentAsset?.OriginalPath}/{currentAsset?.GetBestName()} 得分 {currentScore}");
 		if (candidateScore != currentScore)
 		{
 			return candidateScore > currentScore;
