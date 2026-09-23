@@ -203,11 +203,11 @@ public static class StrippedAssetData
 	private static void CopyAnimationCurve(IAnimationCurve_Single source, IAnimationCurve_Single target)
 	{
 		target.Curve.Clear();
-		// 源与目标为同一运行类型，Curve 的元素类型一致，直接复用实例（导出期只读，Dispose 清空后无残留引用）。
-		// var 推断的 Keyframe 类型与 target.Curve 的元素类型一致，无需 dynamic，兼容 AOT/修剪
-		foreach (var keyframe in source.Curve)
+		// Keyframe 是可变元素，AssetList 禁止 Add 直接共享实例（防别名写穿），
+		// 必须 AddNew 建新元素再逐个拷贝字段值
+		for (int i = 0; i < source.Curve.Count; i++)
 		{
-			target.Curve.Add(keyframe);
+			target.Curve.AddNew().CopyValues(source.Curve[i]);
 		}
 	}
 
