@@ -532,11 +532,13 @@ CoreConfiguration（导入设置 + 导出路径 + 版本）
 2. **导出期回读**：`TextureAssetExporter`/`LightmapTextureAssetExporter`/主内容模式 `TextureExporter` 在占位模式下
    先取得恢复句柄——流式纹理由 `GetImageData()` 懒读 `.resS` 得到真实数据，完全内嵌者经 `MaterializeAssetOnly`
    重建补回，随后走与普通模式相同的解码导出；句柄释放后内嵌数据再次清空。回读失败
-   （如 `.resS` 缺失）或**格式无法解码**（如 `ASTC_HDR` 系列——库内 ASTC 解码器仅支持 LDR 块）
-   才由 `TextureConverter.TryCreatePlaceholderBitmap` 生成纯白同尺寸占位图；
-   不可解码格式由 `TextureConverter.IsSupportedFormat` 前置判定，每格式只提示一次（Info 级）
-   后直接降级，避免解码层打出误导性的 Error 日志。该判定表必须与
-   `TextureConverter.DecodeTexture` 的 TextureFormat 分支保持同步（改格式支持时两处都要改）。
+   （如 `.resS` 缺失）或**格式无法解码**才由 `TextureConverter.TryCreatePlaceholderBitmap` 生成纯白同尺寸占位图；
+   不可解码格式由 `TextureConverter.IsSupportedFormat` 前置判定，每格式只提示一次（Info 级）后直接降级，
+   避免解码层打出误导性的 Error 日志。
+   **ASTC 解码器已内嵌进本仓库**（`Source/AssetRipper.Export.Modules.Textures/Astc/`，源自 AssetRipper.TextureDecoder
+   v2.6.3，补全 HDR 端点解码）：`ASTC_HDR_4x4~12x12` 与 LDR 一样可解码为真实图像，
+   HDR 高光按 8 位输出截断。`IsSupportedFormat` 判定表与 `TextureConverter.DecodeTexture` 的
+   TextureFormat 分支同步（增删解码支持时两处都要改）。
 
 **Mesh（`StripMeshData`）**：
 1. **加载期剥离**：对每个 `IMesh` 清空 `VertexData.Data`（内嵌顶点，加载期内存大头）与 `IndexBuffer`（索引缓冲），

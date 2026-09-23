@@ -1,4 +1,5 @@
 using AssetRipper.Export.UnityProjects.Textures;
+using AssetRipper.Export.Modules.Textures.Astc;
 using AssetRipper.Logging;
 using AssetRipper.SourceGenerated.Classes.ClassID_117;
 using AssetRipper.SourceGenerated.Classes.ClassID_187;
@@ -8,7 +9,6 @@ using AssetRipper.SourceGenerated.Classes.ClassID_28;
 using AssetRipper.SourceGenerated.Classes.ClassID_89;
 using AssetRipper.SourceGenerated.Enums;
 using AssetRipper.SourceGenerated.Extensions;
-using AssetRipper.TextureDecoder.Astc;
 using AssetRipper.TextureDecoder.Atc;
 using AssetRipper.TextureDecoder.Bc;
 using AssetRipper.TextureDecoder.Dxt;
@@ -182,19 +182,19 @@ public static class TextureConverter
 
 	/// <summary>
 	/// 判断 TextureFormat 是否可被解码为位图。
-	/// 占位模式导出用它提前判定"能否回读真实数据"：不可解码的格式（如 ASTC_HDR 系列）直接走占位图，
+	/// 占位模式导出用它提前判定"能否回读真实数据"：不可解码的格式直接走占位图，
 	/// 避免在解码层打出误导性的 Error 日志。该表必须与 <see cref="DecodeTexture{TColor,TChannelValue}"/>
-	/// 的 TextureFormat 分支保持同步——当前库内 ASTC 解码器只支持 LDR 块，HDR 块按 LDR 解析会得到错误颜色。
+	/// 的 TextureFormat 分支保持同步（ASTC LDR/HDR 均由内嵌解码器处理）。
 	/// </summary>
 	public static bool IsSupportedFormat(TextureFormat format) => format switch
 	{
-		//ASTC（仅 LDR；ASTC_HDR 系列不支持）
-		TextureFormat.ASTC_RGB_4x4 or TextureFormat.ASTC_RGBA_4x4
-			or TextureFormat.ASTC_RGB_5x5 or TextureFormat.ASTC_RGBA_5x5
-			or TextureFormat.ASTC_RGB_6x6 or TextureFormat.ASTC_RGBA_6x6
-			or TextureFormat.ASTC_RGB_8x8 or TextureFormat.ASTC_RGBA_8x8
-			or TextureFormat.ASTC_RGB_10x10 or TextureFormat.ASTC_RGBA_10x10
-			or TextureFormat.ASTC_RGB_12x12 or TextureFormat.ASTC_RGBA_12x12
+		//ASTC（LDR + HDR）
+		TextureFormat.ASTC_RGB_4x4 or TextureFormat.ASTC_RGBA_4x4 or TextureFormat.ASTC_HDR_4x4
+			or TextureFormat.ASTC_RGB_5x5 or TextureFormat.ASTC_RGBA_5x5 or TextureFormat.ASTC_HDR_5x5
+			or TextureFormat.ASTC_RGB_6x6 or TextureFormat.ASTC_RGBA_6x6 or TextureFormat.ASTC_HDR_6x6
+			or TextureFormat.ASTC_RGB_8x8 or TextureFormat.ASTC_RGBA_8x8 or TextureFormat.ASTC_HDR_8x8
+			or TextureFormat.ASTC_RGB_10x10 or TextureFormat.ASTC_RGBA_10x10 or TextureFormat.ASTC_HDR_10x10
+			or TextureFormat.ASTC_RGB_12x12 or TextureFormat.ASTC_RGBA_12x12 or TextureFormat.ASTC_HDR_12x12
 			//ATC
 			or TextureFormat.ATC_RGB4 or TextureFormat.ATC_RGBA8
 			//BC
@@ -387,13 +387,13 @@ public static class TextureConverter
 		return options.UsesTextureFormat
 			? options.TextureFormat switch
 			{
-				//ASTC
-				TextureFormat.ASTC_RGB_4x4 or TextureFormat.ASTC_RGBA_4x4 => AstcDecoder.DecodeASTC<TColor, TChannelValue>(inputSpan, width, height, 4, 4, outputSpan),
-				TextureFormat.ASTC_RGB_5x5 or TextureFormat.ASTC_RGBA_5x5 => AstcDecoder.DecodeASTC<TColor, TChannelValue>(inputSpan, width, height, 5, 5, outputSpan),
-				TextureFormat.ASTC_RGB_6x6 or TextureFormat.ASTC_RGBA_6x6 => AstcDecoder.DecodeASTC<TColor, TChannelValue>(inputSpan, width, height, 6, 6, outputSpan),
-				TextureFormat.ASTC_RGB_8x8 or TextureFormat.ASTC_RGBA_8x8 => AstcDecoder.DecodeASTC<TColor, TChannelValue>(inputSpan, width, height, 8, 8, outputSpan),
-				TextureFormat.ASTC_RGB_10x10 or TextureFormat.ASTC_RGBA_10x10 => AstcDecoder.DecodeASTC<TColor, TChannelValue>(inputSpan, width, height, 10, 10, outputSpan),
-				TextureFormat.ASTC_RGB_12x12 or TextureFormat.ASTC_RGBA_12x12 => AstcDecoder.DecodeASTC<TColor, TChannelValue>(inputSpan, width, height, 12, 12, outputSpan),
+				//ASTC（内嵌解码器同时支持 LDR 与 HDR 块；HDR 端点按 ASTC 规范 16 位浮点重建）
+				TextureFormat.ASTC_RGB_4x4 or TextureFormat.ASTC_RGBA_4x4 or TextureFormat.ASTC_HDR_4x4 => AstcDecoder.DecodeASTC<TColor, TChannelValue>(inputSpan, width, height, 4, 4, outputSpan),
+				TextureFormat.ASTC_RGB_5x5 or TextureFormat.ASTC_RGBA_5x5 or TextureFormat.ASTC_HDR_5x5 => AstcDecoder.DecodeASTC<TColor, TChannelValue>(inputSpan, width, height, 5, 5, outputSpan),
+				TextureFormat.ASTC_RGB_6x6 or TextureFormat.ASTC_RGBA_6x6 or TextureFormat.ASTC_HDR_6x6 => AstcDecoder.DecodeASTC<TColor, TChannelValue>(inputSpan, width, height, 6, 6, outputSpan),
+				TextureFormat.ASTC_RGB_8x8 or TextureFormat.ASTC_RGBA_8x8 or TextureFormat.ASTC_HDR_8x8 => AstcDecoder.DecodeASTC<TColor, TChannelValue>(inputSpan, width, height, 8, 8, outputSpan),
+				TextureFormat.ASTC_RGB_10x10 or TextureFormat.ASTC_RGBA_10x10 or TextureFormat.ASTC_HDR_10x10 => AstcDecoder.DecodeASTC<TColor, TChannelValue>(inputSpan, width, height, 10, 10, outputSpan),
+				TextureFormat.ASTC_RGB_12x12 or TextureFormat.ASTC_RGBA_12x12 or TextureFormat.ASTC_HDR_12x12 => AstcDecoder.DecodeASTC<TColor, TChannelValue>(inputSpan, width, height, 12, 12, outputSpan),
 
 				//ATC
 				TextureFormat.ATC_RGB4 => AtcDecoder.DecompressAtcRgb4<TColor, TChannelValue>(inputSpan, width, height, outputSpan),
