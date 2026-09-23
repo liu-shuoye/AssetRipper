@@ -49,12 +49,19 @@ public class TextureAssetExporter : BinaryAssetExporter
 		{
 			// 导出时回读真实数据：句柄在进入 using 块时补回被剥离的内嵌像素数据，
 			// 离开时立即再次清除（用完即弃）；流式纹理由 GetImageData 懒读 .resS。
-			// 回读失败（如 .resS 缺失、资产不可重建）才降级为白色占位图。
+			// 解码层不支持的格式（如 ASTC_HDR）提前判定、每格式提示一次后直接降级占位图，
+			// 避免在解码层打出误导性的 Error 日志。
 			using AssetDataRestoreHandle restore = StrippedAssetData.TryAcquire(texture);
-			if (ExportReal(texture, path, fileSystem))
+			if (TextureConverter.IsSupportedFormat(texture.Format_C28E))
 			{
-				return true;
+				if (ExportReal(texture, path, fileSystem))
+				{
+					return true;
+				}
+				// 格式支持但数据不可用/无法解码：同样降级占位图保证引用完整
+				return ExportPlaceholder(texture, path, fileSystem);
 			}
+			TextureConverter.LogUnsupportedFormatOnce(texture.Format_C28E);
 			return ExportPlaceholder(texture, path, fileSystem);
 		}
 		return ExportReal(texture, path, fileSystem);

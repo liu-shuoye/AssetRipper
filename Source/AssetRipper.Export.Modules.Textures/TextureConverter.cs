@@ -181,6 +181,66 @@ public static class TextureConverter
 	}
 
 	/// <summary>
+	/// 判断 TextureFormat 是否可被解码为位图。
+	/// 占位模式导出用它提前判定"能否回读真实数据"：不可解码的格式（如 ASTC_HDR 系列）直接走占位图，
+	/// 避免在解码层打出误导性的 Error 日志。该表必须与 <see cref="DecodeTexture{TColor,TChannelValue}"/>
+	/// 的 TextureFormat 分支保持同步——当前库内 ASTC 解码器只支持 LDR 块，HDR 块按 LDR 解析会得到错误颜色。
+	/// </summary>
+	public static bool IsSupportedFormat(TextureFormat format) => format switch
+	{
+		//ASTC（仅 LDR；ASTC_HDR 系列不支持）
+		TextureFormat.ASTC_RGB_4x4 or TextureFormat.ASTC_RGBA_4x4
+			or TextureFormat.ASTC_RGB_5x5 or TextureFormat.ASTC_RGBA_5x5
+			or TextureFormat.ASTC_RGB_6x6 or TextureFormat.ASTC_RGBA_6x6
+			or TextureFormat.ASTC_RGB_8x8 or TextureFormat.ASTC_RGBA_8x8
+			or TextureFormat.ASTC_RGB_10x10 or TextureFormat.ASTC_RGBA_10x10
+			or TextureFormat.ASTC_RGB_12x12 or TextureFormat.ASTC_RGBA_12x12
+			//ATC
+			or TextureFormat.ATC_RGB4 or TextureFormat.ATC_RGBA8
+			//BC
+			or TextureFormat.BC4 or TextureFormat.BC5 or TextureFormat.BC6H or TextureFormat.BC7
+			//DXT
+			or TextureFormat.DXT1 or TextureFormat.DXT1Crunched
+			or TextureFormat.DXT3
+			or TextureFormat.DXT5 or TextureFormat.DXT5Crunched
+			//ETC / EAC
+			or TextureFormat.ETC_RGB4 or TextureFormat.ETC_RGB4_3DS or TextureFormat.ETC_RGB4Crunched
+			or TextureFormat.EAC_R or TextureFormat.EAC_R_SIGNED
+			or TextureFormat.EAC_RG or TextureFormat.EAC_RG_SIGNED
+			or TextureFormat.ETC2_RGB or TextureFormat.ETC2_RGBA1
+			or TextureFormat.ETC2_RGBA8 or TextureFormat.ETC_RGBA8_3DS or TextureFormat.ETC2_RGBA8Crunched
+			//PVRTC
+			or TextureFormat.PVRTC_RGB2 or TextureFormat.PVRTC_RGBA2
+			or TextureFormat.PVRTC_RGB4 or TextureFormat.PVRTC_RGBA4
+			//YUY2
+			or TextureFormat.YUY2
+			//RGB
+			or TextureFormat.Alpha8 or TextureFormat.ARGB4444 or TextureFormat.RGBA4444 or TextureFormat.RGB565 or TextureFormat.R8
+			or TextureFormat.RG16 or TextureFormat.RGB24 or TextureFormat.RGBA32 or TextureFormat.ARGB32 or TextureFormat.ARGBFloat
+			or TextureFormat.BGR24 or TextureFormat.BGRA32_14 or TextureFormat.BGRA32_37
+			or TextureFormat.R16 or TextureFormat.RG32 or TextureFormat.RGB48 or TextureFormat.RGBA64
+			or TextureFormat.RHalf or TextureFormat.RGHalf or TextureFormat.RGBAHalf
+			or TextureFormat.RFloat or TextureFormat.RGFloat or TextureFormat.RGBAFloat or TextureFormat.RGB9e5Float
+			or TextureFormat.R8_SIGNED or TextureFormat.RG16_SIGNED or TextureFormat.RGB24_SIGNED or TextureFormat.RGBA32_SIGNED
+			or TextureFormat.R16_SIGNED or TextureFormat.RG32_SIGNED or TextureFormat.RGB48_SIGNED or TextureFormat.RGBA64_SIGNED => true,
+		_ => false,
+	};
+
+	/// <summary>
+	/// 每个格式只提示一次：占位模式下该格式的纹理无法解码为位图，将以白色占位图导出。
+	/// 避免上万条 Error 刷屏，同时保留"哪些格式没导出真实数据"的可发现性（Info 级）。
+	/// </summary>
+	public static void LogUnsupportedFormatOnce(TextureFormat format)
+	{
+		if (_reportedUnsupportedFormats.Add(format))
+		{
+			Logger.Log(LogType.Info, LogCategory.Export, $"纹理格式 {format} 无法解码为位图，相关纹理将导出为白色占位图。");
+		}
+	}
+
+	private static readonly System.Collections.Generic.HashSet<TextureFormat> _reportedUnsupportedFormats = [];
+
+	/// <summary>
 	/// 生成与原纹理同宽高的纯白不透明位图，用作占位图。
 	/// 占位模式下 Texture2D 的图像数据已在加载阶段剥离，无法正常解码，
 	/// 导出时以此占位图保持文件名与引用不丢失；纯色图经 PNG 压缩后仅几 KB。

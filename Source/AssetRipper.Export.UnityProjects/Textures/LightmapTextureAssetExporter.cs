@@ -42,12 +42,18 @@ public class LightmapTextureAssetExporter : BinaryAssetExporter
 		ITexture2D texture = (ITexture2D)asset;
 		if (PlaceholderMode)
 		{
-			// 导出时回读真实数据（流式懒读 / 内嵌重建补回），用完即弃；失败才降级白色占位图
+			// 导出时回读真实数据（流式懒读 / 内嵌重建补回），用完即弃；
+			// 解码层不支持的格式每格式提示一次后直接降级占位图，避免误导性的 Error 日志
 			using AssetDataRestoreHandle restore = StrippedAssetData.TryAcquire(texture);
-			if (ExportReal(texture, path, fileSystem))
+			if (TextureConverter.IsSupportedFormat(texture.Format_C28E))
 			{
-				return true;
+				if (ExportReal(texture, path, fileSystem))
+				{
+					return true;
+				}
+				return ExportPlaceholder(texture, path, fileSystem);
 			}
+			TextureConverter.LogUnsupportedFormatOnce(texture.Format_C28E);
 			return ExportPlaceholder(texture, path, fileSystem);
 		}
 		return ExportReal(texture, path, fileSystem);
