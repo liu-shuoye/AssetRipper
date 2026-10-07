@@ -5,12 +5,14 @@ using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects;
 using AssetRipper.Export.UnityProjects.Project;
 using AssetRipper.Export.UnityProjects.Shaders;
+using AssetRipper.Export.UnityProjects.Textures;
 using AssetRipper.Import.Structure.Assembly.Managers;
 using AssetRipper.IO.Files;
 using AssetRipper.Primitives;
 using AssetRipper.Processing.Configuration;
 using AssetRipper.Processing.Prefabs;
 using AssetRipper.SourceGenerated.Classes.ClassID_114;
+using AssetRipper.SourceGenerated.Classes.ClassID_28;
 using AssetRipper.SourceGenerated.Classes.ClassID_48;
 using AssetRipper.SourceGenerated.Extensions;
 using System.Reflection;
@@ -20,11 +22,76 @@ namespace AssetRipper.Tests;
 internal class DeduplicationTests
 {
 	/// <summary>
-	/// SubTask 7.1: Two content-equal assets are deduplicated when the switch is enabled.
-	/// Only one exported file should remain.
+	/// 去重仅对 shader 与图片资源生效：内容相同的两个图片（Texture2D）集合只保留一个。
 	/// </summary>
 	[Test]
-	public void Deduplication_WhenEnabled_KeepsSingleCopyOfDuplicateAsset()
+	public void Deduplication_IdenticalImageCollections_KeepsSingleCopy()
+	{
+		ProcessedAssetCollection collection = AssetCreator.CreateCollection(UnityVersion.V_2022);
+
+		ITexture2D first = CreateTexture(collection, "DuplicateTexture");
+		ITexture2D second = CreateTexture(collection, "DuplicateTexture");
+
+		(_, HashSet<IExportCollection> skipped, Dictionary<IUnityObjectBase, IUnityObjectBase> redirect) =
+			RunApplyDeduplication(CreateTextureCollection(first), CreateTextureCollection(second));
+
+		Assert.Multiple(() =>
+		{
+			Assert.That(skipped, Has.Count.EqualTo(1), "内容相同的两个图片集合应只保留一个");
+			Assert.That(redirect, Has.Count.EqualTo(1), "被跳过的贴图必须重定向到保留的贴图");
+		});
+	}
+
+	/// <summary>
+	/// 主资源（贴图）内容相同但子资源不同 → 不得合并删除，两个集合都应保留：
+	/// 子资源会随被跳过集合一起消失。
+	/// </summary>
+	[Test]
+	public void Deduplication_SameTextureButDifferentSubAsset_DoesNotDeduplicate()
+	{
+		ProcessedAssetCollection collection = AssetCreator.CreateCollection(UnityVersion.V_2022);
+
+		IMonoBehaviour firstSub = collection.CreateMonoBehaviour();
+		firstSub.Name = "SubAsset";
+		IMonoBehaviour secondSub = collection.CreateMonoBehaviour();
+		secondSub.Name = "OtherSubAsset";
+
+		StubAssetsCollection<ITexture2D> first = CreateTextureCollection(CreateTexture(collection, "DuplicateTexture"));
+		first.AddSubAsset(firstSub);
+		StubAssetsCollection<ITexture2D> second = CreateTextureCollection(CreateTexture(collection, "DuplicateTexture"));
+		second.AddSubAsset(secondSub);
+
+		(_, HashSet<IExportCollection> skipped, _) = RunApplyDeduplication(first, second);
+
+		Assert.That(skipped, Is.Empty, "主资源相同但子资源不同的集合不得被去重");
+	}
+
+	/// <summary>
+	/// 非 shader/图片资源（如 MonoBehaviour）不参与去重：即使内容完全相同也各自导出。
+	/// </summary>
+	[Test]
+	public void Deduplication_NonShaderOrImageAssets_AreNotDeduplicated()
+	{
+		ProcessedAssetCollection collection = AssetCreator.CreateCollection(UnityVersion.V_2022);
+
+		IMonoBehaviour first = collection.CreateMonoBehaviour();
+		first.Name = "DuplicateAsset";
+		IMonoBehaviour second = collection.CreateMonoBehaviour();
+		second.Name = "DuplicateAsset";
+
+		ScriptableObjectExporter exporter = new();
+		(_, HashSet<IExportCollection> skipped, _) = RunApplyDeduplication(
+			new StubAssetsCollection<IMonoBehaviour>(exporter, first),
+			new StubAssetsCollection<IMonoBehaviour>(exporter, second));
+
+		Assert.That(skipped, Is.Empty, "去重只对 shader 与图片资源生效");
+	}
+
+	/// <summary>
+	/// 端到端：启用去重时，非 shader/图片资源（MonoBehaviour）的重复副本仍全部导出。
+	/// </summary>
+	[Test]
+	public void Deduplication_WhenEnabled_DoesNotDeduplicateNonShaderOrImageAssets()
 	{
 		GameBundle gameBundle = new();
 		ProcessedAssetCollection collection = gameBundle.AddNewProcessedCollection("TestCollection", UnityVersion.V_2022);
@@ -44,7 +111,7 @@ internal class DeduplicationTests
 		Assert.Multiple(() =>
 		{
 			Assert.That(fileSystem.File.Exists($"{assetDir}/DuplicateAsset.asset"), Is.True);
-			Assert.That(assetFiles, Has.Length.EqualTo(1));
+			Assert.That(assetFiles, Has.Length.EqualTo(2), "非 shader/图片资源的重复副本不应被去重");
 		});
 	}
 
@@ -143,42 +210,20 @@ internal class DeduplicationTests
 		SceneExportCollection sceneCollection1 = new(sceneExporter, hierarchy1);
 		SceneExportCollection sceneCollection2 = new(sceneExporter, hierarchy2);
 
-		// Also include a pair of duplicate non-scene collections to ensure the deduplication logic runs.
-		IMonoBehaviour mono1 = collection.CreateMonoBehaviour();
-		mono1.Name = "DuplicateMono";
-		IMonoBehaviour mono2 = collection.CreateMonoBehaviour();
-		mono2.Name = "DuplicateMono";
-		ScriptableObjectExporter soExporter = new();
-		Assert.That(soExporter.TryCreateCollection(mono1, out IExportCollection? monoCollection1), Is.True);
-		Assert.That(soExporter.TryCreateCollection(mono2, out IExportCollection? monoCollection2), Is.True);
+		// 同时放一对内容相同的图片集合，保证去重逻辑确实运行过（否则"场景未被跳过"可能只是没跑）。
+		StubAssetsCollection<ITexture2D> textureCollection1 =
+			CreateTextureCollection(CreateTexture(collection, "DuplicateTexture"));
+		StubAssetsCollection<ITexture2D> textureCollection2 =
+			CreateTextureCollection(CreateTexture(collection, "DuplicateTexture"));
 
-		List<IExportCollection> collections = new()
-		{
-			sceneCollection1,
-			sceneCollection2,
-			monoCollection1!,
-			monoCollection2!,
-		};
-
-		FullConfiguration settings = new();
-		settings.SetProjectSettings(version);
-		BaseManager assemblyManager = new(_ => { });
-		ProjectExporter projectExporter = new(settings, assemblyManager);
-
-		MethodInfo? method = typeof(ProjectExporter).GetMethod(
-			"ApplyDeduplication",
-			BindingFlags.NonPublic | BindingFlags.Instance);
-		Assert.That(method, Is.Not.Null);
-
-		object[] parameters = { collections, null!, null! };
-		method!.Invoke(projectExporter, parameters);
-		HashSet<IExportCollection> skippedCollections = (HashSet<IExportCollection>)parameters[1]!;
+		(_, HashSet<IExportCollection> skippedCollections, _) =
+			RunApplyDeduplication(sceneCollection1, sceneCollection2, textureCollection1, textureCollection2);
 
 		Assert.Multiple(() =>
 		{
-			// The duplicate MonoBehaviour collection should be skipped.
+			// 内容相同的图片集合应被跳过其中一个。
 			Assert.That(skippedCollections, Has.Count.EqualTo(1));
-			Assert.That(skippedCollections, Contains.Item(monoCollection2!));
+			Assert.That(skippedCollections.Contains(textureCollection1) || skippedCollections.Contains(textureCollection2), Is.True);
 			// Neither scene collection should be skipped.
 			Assert.That(skippedCollections, Does.Not.Contain(sceneCollection1));
 			Assert.That(skippedCollections, Does.Not.Contain(sceneCollection2));
@@ -188,29 +233,27 @@ internal class DeduplicationTests
 	/// <summary>
 	/// T1：两个"主资源与子资源内容完全相同"的多子资源集合 → 仅保留一个，且被跳过集合的
 	/// 主资源与子资源都被一对一重定向到保留集合的对应资源。
-	/// 用轻量化并可哈希的 MonoBehaviour 充当"主资源+子资源"，因为去重逻辑与资源类型无关，
-	/// 不依赖贴图/精灵的构造管线。这验证了修复：对被去重集合的子资源引用不再丢失。
+	/// 去重只对 shader 与图片资源生效，因此主资源用 Texture2D 走图片分支，
+	/// 子资源用轻量的 MonoBehaviour（无需贴图/精灵的构造管线）。这验证了：
+	/// 对被去重集合的子资源引用不再丢失。
 	/// </summary>
 	[Test]
-	public void Deduplication_FullyIdenticalMultiAssetCollections_RedirectsAllAssets()
+	public void Deduplication_FullyIdenticalImageCollections_RedirectsAllAssets()
 	{
 		GameBundle gameBundle = new();
 		ProcessedAssetCollection collection = gameBundle.AddNewProcessedCollection("DupFullTest", UnityVersion.V_2022);
 
-		IMonoBehaviour keepPrimary = collection.CreateMonoBehaviour();
-		keepPrimary.Name = "Primary";
+		ITexture2D keepPrimary = CreateTexture(collection, "Primary");
 		IMonoBehaviour keepSub = collection.CreateMonoBehaviour();
 		keepSub.Name = "Sub";
 
-		IMonoBehaviour skipPrimary = collection.CreateMonoBehaviour();
-		skipPrimary.Name = "Primary";
+		ITexture2D skipPrimary = CreateTexture(collection, "Primary");
 		IMonoBehaviour skipSub = collection.CreateMonoBehaviour();
 		skipSub.Name = "Sub";
 
-		ScriptableObjectExporter exporter = new();
-		StubAssetsCollection keep = new(exporter, keepPrimary);
+		StubAssetsCollection<ITexture2D> keep = CreateTextureCollection(keepPrimary);
 		keep.AddSubAsset(keepSub);
-		StubAssetsCollection skip = new(exporter, skipPrimary);
+		StubAssetsCollection<ITexture2D> skip = CreateTextureCollection(skipPrimary);
 		skip.AddSubAsset(skipSub);
 
 		(List<IExportCollection> collections,
@@ -253,37 +296,6 @@ internal class DeduplicationTests
 			Assert.That(skippedSubPointer, Is.EqualTo(keptSubPointer));
 			Assert.That(skippedPrimaryPointer, Is.EqualTo(keptPrimaryPointer));
 		});
-	}
-
-	/// <summary>
-	/// T2：两个集合主资源内容相同但子资源不同 → 不得合并删除，两个集合都应保留。
-	/// 这是为了避免"字节相同但子资源不同"的贴图被误判为重复而丢失不同子资源。
-	/// </summary>
-	[Test]
-	public void Deduplication_SamePrimaryButDifferentSubAsset_DoesNotDeduplicate()
-	{
-		GameBundle gameBundle = new();
-		ProcessedAssetCollection collection = gameBundle.AddNewProcessedCollection("DupDiffTest", UnityVersion.V_2022);
-
-		IMonoBehaviour keepPrimary = collection.CreateMonoBehaviour();
-		keepPrimary.Name = "Primary";
-		IMonoBehaviour keepSub = collection.CreateMonoBehaviour();
-		keepSub.Name = "Sub";
-
-		IMonoBehaviour skipPrimary = collection.CreateMonoBehaviour();
-		skipPrimary.Name = "Primary";
-		IMonoBehaviour skipSub = collection.CreateMonoBehaviour();
-		skipSub.Name = "DifferentSub";
-
-		ScriptableObjectExporter exporter = new();
-		StubAssetsCollection first = new(exporter, keepPrimary);
-		first.AddSubAsset(keepSub);
-		StubAssetsCollection second = new(exporter, skipPrimary);
-		second.AddSubAsset(skipSub);
-
-		(_, HashSet<IExportCollection> skipped, _) = RunApplyDeduplication(first, second);
-
-		Assert.That(skipped, Is.Empty, "主资源相同但子资源不同的集合不得被去重");
 	}
 
 	/// <summary>
@@ -375,12 +387,31 @@ internal class DeduplicationTests
 	}
 
 	/// <summary>
-	/// 测试用多子资源集合桩：继承真实导出集合，通过 AddAsset 挂一个额外的子资源。
-	/// 用于在无需纹理/精灵物理管线的前提下验证去重对"子资源"的处理。
+	/// 构造一个指定名称的 Texture2D 实例，代表参与去重的图片资源。
 	/// </summary>
-	private sealed class StubAssetsCollection : AssetsExportCollection<IMonoBehaviour>
+	private static ITexture2D CreateTexture(ProcessedAssetCollection collection, string name)
 	{
-		public StubAssetsCollection(ScriptableObjectExporter exporter, IMonoBehaviour primary)
+		ITexture2D texture = collection.CreateTexture2D();
+		texture.Name = name;
+		return texture;
+	}
+
+	/// <summary>
+	/// 以 Texture2D 为主资源构造图片集合桩。去重按主资源类型判定资格，桩集合即可走图片分支，
+	/// 无需构造贴图/精灵的完整导出管线。
+	/// </summary>
+	private static StubAssetsCollection<ITexture2D> CreateTextureCollection(ITexture2D texture)
+	{
+		return new StubAssetsCollection<ITexture2D>(new TextureAssetExporter(new FullConfiguration()), texture);
+	}
+
+	/// <summary>
+	/// 测试用多子资源集合桩：继承真实导出集合，通过 AddSubAsset 挂一个额外的子资源。
+	/// 用于在无需纹理/精灵构造管线的前提下验证去重对"子资源"的处理。
+	/// </summary>
+	private sealed class StubAssetsCollection<T> : AssetsExportCollection<T> where T : IUnityObjectBase
+	{
+		public StubAssetsCollection(IAssetExporter exporter, T primary)
 			: base(exporter, primary)
 		{
 		}

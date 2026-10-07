@@ -6,8 +6,8 @@ using AssetRipper.Import.Configuration;
 using AssetRipper.Logging;
 using AssetRipper.Processing.Configuration;
 using AssetRipper.SourceGenerated;
+using AssetRipper.SourceGenerated.Classes.ClassID_189;
 using AssetRipper.SourceGenerated.Classes.ClassID_48;
-using AssetRipper.SourceGenerated.Classes.ClassID_74;
 using System.Runtime;
 using System.Text;
 
@@ -246,6 +246,10 @@ public sealed partial class ProjectExporter
 	/// 的 (ClassID, 内容哈希) 多重集合都相同。这样不会因主资源内容相同但子资源不同而误删集合。
 	/// 被跳过集合的每个资源都会一对一重定向到 keeper 中指纹相同的对应资源，从而让场景/对象对任意
 	/// 被跳过资源的引用 (guid, fileID) 都指向 keeper 导出的真实资源，避免引用丢失。
+	///
+	/// 参与范围仅限 shader 与图片资源：内容哈希无法覆盖延迟转换或非序列化字段，
+	/// 其他资源类型（Prefab、网格、动画、MonoBehaviour、场景等）合并后极易造成真实差异丢失，
+	/// 因此一律不比较、不跳过。
 	/// </remarks>
 	private void ApplyDeduplication(List<IExportCollection> collections,
 		out HashSet<IExportCollection> skippedCollections, out Dictionary<IUnityObjectBase, IUnityObjectBase> redirectMap)
@@ -263,14 +267,9 @@ public sealed partial class ProjectExporter
 		int comparedCount = 0;
 		foreach (IExportCollection collection in collections)
 		{
+			// 场景集合的 Assets 是"场景内全部资源 + 层级对象"，首个元素可能是贴图之类的资源，
+			// 只按主资源类型判定会把整个场景误判为图片集合，必须在此显式排除。
 			if (collection is SceneExportCollection)
-			{
-				continue;
-			}
-
-			// 动画曲线的 EditorFormat 转换已延迟到导出阶段，此刻内容哈希不含曲线字段，
-			// 参与去重会把实际不同的动画误判为重复而合并，故整集合跳过（重复动画各自导出，正确性优先）
-			if (collection.Assets.Any(asset => asset is IAnimationClip))
 			{
 				continue;
 			}
@@ -280,8 +279,10 @@ public sealed partial class ProjectExporter
 				continue;
 			}
 
-			List<IUnityObjectBase> assets = collection.Assets.ToList();
-			if (assets.Count == 0)
+			// 先按主资源类型判定参与资格，再枚举集合内容：Prefab 等集合可能包含成千上万个
+			// 子资源，对不参与去重的集合做 ToList 纯属浪费。
+			IUnityObjectBase? primary = collection.Assets.FirstOrDefault();
+			if (primary is null)
 			{
 				continue;
 			}
@@ -289,9 +290,9 @@ public sealed partial class ProjectExporter
 			// Shader：以名称作为去重依据。同一条资源集中 shader 名称一般唯一，
 			// 而编译二进制/ParsedForm 内细微差异会导致序列化内容哈希不同，无法识别重复，
 			// 因此这里不走内容指纹，改为直接按 shader 名称分组。
-			if (assets[0] is IShader)
+			if (primary is IShader)
 			{
-				string? shaderKey = GetShaderKey(assets);
+				string? shaderKey = GetShaderKey(primary);
 				if (shaderKey is null)
 				{
 					// 取不到稳定名称（如空名），保守保留，不去重。
@@ -303,9 +304,18 @@ public sealed partial class ProjectExporter
 				continue;
 			}
 
+			// 内容指纹去重只对图片资源（Texture2D/Cubemap/纹理数组等）生效：其余资源
+			// （网格、动画、MonoBehaviour、字体等）的内容差异可能来自延迟转换或非序列化字段，
+			// 序列化内容相同并不代表导出结果相同，合并会直接丢失资源，故一律不参与比较。
+			if (primary is not IImageTexture)
+			{
+				continue;
+			}
+
+			List<IUnityObjectBase> assets = collection.Assets.ToList();
 			if (!TryComputeCollectionFingerprint(assets, hashCache, visiting, out List<(int, ulong)> fingerprint))
 			{
-				// 集合内存在无法哈希的资源（如未加载的 MonoBehaviour 脚本数据），保守保留，不去重。
+				// 集合内存在无法哈希的资源（如流式贴图数据不可读），保守保留，不去重。
 				continue;
 			}
 
@@ -376,7 +386,7 @@ public sealed partial class ProjectExporter
 
 		int keptCount = comparedCount - skippedCount;
 		Logger.Info(LogCategory.ExportProgress,
-			$"资产去重：比较了 {comparedCount} 个资产，保留了 {keptCount} 个，跳过了 {skippedCount} 个。");
+			$"资产去重（仅 shader 与图片）：比较了 {comparedCount} 个资产，保留了 {keptCount} 个，跳过了 {skippedCount} 个。");
 
 		if (skippedCount > 0)
 		{
@@ -398,14 +408,13 @@ public sealed partial class ProjectExporter
 	}
 
 	/// <summary>
-	/// 取 shader 服务集合的“去重键”，即 shader 名称。
+	/// 取 shader 集合的“去重键”，即 shader 名称。
 	/// </summary>
-	/// <param name="assets">shader 集合内的资源（首个为主 shader）。</param>
+	/// <param name="primary">集合的主资源，即 shader 本身。</param>
 	/// <returns>名称去除首尾空白后的非空字符串；取不到稳定名称时返回 null。</returns>
-	private static string? GetShaderKey(List<IUnityObjectBase> assets)
+	private static string? GetShaderKey(IUnityObjectBase primary)
 	{
-		IUnityObjectBase? primary = assets.FirstOrDefault();
-		string name = primary?.GetBestName() ?? string.Empty;
+		string name = primary.GetBestName() ?? string.Empty;
 		return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
 	}
 

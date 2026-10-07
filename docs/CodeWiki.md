@@ -616,7 +616,7 @@ dotnet test -c Debug
 1. **懒加载资产**：`SerializedAssetCollection` 只保存数据源引用，对象按需反序列化；`AssetCollection.AssetMetadata` 允许以 (PathID, ClassID) 轻量元数据驱动处理流程（如 `OriginalPathProcessor`、`EnumerateAssetsByClassID`），避免全量加载触发 OOM。
 2. **导出器栈**：`ObjectHandlerStack<IAssetExporter>` + `OverrideExporter` 使导出行为可覆盖、可扩展，是 Premium 版功能扩展的扩展点。
 3. **导出集合（IExportCollection）**：把"主资产 + 关联子资产"打包为一个可整体导出的单元，配合 `ProjectAssetContainer` 完成跨集合的 `(guid, fileID)` 引用解析。
-4. **资产去重**：`ContentHashWalker`（XxHash64）计算内容指纹，按 (ClassID, hash) 分组去重，并生成 `redirectMap` 保证引用不丢失；Shader 按名称去重。
+4. **资产去重**（仅对 shader 与图片资源生效）：`ContentHashWalker`（XxHash64）计算内容指纹，按 (ClassID, hash) 分组去重，并生成 `redirectMap` 保证引用不丢失；Shader 按名称去重，其余资源类型不参与比较。
 5. **确定性 GUID**：可选按资产稳定标识计算 GUID，保证跨批次导出结果可复现。
 6. **双 GC 重置**：`GameFileLoader.Reset` 在释放 Bundle 后执行两轮 `GC.Collect()`（第一轮触发终结器，第二轮回收终结器释放的对象），确保重新加载前内存被回收。
 7. **代码生成驱动**：`AssetRipper.SourceGenerated` 的全部资产类型类由 AssemblyDumper 工具链从 Unity 程序集自动生成，配合多个 SourceGenerator 在编译期注入扩展，保证对海量 Unity 版本/类型的覆盖率。
