@@ -100,17 +100,65 @@ public static class GameFileLoader
 	}
 
 	/// <summary>
-	/// 推断自动导出使用的基础目录：优先用上次设置的导出目录，未设置时取 <paramref name="importPath"/> 的父目录。
-	/// 写成同级目录（而非写入导入目录内部）是为了避免导出结果与源资源混在一起。
+	/// 导出页预填用的路径：优先设置页配置的导出路径，其次上次实际使用的导出路径。
+	/// </summary>
+	/// <remarks>
+	/// 两个页面必须读同一个值，否则用户在设置页填的路径会被"上次导出"记录盖掉，
+	/// 出现"设置里一个路径、导出页另一个路径"的困惑。
+	/// 这里刻意不做"导入目录同级"那一层回退：导出页没有导入目录可用，
+	/// 且把用户没选过的目录悄悄填进输入框只会误导。
+	/// </remarks>
+	public static string? PreferredExportPath
+		=> ResolveBasePathFromCandidates(Settings.ImportSettings.AutoExportPath, LastExport.ExportPath, null);
+
+	/// <summary>
+	/// 记录一次导出实际使用的基础目录，供设置页回显与下次预填。
+	/// </summary>
+	/// <param name="path">用户填写的基础导出目录（不含追加的时间戳子文件夹）。</param>
+	/// <param name="createSubfolder">用户是否勾选了"创建时间戳子文件夹"。</param>
+	/// <remarks>
+	/// 同时写设置项与 <see cref="LastExport"/> 是刻意的：前者让设置页与导出页立刻显示同一路径，
+	/// 后者始终落盘（不受"保存到磁盘"开关影响），保证重启后仍记得住。
+	/// </remarks>
+	public static void RememberExportPath(string path, bool createSubfolder)
+	{
+		LastExport.ExportPath = path;
+		LastExport.CreateSubfolder = createSubfolder;
+		LastExport.SaveToDefaultPath();
+
+		Settings.ImportSettings.AutoExportPath = path;
+		Settings.MaybeSaveToDefaultPath();
+	}
+
+	/// <summary>
+	/// 推断导出使用的基础目录，优先级：设置页配置的导出路径 → 上次实际使用的导出路径 → 导入目录的同级目录。
 	/// </summary>
 	/// <param name="importPath">本次导入的源目录，可为 null。</param>
-	/// <returns>可直接用于导出的基础目录；两者都不可用时返回 null，调用方应放弃自动导出。</returns>
+	/// <returns>可直接用于导出的基础目录；都无法确定时返回 null，调用方应放弃导出。</returns>
 	public static string? ResolveAutoExportBasePath(string? importPath)
+		=> ResolveBasePathFromCandidates(Settings.ImportSettings.AutoExportPath, LastExport.ExportPath, importPath);
+
+	/// <summary>
+	/// 导出基目录的判定规则本体，与全局状态解耦以便单测。
+	/// </summary>
+	/// <param name="configuredPath">设置页显式配置的导出路径，最高优先级。</param>
+	/// <param name="rememberedPath">上次实际使用的导出路径。</param>
+	/// <param name="importPath">本次导入的源目录，用作最后一层兜底。</param>
+	/// <remarks>
+	/// 兜底取导入目录的<em>同级</em>目录而非其内部，是为了避免导出结果与源资源混在一起；
+	/// 若传入路径带结尾分隔符而不先规范化，<see cref="Path.GetDirectoryName(string)"/>
+	/// 会返回它自身或空串，因此必须先 TrimEnd。
+	/// </remarks>
+	public static string? ResolveBasePathFromCandidates(string? configuredPath, string? rememberedPath, string? importPath)
 	{
-		string? remembered = LastExport.ExportPath;
-		if (!string.IsNullOrWhiteSpace(remembered))
+		if (!string.IsNullOrWhiteSpace(configuredPath))
 		{
-			return remembered;
+			return configuredPath;
+		}
+
+		if (!string.IsNullOrWhiteSpace(rememberedPath))
+		{
+			return rememberedPath;
 		}
 
 		if (string.IsNullOrWhiteSpace(importPath))
@@ -118,7 +166,6 @@ public static class GameFileLoader
 			return null;
 		}
 
-		// 规范化掉结尾分隔符，否则 GetDirectoryName 会返回它自身或空串
 		string normalized = importPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 		return Path.GetDirectoryName(normalized);
 	}

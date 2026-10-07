@@ -45,6 +45,9 @@ partial class SettingsPage
 			case nameof(ImportSettings.AutoExportKind):
 				Configuration.ImportSettings.AutoExportKind = TryParseEnum<AutoExportKind>(value);
 				break;
+			case nameof(ImportSettings.AutoExportPath):
+				Configuration.ImportSettings.AutoExportPath = value;
+				break;
 			case nameof(ProcessingSettings.BundledAssetsExportMode):
 				Configuration.ProcessingSettings.BundledAssetsExportMode = TryParseEnum<BundledAssetsExportMode>(value);
 				break;

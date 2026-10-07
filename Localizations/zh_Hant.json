@@ -33,6 +33,8 @@
     "auto_export_kind_title": "匯入後自動匯出",
     "auto_export_kind_unity_project": "匯出為 Unity 專案",
     "auto_export_kind_unity_project_description": "匯入一旦完成，立即自動匯出為 Unity 專案。",
+    "auto_export_path": "匯出路徑",
+    "auto_export_path_description": "匯出到哪裡。留空則沿用上次使用的匯出目錄；若也沒有，則使用匯入資料夾的同級目錄。自動匯出一律寫入帶時間戳的子資料夾。",
     "auto_export_started": "已開始自動匯出：正在匯出至 {0}",
     "bundled_assets_export_direct_export": "直接匯出",
     "bundled_assets_export_direct_export_description": "Bundled assets在不分組的情況下導出。",

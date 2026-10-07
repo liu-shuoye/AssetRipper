@@ -111,10 +111,11 @@ public sealed class CommandsPage : VuePage
 
 	protected override void WriteScriptReferences(TextWriter writer)
 	{
-		// 在 Vue 脚本之前注入上次导出的记忆：用源生成上下文编码，避免反射式序列化
+		// 在 Vue 脚本之前注入导出路径初值：用源生成上下文编码，避免反射式序列化
 		// （应用已禁用反射式 System.Text.Json，反射式 Serialize 会抛 InvalidOperationException）
+		// 取的是"设置页配置路径 → 上次实际使用"的统一结果，与设置页保持一致
 		writer.Write("<script>");
-		writer.Write($"window.__lastExportPath = {JsonSerializer.Serialize(GameFileLoader.LastExport.ExportPath, AppJsonSerializerContext.Default.String)};");
+		writer.Write($"window.__exportPath = {JsonSerializer.Serialize(GameFileLoader.PreferredExportPath, AppJsonSerializerContext.Default.String)};");
 		writer.Write($"window.__createSubfolder = {JsonSerializer.Serialize(GameFileLoader.LastExport.CreateSubfolder, AppJsonSerializerContext.Default.Boolean)};");
 		writer.Write("</script>");
 

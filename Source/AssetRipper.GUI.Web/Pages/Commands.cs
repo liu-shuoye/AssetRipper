@@ -152,10 +152,8 @@ public static class Commands
 				bool createSubfolder = TryGetCreateSubfolder(form);
 				string finalPath = MaybeAppendTimestampedSubfolder(path, createSubfolder);
 
-				// 记住本次导出：保存用户输入的基础路径与子文件夹选项，下次打开导出页自动预填
-				GameFileLoader.LastExport.ExportPath = path;
-				GameFileLoader.LastExport.CreateSubfolder = createSubfolder;
-				GameFileLoader.LastExport.SaveToDefaultPath();
+				// 记住本次导出：同时更新设置项与磁盘记忆，让设置页与导出页看到同一路径
+				GameFileLoader.RememberExportPath(path, createSubfolder);
 
 				await GameFileLoader.ExportUnityProject(finalPath);
 			}
@@ -184,10 +182,8 @@ public static class Commands
 				bool createSubfolder = TryGetCreateSubfolder(form);
 				string finalPath = MaybeAppendTimestampedSubfolder(path, createSubfolder);
 
-				// 记住本次导出：保存用户输入的基础路径与子文件夹选项，下次打开导出页自动预填
-				GameFileLoader.LastExport.ExportPath = path;
-				GameFileLoader.LastExport.CreateSubfolder = createSubfolder;
-				GameFileLoader.LastExport.SaveToDefaultPath();
+				// 记住本次导出：同时更新设置项与磁盘记忆，让设置页与导出页看到同一路径
+				GameFileLoader.RememberExportPath(path, createSubfolder);
 
 				await GameFileLoader.ExportPrimaryContent(finalPath);
 			}

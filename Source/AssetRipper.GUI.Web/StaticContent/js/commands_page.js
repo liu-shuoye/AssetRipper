@@ -7,7 +7,7 @@ const app = createApp({
 			load_path_exists: false,
 			// 依赖关系扫描的输入路径，仅用于生成依赖关系文件
 			scan_path: '',
-			export_path: window.__lastExportPath ?? '',
+			export_path: window.__exportPath ?? '',
 			export_path_has_files: false,
 			create_subfolder: window.__createSubfolder ?? false
 		}

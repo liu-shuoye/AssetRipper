@@ -39,6 +39,8 @@
     "auto_export_kind_title": "导入后自动导出",
     "auto_export_kind_unity_project": "导出为 Unity 项目",
     "auto_export_kind_unity_project_description": "导入一旦完成，立即自动导出为 Unity 项目。",
+    "auto_export_path": "导出路径",
+    "auto_export_path_description": "导出到哪里。留空则沿用上次使用的导出目录；若也没有，则使用导入文件夹的同级目录。自动导出始终写入带时间戳的子文件夹。",
     "auto_export_started": "已开始自动导出：正在导出到 {0}",
     "bundle": "包（Bundle）",
     "bundled_assets_export_direct_export": "直接导出",

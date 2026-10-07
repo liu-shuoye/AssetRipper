@@ -150,6 +150,17 @@ public sealed partial class SettingsPage : DefaultPage
 							}
 						}
 
+						// 导出路径：导入前就把"导到哪"定好，导入结束即可直接落盘；
+						// 与导出页共用同一个值，避免两处各记一份路径而互相覆盖
+						using (new Div(writer).WithClass("row").End())
+						{
+							using (new Div(writer).WithClass("col").End())
+							{
+								WriteTextInputForAutoExportPath(writer);
+								new P(writer).WithClass("form-text").Close(Localization.AutoExportPathDescription);
+							}
+						}
+
 						using (new Div(writer).WithClass("row").End())
 						{
 							using (new Div(writer).WithClass("col").End())
@@ -347,6 +358,31 @@ public sealed partial class SettingsPage : DefaultPage
 				.WithId(id)
 				.WithName(id)
 				.WithValue(Configuration.ExportSettings.CustomProjectPath ?? "")
+				.Close();
+			new Button(writer)
+				.WithType("button")
+				.WithClass("btn btn-outline-secondary")
+				.WithCustomAttribute("onclick", $"browseForFolder('{id}')")
+				.Close(Localization.SelectFolder);
+		}
+	}
+
+	/// <summary>
+	/// 导出路径的文本输入框，附带"选择文件夹"按钮（调用全局 JS 打开本机目录选择对话框）。
+	/// 留空表示不指定，导出时按"上次使用的目录 → 导入目录的同级目录"依次回退。
+	/// </summary>
+	private static void WriteTextInputForAutoExportPath(TextWriter writer)
+	{
+		string id = nameof(Configuration.ImportSettings.AutoExportPath);
+		new Label(writer).WithClass("form-label").WithFor(id).Close(Localization.AutoExportPath);
+		using (new Div(writer).WithClass("input-group").End())
+		{
+			new Input(writer)
+				.WithType("text")
+				.WithClass("form-control")
+				.WithId(id)
+				.WithName(id)
+				.WithValue(Configuration.ImportSettings.AutoExportPath ?? "")
 				.Close();
 			new Button(writer)
 				.WithType("button")

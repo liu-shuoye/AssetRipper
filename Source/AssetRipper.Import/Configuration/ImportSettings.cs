@@ -154,10 +154,20 @@ public sealed record class ImportSettings
 	/// <remarks>
 	/// 放在 ImportSettings 而非 ExportSettings 是刻意的：本项描述的是导入流程何时结束，
 	/// 属于导入阶段的行为；且设置页只在未加载资源时可编辑，导出页则在加载后才可用。
-	/// 导出位置优先取上次记住的导出目录，否则取导入目录的同级目录，
-	/// 并强制追加时间戳子文件夹，避免自动导出覆盖用户既有文件。
+	/// 导出位置由 <see cref="AutoExportPath"/> 决定，未配置时回退到上次使用的导出目录，
+	/// 再回退到导入目录的同级目录，并强制追加时间戳子文件夹，避免覆盖用户既有文件。
 	/// </remarks>
 	public AutoExportKind AutoExportKind { get; set; } = AutoExportKind.None;
+
+	/// <summary>
+	/// 导出目标基础目录。留空时回退到上次实际使用的导出目录，再回退到导入目录的同级目录。
+	/// </summary>
+	/// <remarks>
+	/// 与 <see cref="AutoExportKind"/> 并列放在导入设置里，用户就能在导入前一次配好"导到哪、导什么"；
+	/// 导出页读取的也是同一个值，避免两个页面各记一份路径而互相覆盖。
+	/// 这里填的目录既用于自动导出，也是手动导出页的预填值。
+	/// </remarks>
+	public string? AutoExportPath { get; set; }
 
 	public void Log()
 	{
@@ -180,6 +190,7 @@ public sealed record class ImportSettings
 		Logger.Info(LogCategory.General, $"{nameof(EnableFileScanCache)}: {EnableFileScanCache}");
 		Logger.Info(LogCategory.General, $"{nameof(FileScanCachePath)}: {FileScanCachePath}");
 		Logger.Info(LogCategory.General, $"{nameof(AutoExportKind)}: {AutoExportKind}");
+		Logger.Info(LogCategory.General, $"{nameof(AutoExportPath)}: {AutoExportPath}");
 	}
 
 	/// <summary>

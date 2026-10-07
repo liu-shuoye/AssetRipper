@@ -1,14 +1,13 @@
 using AssetRipper.GUI.Web;
-using AssetRipper.Import.Configuration;
 
 namespace AssetRipper.GUI.Web.Tests;
 
 /// <summary>
-/// 覆盖"导入完成后自动导出"的路径推断与开关语义。
+/// 覆盖"导出路径"的判定优先级与自动导出的目录拼接规则。
 /// </summary>
 /// <remarks>
-/// 这些用例只触碰纯计算部分（路径拼接、记忆回退），不触发真实文件写入，
-/// 因此测试可以安全地在 CI 中重复运行。真实的导出链路由导出页手动流程共用，不在此重复覆盖。
+/// 优先级逻辑走 <see cref="GameFileLoader.ResolveBasePathFromCandidates"/> 这个纯函数，
+/// 测试因此不依赖磁盘上的设置文件，结果稳定可重复；只有接线部分才触碰全局状态。
 /// </remarks>
 public class AutoExportTests
 {
@@ -31,26 +30,91 @@ public class AutoExportTests
 	}
 
 	[Test]
-	public void ResolveAutoExportBasePathFallsBackToImportParentDirectory()
+	public void ConfiguredExportPathWinsOverRememberedAndImportDirectory()
 	{
-		// 未记住导出路径时，应取导入目录的同级目录，而不是导入目录自身
-		string? resolved = GameFileLoader.ResolveAutoExportBasePath(@"D:\games\Nikki4");
+		string? result = GameFileLoader.ResolveBasePathFromCandidates(
+			@"D:\configured", @"D:\remembered", @"D:\games\Nikki4");
 
-		Assert.That(resolved, Is.EqualTo(@"D:\games"));
+		Assert.That(result, Is.EqualTo(@"D:\configured"));
 	}
 
 	[Test]
-	public void ResolveAutoExportBasePathIgnoresTrailingSeparator()
+	public void RememberedExportPathWinsOverImportDirectory()
+	{
+		string? result = GameFileLoader.ResolveBasePathFromCandidates(
+			configuredPath: null, @"D:\remembered", @"D:\games\Nikki4");
+
+		Assert.That(result, Is.EqualTo(@"D:\remembered"));
+	}
+
+	[Test]
+	public void BlankConfiguredPathIsIgnored()
+	{
+		// 设置页留空时表单提交的是空白串，不能把它当路径用，应继续回退
+		Assert.That(
+			GameFileLoader.ResolveBasePathFromCandidates("   ", null, @"D:\games\Nikki4"),
+			Is.EqualTo(@"D:\games"));
+	}
+
+	[Test]
+	public void FallsBackToImportParentDirectory()
+	{
+		// 无配置也无记忆时，取导入目录的同级目录，而不是导入目录自身
+		Assert.That(
+			GameFileLoader.ResolveBasePathFromCandidates(null, null, @"D:\games\Nikki4"),
+			Is.EqualTo(@"D:\games"));
+	}
+
+	[Test]
+	public void IgnoresTrailingSeparatorWhenFallingBackToImportParent()
 	{
 		// 带结尾分隔符的路径若不做规范化，GetDirectoryName 会返回自身或空串
-		Assert.That(GameFileLoader.ResolveAutoExportBasePath(@"D:\games\Nikki4\"), Is.EqualTo(@"D:\games"));
+		Assert.That(
+			GameFileLoader.ResolveBasePathFromCandidates(null, null, @"D:\games\Nikki4\"),
+			Is.EqualTo(@"D:\games"));
 	}
 
 	[Test]
-	public void ResolveAutoExportBasePathReturnsNullWithoutAnySource()
+	public void ReturnsNullWhenNothingAvailable()
 	{
-		// 既无记忆导出路径、又无导入目录时无法推断位置，调用方应据此放弃自动导出
-		Assert.That(GameFileLoader.ResolveAutoExportBasePath(null), Is.Null);
-		Assert.That(GameFileLoader.ResolveAutoExportBasePath("   "), Is.Null);
+		// 三者皆无时无法推断位置，调用方应据此放弃导出，而不是猜一个目录
+		Assert.That(GameFileLoader.ResolveBasePathFromCandidates(null, null, null), Is.Null);
+		Assert.That(GameFileLoader.ResolveBasePathFromCandidates(null, null, "   "), Is.Null);
+	}
+
+	[Test]
+	public void SettingsExportPathIsActuallyUsedByExportFlow()
+	{
+		// 只测纯函数证明不了"设置页填的值真的会被用上"，这里覆盖这段接线
+		string? original = GameFileLoader.Settings.ImportSettings.AutoExportPath;
+		try
+		{
+			GameFileLoader.Settings.ImportSettings.AutoExportPath = @"D:\configured";
+
+			Assert.That(GameFileLoader.ResolveAutoExportBasePath(@"D:\games\Nikki4"), Is.EqualTo(@"D:\configured"));
+			// 导出页预填同样以配置值为准
+			Assert.That(GameFileLoader.PreferredExportPath, Is.EqualTo(@"D:\configured"));
+		}
+		finally
+		{
+			GameFileLoader.Settings.ImportSettings.AutoExportPath = original;
+		}
+	}
+
+	[Test]
+	public void PreferredExportPathDoesNotFallBackToImportDirectory()
+	{
+		// 导出页拿不到导入目录，绝不能凭空造一个"导入目录同级"填进输入框
+		string? original = GameFileLoader.Settings.ImportSettings.AutoExportPath;
+		try
+		{
+			GameFileLoader.Settings.ImportSettings.AutoExportPath = null;
+
+			Assert.That(GameFileLoader.PreferredExportPath, Is.EqualTo(GameFileLoader.LastExport.ExportPath));
+		}
+		finally
+		{
+			GameFileLoader.Settings.ImportSettings.AutoExportPath = original;
+		}
 	}
 }
