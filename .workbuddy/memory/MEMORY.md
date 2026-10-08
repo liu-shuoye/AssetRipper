@@ -76,6 +76,12 @@
 - `CreateStream`：`> MaxMemoryStreamLength` → `SmartStream.CreateTemp()`。**下调阈值不省内存**（每落盘条目 ≈ 4.3KB 托管 + 1 句柄）；要省改 `bufferSize: 0`。
 - 现状：`MaxMemoryStreamLength = 1024`、`MaxPreAllocatedMemoryStreamLength = 1023`（注释与代码不一致，信代码）。
 
+## 闪暖（Nikki4）资产结构与跨 bundle 依赖解析（2026-10-07 调查）
+- 数据布局：`assets/art/**` 一资源一 UnityFS bundle；cab 名=bundle 内 node 名 `CAB-<32hex>`；`FixFileIdentifier` 后小写 `cab-<hex>`（= 集合名 NameFixed）。`bin/Data`（252 个 cab）、`assetbundles`（1.9MB 索引）。
+- externals 引用格式 `archive:/CAB-<hash>/CAB-<hash>` → Fix 后 `cab-<hash>`。**文件名解析三条路**：`_filesIndex`（键=文件基名去扩展名小写）与 `join(dataPath, dep)` **都匹配不上 cab-hash**；**只有 `DependencyMap.TryResolve`（依赖映射文件、d 键=NameFixed）能解析** → **无 DependencyMap 时此类依赖全断**（导入设置"依赖关系文件路径"极关键）。
+- **同名多副本普遍存在**：同一资产（同 pathID）可在多个 bundle 各有一份副本（内容可不同），导出为「同名文件 + `_0`」两个资产（guid 不同但各自跨批次稳定）。
+- 手写 UnityFS 解析（python+lz4）：blocksInfo 从 header 后 **16 对齐**处；数据区**紧跟其后不对齐**；blocks 字段=未压缩在前(u32,u32,u16)；sfVer21 布局：types=int32+bool+int16+[scriptID16B]+16B+typeTree(nodes×32B)+typeDeps；objects=align4+int64+u32+int32+int32；externals=串+16B guid+int32+串；Animator 数据=(GameObject12B)(Enabled1+3pad)(Avatar12B)(Controller12B)。
+
 ## ⚠️ .git 易失（操作前先备份）
 - `.git/objects` loose 对象会消失，历史只在 3 个 pack（463MB/4352 commit）。曾致 refs 丢失。**6 个 `optimize/*` 分支已损坏，不要"修复"**；`alpha`/`master` 健康。
 - git 操作前把改动复制到仓库外；**不要用 `git stash`**。

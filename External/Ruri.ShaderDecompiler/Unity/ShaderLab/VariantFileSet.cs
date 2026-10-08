@@ -11,7 +11,7 @@ namespace Ruri.ShaderTools.Unity.ShaderLab;
 /// enough to stall an editor on import. Split, each variant is independently
 /// diffable and the <c>.shader</c> stays navigable.
 ///
-/// FILE NAMES ARE DELIBERATELY SHORT — <c>Sub0_Pass2_Fragment_b31</c> — and the
+/// FILE NAMES ARE DELIBERATELY SHORT — <c>Sub0_Pass2_Fragment</c> — and the
 /// keyword combination lives in a comment INSIDE the file instead. Baking the
 /// combination into the name ran to hundreds of characters on heavily
 /// multi-compiled shaders and pushed paths past the platform filename limit,
@@ -38,26 +38,29 @@ internal sealed class VariantFileSet
     public string Add(int subShaderIndex, int passIndex, string stage, UnitySerializedSubProgram subProgram, string keywordList, string body, string? legend)
     {
         string extension = string.IsNullOrWhiteSpace(subProgram.SourceFileExtension) ? ".hlsl" : subProgram.SourceFileExtension;
-        string fileName = ResolveUniqueName(BuildKey(subShaderIndex, passIndex, stage, subProgram), extension);
+        string fileName = ResolveUniqueName(BuildKey(subShaderIndex, passIndex, stage), extension);
 
         _files[fileName] = BuildContent(stage, subProgram, keywordList, body, legend);
         return $"{FolderName}/{fileName}";
     }
 
     /// <summary>
-    /// <c>Sub&lt;N&gt;_Pass&lt;M&gt;_&lt;Stage&gt;_b&lt;Blob&gt;</c> — short and bounded.
+    /// <c>Sub&lt;N&gt;_Pass&lt;M&gt;_&lt;Stage&gt;</c> — short, bounded, and stable.
     ///
     /// Every variant file for one shader shares a folder, so subshader, pass and
-    /// stage must all stay in the name to avoid cross-pass clashes; the blob index
-    /// separates the distinct binaries within one of those.
+    /// stage must all stay in the name to avoid cross-pass clashes.
+    ///
+    /// 文件名刻意不含 blob 索引：它是内部条目编号（Sub0_Pass0_Vertex_b14 里的 14），
+    /// 对阅读导出产物的人而言与随机数无异，却让同一逻辑变体在不同资产/版本间改名。
+    /// 同一 slot 内的多个变体由 <see cref="ResolveUniqueName"/> 的递增序号区分。
     /// </summary>
-    private static string BuildKey(int subShaderIndex, int passIndex, string stage, UnitySerializedSubProgram subProgram)
-        => SanitizeStem($"Sub{subShaderIndex}_Pass{passIndex}_{stage}_b{subProgram.BlobIndex}");
+    private static string BuildKey(int subShaderIndex, int passIndex, string stage)
+        => SanitizeStem($"Sub{subShaderIndex}_Pass{passIndex}_{stage}");
 
     /// <summary>
-    /// The key is unique per emitted variant in practice; the one way two collide
-    /// is when the engine deduplicated two keyword combinations onto one bytecode
-    /// blob. Append a counter so neither body is silently dropped.
+    /// 同名即同一 <c>(SubShader, Pass, Stage)</c> slot 下有多个关键词变体——去掉 blob 索引后
+    /// 这是 split 模式的常态。按发射顺序追加递增序号（顺序源自资产自身数据，跨次导出一致），
+    /// 保证既不静默丢变体，文件名也始终可预期。
     /// </summary>
     private string ResolveUniqueName(string stem, string extension)
     {
