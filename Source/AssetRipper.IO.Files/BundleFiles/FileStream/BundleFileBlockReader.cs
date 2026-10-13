@@ -299,7 +299,7 @@ internal sealed class BundleFileBlockReader : IDisposable
 	/// 这里刻意取得很小：真实项目里 bundle 数量可达数万，单个 bundle 解压后常在数百 KB，
 	/// 若放宽到 MB 级，整批数据会直接压垮托管堆，因此默认值让它们几乎全部落盘。
 	/// </remarks>
-	private const int MaxMemoryStreamLength = 1024;
+	private const int MaxMemoryStreamLength = 1024 * 3;
 	/// <summary>
 	/// 允许预先分配缓冲区的最大体积（字节），必须小于 <see cref="MaxMemoryStreamLength"/>。
 	/// </summary>

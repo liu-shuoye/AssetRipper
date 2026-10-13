@@ -32,7 +32,7 @@ public sealed partial class SmartStream : Stream
 	public static SmartStream CreateTemp()
 	{
 		string tempFile = LocalFileSystem.Instance.File.CreateTemporary();
-		return new SmartStream(new FileStream(tempFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None, 4096, FileOptions.DeleteOnClose));
+		return new SmartStream(new FileStream(tempFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None, 1024, FileOptions.DeleteOnClose));
 	}
 
 	public static SmartStream CreateMemory()
