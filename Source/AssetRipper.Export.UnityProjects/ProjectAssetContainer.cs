@@ -1,5 +1,6 @@
 using AssetRipper.Assets;
 using AssetRipper.Assets.Collections;
+using AssetRipper.Export.Configuration;
 using AssetRipper.Export.UnityProjects.Project;
 using AssetRipper.Import.Configuration;
 using AssetRipper.Processing.Configuration;
@@ -25,6 +26,11 @@ public class ProjectAssetContainer : IExportContainer
 		UseDeterministicGuids = options.SingletonData.TryGetStoredValue<ProcessingSettings>(
 			nameof(ProcessingSettings), out ProcessingSettings? ps)
 			&& ps.EnableDeterministicGuids;
+
+		// 同上：从 Core 读取"meta 是否省略 AssetBundle 名称"开关，供 Meta 导出时查询。
+		SkipAssetBundleNameInMeta = options.SingletonData.TryGetStoredValue<ExportSettings>(
+			nameof(ExportSettings), out ExportSettings? es)
+			&& es.SkipAssetBundleNameInMeta;
 
 		ExportVersion = options.Version;
 
@@ -121,6 +127,8 @@ public class ProjectAssetContainer : IExportContainer
 	public UnityVersion ExportVersion { get; }
 	/// <inheritdoc/>
 	public bool UseDeterministicGuids { get; }
+	/// <inheritdoc/>
+	public bool SkipAssetBundleNameInMeta { get; }
 
 	private readonly ProjectExporter m_exporter;
 	private readonly Dictionary<IUnityObjectBase, IExportCollection> m_assetCollections = new();

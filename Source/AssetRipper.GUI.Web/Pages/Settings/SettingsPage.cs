@@ -274,6 +274,10 @@ public sealed partial class SettingsPage : DefaultPage
 								{
 									WriteCheckBoxForExportUnreadableAssets(writer, Localization.ExportUnreadableAssets);
 								}
+								using (new Div(writer).WithClass("col").End())
+								{
+									WriteCheckBoxForSkipAssetBundleNameInMeta(writer, Localization.SkipAssetBundleNameInMeta);
+								}
 							}
 
 							using (new Div(writer).WithClass("row").End())

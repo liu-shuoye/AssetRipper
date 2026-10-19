@@ -289,6 +289,7 @@
     "shader_asset_format_yaml_description": "Export the shader as a yaml asset. Experimental and only usable for viewing in the editor. The editor can randomly corrupt these files.",
     "shader_decompilation": "Shader Decompilation",
     "size": "Size",
+    "skip_asset_bundle_name_in_meta": "Skip AssetBundle Names in Meta Files",
     "skip_streaming_assets": "Skip StreamingAssets Folder",
     "sprite_export_title": "Sprite Export Format",
     "sprite_format_native": "Unity",

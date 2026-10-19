@@ -56,6 +56,15 @@ public sealed record class ExportSettings
 
 	public bool ExportUnreadableAssets { get; set; } = false;
 
+	/// <summary>
+	/// 是否在导出 .meta 文件时省略 AssetBundle 名称与变体。
+	/// </summary>
+	/// <remarks>
+	/// 开启后 meta 中不再写入 assetBundleName / assetBundleVariant，避免重建的 Unity 工程
+	/// 依据原包体名把资产误归入并不存在的 AssetBundle；关闭时保持与原始元数据一致。
+	/// </remarks>
+	public bool SkipAssetBundleNameInMeta { get; set; } = false;
+
 	public bool SaveSettingsToDisk { get; set; } = true;
 
 	public string? LanguageCode { get; set; }
@@ -79,6 +88,7 @@ public sealed record class ExportSettings
 		Logger.Info(LogCategory.General, $"{nameof(SpriteExportMode)}: {SpriteExportMode}");
 		Logger.Info(LogCategory.General, $"{nameof(TextExportMode)}: {TextExportMode}");
 		Logger.Info(LogCategory.General, $"{nameof(ExportUnreadableAssets)}: {ExportUnreadableAssets}");
+		Logger.Info(LogCategory.General, $"{nameof(SkipAssetBundleNameInMeta)}: {SkipAssetBundleNameInMeta}");
 		Logger.Info(LogCategory.General, $"{nameof(CustomProjectPath)}: {CustomProjectPath}");
 	}
 }

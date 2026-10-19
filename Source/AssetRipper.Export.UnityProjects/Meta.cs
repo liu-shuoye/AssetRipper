@@ -48,7 +48,11 @@ public readonly struct Meta
 		}
 		//if (Importer.IncludesImporter(container.ExportVersion)) //For now, assume true
 		{
-			root.Add(Importer.ClassName, new ProjectYamlWalker(container) { ExportingAssetImporter = true }.ExportYamlNode(Importer));
+			root.Add(Importer.ClassName, new ProjectYamlWalker(container)
+			{
+				ExportingAssetImporter = true,
+				SkipAssetBundleFields = container.SkipAssetBundleNameInMeta,
+			}.ExportYamlNode(Importer));
 		}
 		return document;
 	}

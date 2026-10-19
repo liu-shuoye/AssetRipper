@@ -48,11 +48,24 @@ public class YamlWalker : AssetWalker
 		"m_PrefabInstance",
 	};
 
+	/// <summary>
+	/// AssetBundle 归属字段，仅在 <see cref="SkipAssetBundleFields"/> 开启时从 meta 中剔除。
+	/// </summary>
+	/// <remarks>
+	/// 名称取自编辑器类型树（AssetImporter 基类），采用带 <c>m_</c> 前缀的原始序列化名。
+	/// </remarks>
+	private static readonly HashSet<string> AssetBundleFieldsInImporters = new()
+	{
+		"m_AssetBundleName",
+		"m_AssetBundleVariant",
+	};
+
 	private const string Data = "data";
 	private const string First = "first";
 	private const string Second = "second";
 	private Stack<YamlContext> ContextStack { get; } = new();
 	public bool ExportingAssetImporter { private get; set; }
+	public bool SkipAssetBundleFields { private get; set; }
 	public bool UseHyphensInDictionaries { get; set; } = true;
 	private YamlMappingNode? CurrentMappingNode => ContextStack.Peek().MappingNode;
 	private YamlSequenceNode? CurrentSequenceNode => ContextStack.Peek().SequenceNode;
@@ -141,6 +154,12 @@ public class YamlWalker : AssetWalker
 		Debug.Assert(CurrentSequenceNode is null);
 		Debug.Assert(CurrentFieldName is null);
 		if (ExportingAssetImporter && (FieldsToSkipInImporters.Contains(name) || asset.IgnoreFieldInMetaFiles(name)))
+		{
+			return false;
+		}
+		// 仅在 meta（importer）导出且开启对应设置时才剔除 AssetBundle 归属字段，
+		// 资源本体（AssetBundle 等）的 yaml 导出不受影响。
+		if (SkipAssetBundleFields && AssetBundleFieldsInImporters.Contains(name))
 		{
 			return false;
 		}
