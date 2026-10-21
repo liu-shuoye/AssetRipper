@@ -287,9 +287,9 @@ public sealed partial class ProjectExporter
 				continue;
 			}
 
-			// Shader：以名称作为去重依据。同一条资源集中 shader 名称一般唯一，
+			// Shader：以着色器内部名称作为去重依据。同一资源集内该名称一般唯一，
 			// 而编译二进制/ParsedForm 内细微差异会导致序列化内容哈希不同，无法识别重复，
-			// 因此这里不走内容指纹，改为直接按 shader 名称分组。
+			// 因此这里不走内容指纹，改为直接按内部名称分组（不能用文件名，见 GetShaderKey 说明）。
 			if (primary is IShader)
 			{
 				string? shaderKey = GetShaderKey(primary);
@@ -408,13 +408,32 @@ public sealed partial class ProjectExporter
 	}
 
 	/// <summary>
-	/// 取 shader 集合的“去重键”，即 shader 名称。
+	/// 取 shader 集合的“去重键”，即着色器内部名称（ShaderLab 中 <c>Shader "名称"</c> 的声明）。
 	/// </summary>
-	/// <param name="primary">集合的主资源，即 shader 本身。</param>
+	/// <param name="asset">集合内的资源（通常就是 shader 本身）。</param>
 	/// <returns>名称去除首尾空白后的非空字符串；取不到稳定名称时返回 null。</returns>
-	private static string? GetShaderKey(IUnityObjectBase primary)
+	/// <remarks>
+	/// 不能用 <see cref="IUnityObjectBase.GetBestName"/>：它优先返回导出的文件名，而不同着色器
+	/// 可以共用同一文件名（如 Amplify 生成的 build_shader）。按文件名分组会把内容完全不同的
+	/// 着色器误判为重复：被跳过的集合不再导出，引用它的材质（尤其是用户项目里原样复制、
+	/// 按原始 GUID 引用的 .mat）随之悬空。
+	/// </remarks>
+	private static string? GetShaderKey(IUnityObjectBase asset)
 	{
-		string name = primary.GetBestName() ?? string.Empty;
+		if (asset is not IShader shader)
+		{
+			return null;
+		}
+
+		string name = shader.Name.String;
+		if (string.IsNullOrWhiteSpace(name)
+			&& shader.Has_ParsedForm()
+			&& shader.ParsedForm is { } parsedForm)
+		{
+			// 部分版本的对象级名称为空，真实名称只在 ParsedForm 中。
+			name = parsedForm.Name.String;
+		}
+
 		return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
 	}
 
@@ -424,7 +443,7 @@ public sealed partial class ProjectExporter
 	private static string AddShaderGroupKey(string shaderName) => "Shader|" + shaderName;
 
 	/// <summary>
-	/// 为按名称去重的 shader 集合构建重定向：把 skip 中的每个 shader 映射到 keep 中名称相同的 shader。
+	/// 为按名称去重的 shader 集合构建重定向：把 skip 中的每个 shader 映射到 keep 中内部名称相同的 shader。
 	/// shader 集合通常只有主资源自身，因此逐资源按名称配对即可满足所有引用解析。
 	/// </summary>
 	private static void RedirectShaderCollection(IExportCollection skip, IExportCollection keep,
@@ -433,17 +452,18 @@ public sealed partial class ProjectExporter
 		Dictionary<string, IUnityObjectBase> keepByName = new();
 		foreach (IUnityObjectBase asset in keep.Assets)
 		{
-			if (asset is IShader shader)
+			string? shaderKey = GetShaderKey(asset);
+			if (shaderKey is not null)
 			{
 				// 同一集合内理论上不会出现重名的 shader，这里取首个即可代表该名称的 keeper。
-				keepByName.TryAdd(shader.GetBestName(), asset);
+				keepByName.TryAdd(shaderKey, asset);
 			}
 		}
 
 		foreach (IUnityObjectBase asset in skip.Assets)
 		{
-			if (asset is IShader shader
-				&& keepByName.TryGetValue(shader.GetBestName(), out IUnityObjectBase? target))
+			string? shaderKey = GetShaderKey(asset);
+			if (shaderKey is not null && keepByName.TryGetValue(shaderKey, out IUnityObjectBase? target))
 			{
 				redirectMap[asset] = target;
 			}

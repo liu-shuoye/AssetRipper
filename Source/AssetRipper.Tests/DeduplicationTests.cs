@@ -349,10 +349,58 @@ internal class DeduplicationTests
 	}
 
 	/// <summary>
+	/// Shader 去重按内部名称（Shader "名称"）而不是导出文件名：
+	/// 不同着色器可以共用同一文件名，按文件名合并会误删真正不同的着色器，
+	/// 使材质（尤其是用户项目里原样复制、按原始 GUID 引用的 .mat）对它的引用悬空。
+	/// </summary>
+	[Test]
+	public void Deduplication_ShadersWithSameFileNameButDifferentInternalNames_KeepsBoth()
+	{
+		GameBundle gameBundle = new();
+		ProcessedAssetCollection collection = gameBundle.AddNewProcessedCollection("ShaderDupFileNameTest", UnityVersion.V_2022);
+
+		// 两个不同着色器共用同一文件名（如 Amplify 生成的 build_shader）。
+		IShader shader1 = CreateShader(collection, "build_shader", "NN4/A");
+		IShader shader2 = CreateShader(collection, "build_shader", "NN4/B");
+
+		SimpleShaderExporter exporter = new();
+		(_, HashSet<IExportCollection> skipped, _) = RunApplyDeduplication(
+			new ShaderExportCollection(exporter, shader1),
+			new ShaderExportCollection(exporter, shader2));
+
+		Assert.That(skipped, Is.Empty, "文件名相同但内部名称不同的 shader 不得被去重合并");
+	}
+
+	/// <summary>
+	/// 内部名称相同的 shader 即使导出文件名不同也应识别为重复，并建立到 keeper 的重定向。
+	/// </summary>
+	[Test]
+	public void Deduplication_ShadersWithSameInternalName_DeduplicatesRegardlessOfFileName()
+	{
+		GameBundle gameBundle = new();
+		ProcessedAssetCollection collection = gameBundle.AddNewProcessedCollection("ShaderDupInternalNameTest", UnityVersion.V_2022);
+
+		IShader shader1 = CreateShader(collection, "file_a", "NN4/Same");
+		IShader shader2 = CreateShader(collection, "file_b", "NN4/Same");
+
+		SimpleShaderExporter exporter = new();
+		(_, HashSet<IExportCollection> skipped, Dictionary<IUnityObjectBase, IUnityObjectBase> redirect) =
+			RunApplyDeduplication(
+				new ShaderExportCollection(exporter, shader1),
+				new ShaderExportCollection(exporter, shader2));
+
+		Assert.Multiple(() =>
+		{
+			Assert.That(skipped, Has.Count.EqualTo(1), "内部名称相同的 shader 应只保留一个");
+			Assert.That(redirect, Has.Count.EqualTo(1), "被跳过的 shader 必须重定向到保留的 shader，避免引用丢失");
+		});
+	}
+
+	/// <summary>
 	/// 构造一个指定名称的 shader 实例。名称通过 <see cref="IUnityObjectBase.OverrideName"/> 控制，
 	/// 使去重测试不依赖特定的 shader 生成类型字段。
 	/// </summary>
-	private static IShader CreateShader(ProcessedAssetCollection collection, string name)
+	private static IShader CreateShader(ProcessedAssetCollection collection, string name, string? internalName = null)
 	{
 		Type? shaderType = typeof(IShader).Assembly.GetTypes()
 			.FirstOrDefault(t => typeof(IShader).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
@@ -360,6 +408,8 @@ internal class DeduplicationTests
 
 		IShader shader = collection.CreateAsset(-1, ai => (IShader)Activator.CreateInstance(shaderType!, ai)!);
 		shader.OverrideName = name;
+		// 内部名称是 shader 的真实身份（去重键），文件名只是导出产物名，二者在真实资产中通常不同。
+		shader.Name = internalName ?? name;
 		return shader;
 	}
 
