@@ -12,6 +12,12 @@ public readonly record struct AclBindingCurveIds(uint Rotation, uint Position, u
 /// </summary>
 public sealed class AclClipPayload
 {
+	/// <summary>
+	/// ACL 映射表中的“无此分量绑定”哨兵。Unity 序列化字段是 uint，
+	/// 而有效曲线通道索引远小于 uint.MaxValue；0xFFFFFFFF 表示该 track 没有对应 binding。
+	/// </summary>
+	public const uint InvalidCurveId = uint.MaxValue;
+
 	public byte[] Blob { get; }
 	public AclBindingCurveIds[] Mapping { get; }
 

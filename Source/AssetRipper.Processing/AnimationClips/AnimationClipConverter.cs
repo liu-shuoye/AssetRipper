@@ -286,6 +286,7 @@ public readonly partial struct AnimationClipConverter
 			AclNativeHeaderInfo info = acl.Info;
 			ValidateAclInfo(info, payload);
 
+			string clipName = nikki4Clip.Name_C130.ToString();
 			int numTracks = (int)info.NumTracks;
 			int numSamples = (int)info.NumSamples;
 			float sampleRate = info.SampleRate;
@@ -296,7 +297,7 @@ public readonly partial struct AnimationClipConverter
 			byte[] scaleTypes = new byte[numTracks];
 			acl.GetSubTrackTypes(rotationTypes, translationTypes, scaleTypes);
 
-			ValidateAclMapping(payload, hasScale);
+			ValidateAclMapping(payload, hasScale, clipName);
 
 			// 逐 track 取数，避免一次性复制整个动画。
 			float[] rotations = new float[checked(numSamples * 4)];
@@ -326,6 +327,12 @@ public readonly partial struct AnimationClipConverter
 		catch (EntryPointNotFoundException ex)
 		{
 			LogAclNativeUnavailable("acl-native.dll 版本不匹配（缺少 aclv_* 导出）", ex);
+		}
+		catch (AclMappingException ex)
+		{
+			Logger.Warning(LogCategory.Processing,
+				$"ACL clip '{nikki4Clip.Name_C130}' 映射校验失败，已跳过 ACL 曲线："
+				+ $"track={ex.TrackIndex}, kind={ex.Kind}, curveId={ex.CurveId} (0x{ex.CurveId:X8})。{ex.Message}");
 		}
 		finally
 		{
@@ -362,26 +369,78 @@ public readonly partial struct AnimationClipConverter
 		}
 		if (info.NumTracks != payload.Mapping.Length)
 		{
-			throw new InvalidOperationException($"ACL track count {info.NumTracks} does not match mapping count {payload.Mapping.Length}.");
+			throw new AclMappingException(-1, "mapping-length", 0,
+				$"ACL track count {info.NumTracks} does not match mapping count {payload.Mapping.Length}.");
 		}
 	}
 
-	private void ValidateAclMapping(AclClipPayload payload, bool hasScale)
+	private void ValidateAclMapping(AclClipPayload payload, bool hasScale, string clipName)
 	{
+		int skippedRotation = 0;
+		int skippedPosition = 0;
+		int skippedScale = 0;
+		int firstSkippedRotation = -1;
+		int firstSkippedPosition = -1;
+		int firstSkippedScale = -1;
+
 		for (int track = 0; track < payload.Mapping.Length; track++)
 		{
 			AclBindingCurveIds ids = payload.Mapping[track];
-			ValidateAclChannel(ids.Rotation, TransformType.Rotation, track, "rotation");
-			ValidateAclChannel(ids.Position, TransformType.Translation, track, "position");
-			if (hasScale)
+			if (!TryValidateAclChannel(ids.Rotation, TransformType.Rotation, track, "rotation"))
 			{
-				ValidateAclChannel(ids.Scale, TransformType.Scaling, track, "scale");
+				skippedRotation++;
+				if (firstSkippedRotation < 0)
+				{
+					firstSkippedRotation = track;
+				}
 			}
+			if (!TryValidateAclChannel(ids.Position, TransformType.Translation, track, "position"))
+			{
+				skippedPosition++;
+				if (firstSkippedPosition < 0)
+				{
+					firstSkippedPosition = track;
+				}
+			}
+			if (hasScale && !TryValidateAclChannel(ids.Scale, TransformType.Scaling, track, "scale"))
+			{
+				skippedScale++;
+				if (firstSkippedScale < 0)
+				{
+					firstSkippedScale = track;
+				}
+			}
+		}
+
+		if (skippedRotation > 0 || skippedPosition > 0 || skippedScale > 0)
+		{
+			// 0xFFFFFFFF 是“该 track 无此分量绑定”的合法哨兵，不是错误；
+			// 记录数量与首个 track，避免静默丢数据。
+			Logger.Info(LogCategory.Processing,
+				$"ACL clip '{clipName}' 映射表含无绑定通道（0xFFFFFFFF），已跳过："
+				+ $"rotation={skippedRotation} (first={firstSkippedRotation}), "
+				+ $"position={skippedPosition} (first={firstSkippedPosition}), "
+				+ $"scale={skippedScale} (first={firstSkippedScale}).");
 		}
 	}
 
-	private void ValidateAclChannel(uint curveId, TransformType expectedType, int trackIndex, string kind)
+	/// <summary>
+	/// 返回 false 表示该分量是合法哨兵 0xFFFFFFFF（无绑定通道，跳过）；
+	/// 其它非法值（超出 int 范围、越界、类型不匹配）抛出 AclMappingException，
+	/// 由 ProcessAcl 捕获后只跳过该 clip 的 ACL 曲线并记录可诊断信息。
+	/// </summary>
+	private bool TryValidateAclChannel(uint curveId, TransformType expectedType, int trackIndex, string kind)
 	{
+		if (curveId == AclClipPayload.InvalidCurveId)
+		{
+			return false;
+		}
+		if (curveId > int.MaxValue)
+		{
+			throw new AclMappingException(trackIndex, kind, curveId,
+				$"channel id {curveId} (0x{curveId:X8}) exceeds int.MaxValue.");
+		}
+
 		IGenericBinding binding;
 		try
 		{
@@ -389,18 +448,28 @@ public readonly partial struct AnimationClipConverter
 		}
 		catch (ArgumentException ex)
 		{
-			throw new InvalidOperationException($"ACL mapping track {trackIndex} {kind} channel id {curveId} is outside the binding cache.", ex);
+			throw new AclMappingException(trackIndex, kind, curveId,
+				$"channel id {curveId} is outside the binding cache.", ex);
 		}
 
 		if (binding.GetClassID() != ClassIDType.Transform || binding.TransformType() != expectedType)
 		{
-			throw new InvalidOperationException(
-				$"ACL mapping track {trackIndex} {kind} channel id {curveId} points to {binding.GetClassID()}/{binding.TransformType()}, expected Transform/{expectedType}.");
+			throw new AclMappingException(trackIndex, kind, curveId,
+				$"channel id {curveId} points to {binding.GetClassID()}/{binding.TransformType()}, expected Transform/{expectedType}.");
 		}
+		return true;
 	}
 
 	private void WriteAclRotation(AclBindingCurveIds ids, float[] rotations, int numSamples, byte subTrackType, float sampleRate, float[] zeroSlopes)
 	{
+		if (ids.Rotation == AclClipPayload.InvalidCurveId)
+		{
+			return;
+		}
+		if (ids.Rotation > int.MaxValue)
+		{
+			throw new AclMappingException(-1, "rotation", ids.Rotation, "channel id exceeds int.MaxValue.");
+		}
 		IGenericBinding binding = GetBinding((int)ids.Rotation);
 		string path = GetCurvePath(binding.Path);
 		int keyCount = subTrackType == 2 ? numSamples : Math.Min(numSamples, 2);
@@ -447,6 +516,14 @@ public readonly partial struct AnimationClipConverter
 
 	private void WriteAclTranslation(AclBindingCurveIds ids, float[] translations, int numSamples, byte subTrackType, float sampleRate, float[] zeroSlopes)
 	{
+		if (ids.Position == AclClipPayload.InvalidCurveId)
+		{
+			return;
+		}
+		if (ids.Position > int.MaxValue)
+		{
+			throw new AclMappingException(-1, "position", ids.Position, "channel id exceeds int.MaxValue.");
+		}
 		IGenericBinding binding = GetBinding((int)ids.Position);
 		string path = GetCurvePath(binding.Path);
 		int keyCount = subTrackType == 2 ? numSamples : Math.Min(numSamples, 2);
@@ -467,6 +544,14 @@ public readonly partial struct AnimationClipConverter
 	{
 		// has_scale=0 时 ACL 输出的是默认 scale；Unity 默认 localScale 是 1，
 		// 因此 defaultScale=1 时直接跳过，不留 361 个常数关键帧。
+		if (ids.Scale == AclClipPayload.InvalidCurveId)
+		{
+			return;
+		}
+		if (ids.Scale > int.MaxValue)
+		{
+			throw new AclMappingException(-1, "scale", ids.Scale, "channel id exceeds int.MaxValue.");
+		}
 		if (!hasScale && defaultScale == 1)
 		{
 			return;
@@ -952,4 +1037,19 @@ public readonly partial struct AnimationClipConverter
 	private readonly Dictionary<int, IGenericBinding> m_bindingsCache = new(); //cache results from GetBinding(curveID)
 	private static bool s_aclNativeUnavailableLogged;
 	private IAnimationClipBindingConstant ClipBindingConstant => m_clip.ClipBindingConstant_C74!; //This class only supports 4.3 and newer.
+
+	private sealed class AclMappingException : Exception
+	{
+		public int TrackIndex { get; }
+		public string Kind { get; }
+		public uint CurveId { get; }
+
+		public AclMappingException(int trackIndex, string kind, uint curveId, string message, Exception? innerException = null)
+			: base(message, innerException)
+		{
+			TrackIndex = trackIndex;
+			Kind = kind;
+			CurveId = curveId;
+		}
+	}
 }
