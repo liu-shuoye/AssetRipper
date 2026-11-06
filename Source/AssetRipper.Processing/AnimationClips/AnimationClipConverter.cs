@@ -2,7 +2,9 @@ using AssetRipper.Assets.Cloning;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Assets.Generics;
 using AssetRipper.Checksum;
+using AssetRipper.Import.AssetCreation.Nikki4;
 using AssetRipper.IO.Endian;
+using AssetRipper.Logging;
 using AssetRipper.Processing.AnimationClips.Editor;
 using AssetRipper.SourceGenerated;
 using AssetRipper.SourceGenerated.Classes.ClassID_1;
@@ -72,6 +74,15 @@ public readonly partial struct AnimationClipConverter
 			}
 
 			m_clip.MuscleClipInfo_C74.Initialize(m_clip.MuscleClip_C74);
+
+			// Nikki4 空壳 clip：标准三段都没有曲线，真实数据在 ACL 段。
+			bool standardPoseEmpty = streamedFrames.Count <= 1
+				&& clip.DenseClip.CurveCount == 0
+				&& (!clip.Has_ConstantClip() || clip.ConstantClip.Data.Count == 0);
+			if (standardPoseEmpty && m_clip is AnimationClip_Nikki4 nikki4Clip && nikki4Clip.AclPayload is { } aclPayload)
+			{
+				ProcessAcl(nikki4Clip, aclPayload);
+			}
 		}
 	}
 
@@ -266,6 +277,217 @@ public readonly partial struct AnimationClipConverter
 		ArrayPool<float>.Shared.Return(rentedArray);
 	}
 
+	private void ProcessAcl(AnimationClip_Nikki4 nikki4Clip, AclClipPayload payload)
+	{
+		AclNativeClip? acl = null;
+		try
+		{
+			acl = AclNativeClip.Open(payload.Blob);
+			AclNativeHeaderInfo info = acl.Info;
+			ValidateAclInfo(info, payload);
+
+			int numTracks = (int)info.NumTracks;
+			int numSamples = (int)info.NumSamples;
+			float sampleRate = info.SampleRate;
+			bool hasScale = info.HasScale != 0;
+
+			byte[] rotationTypes = new byte[numTracks];
+			byte[] translationTypes = new byte[numTracks];
+			byte[] scaleTypes = new byte[numTracks];
+			acl.GetSubTrackTypes(rotationTypes, translationTypes, scaleTypes);
+
+			ValidateAclMapping(payload, hasScale);
+
+			// 逐 track 取数，避免一次性复制整个动画。
+			float[] rotations = new float[checked(numSamples * 4)];
+			float[] translations = new float[checked(numSamples * 3)];
+			float[] scales = new float[checked(numSamples * 3)];
+			float[] zeroSlopes4 = [0, 0, 0, 0];
+			float[] zeroSlopes3 = [0, 0, 0];
+
+			for (int track = 0; track < numTracks; track++)
+			{
+				acl.DecompressTrack(track, rotations, translations, scales);
+				AclBindingCurveIds ids = payload.Mapping[track];
+
+				WriteAclRotation(ids, rotations, numSamples, rotationTypes[track], sampleRate, zeroSlopes4);
+				WriteAclTranslation(ids, translations, numSamples, translationTypes[track], sampleRate, zeroSlopes3);
+				WriteAclScale(ids, scales, numSamples, scaleTypes[track], sampleRate, zeroSlopes3, hasScale, info.DefaultScale);
+			}
+		}
+		catch (DllNotFoundException ex)
+		{
+			LogAclNativeUnavailable("未找到 acl-native.dll", ex);
+		}
+		catch (BadImageFormatException ex)
+		{
+			LogAclNativeUnavailable("acl-native.dll 无法加载（位数/架构不匹配）", ex);
+		}
+		catch (EntryPointNotFoundException ex)
+		{
+			LogAclNativeUnavailable("acl-native.dll 版本不匹配（缺少 aclv_* 导出）", ex);
+		}
+		finally
+		{
+			acl?.Dispose();
+			// 解压完立即释放 blob，避免 6000+ 空壳 clip 同时驻留。
+			nikki4Clip.ClearAclPayload();
+		}
+	}
+
+	/// <summary>
+	/// 原生 ACL DLL 缺失或版本不匹配时只警告一次：标准三段继续正常导出，ACL 曲线跳过。
+	/// </summary>
+	private static void LogAclNativeUnavailable(string reason, Exception exception)
+	{
+		if (s_aclNativeUnavailableLogged)
+		{
+			return;
+		}
+		s_aclNativeUnavailableLogged = true;
+		Logger.Warning(LogCategory.Processing,
+			$"ACL 动画曲线重建已跳过：{reason}。{exception.Message} "
+			+ "请运行 External/acl-native/build.ps1，并确保 acl-native.dll 与 AssetRipper 可执行文件同目录。");
+	}
+
+	private static void ValidateAclInfo(in AclNativeHeaderInfo info, AclClipPayload payload)
+	{
+		if (info.Version != 7 || info.AlgorithmType != 0 || info.TrackType != 12)
+		{
+			throw new InvalidOperationException($"Unsupported ACL clip: version={info.Version}, algorithm={info.AlgorithmType}, trackType={info.TrackType}.");
+		}
+		if (info.NumTracks == 0 || info.NumSamples == 0 || info.SampleRate <= 0f)
+		{
+			throw new InvalidOperationException($"Invalid ACL clip counts: tracks={info.NumTracks}, samples={info.NumSamples}, sampleRate={info.SampleRate}.");
+		}
+		if (info.NumTracks != payload.Mapping.Length)
+		{
+			throw new InvalidOperationException($"ACL track count {info.NumTracks} does not match mapping count {payload.Mapping.Length}.");
+		}
+	}
+
+	private void ValidateAclMapping(AclClipPayload payload, bool hasScale)
+	{
+		for (int track = 0; track < payload.Mapping.Length; track++)
+		{
+			AclBindingCurveIds ids = payload.Mapping[track];
+			ValidateAclChannel(ids.Rotation, TransformType.Rotation, track, "rotation");
+			ValidateAclChannel(ids.Position, TransformType.Translation, track, "position");
+			if (hasScale)
+			{
+				ValidateAclChannel(ids.Scale, TransformType.Scaling, track, "scale");
+			}
+		}
+	}
+
+	private void ValidateAclChannel(uint curveId, TransformType expectedType, int trackIndex, string kind)
+	{
+		IGenericBinding binding;
+		try
+		{
+			binding = GetBinding((int)curveId);
+		}
+		catch (ArgumentException ex)
+		{
+			throw new InvalidOperationException($"ACL mapping track {trackIndex} {kind} channel id {curveId} is outside the binding cache.", ex);
+		}
+
+		if (binding.GetClassID() != ClassIDType.Transform || binding.TransformType() != expectedType)
+		{
+			throw new InvalidOperationException(
+				$"ACL mapping track {trackIndex} {kind} channel id {curveId} points to {binding.GetClassID()}/{binding.TransformType()}, expected Transform/{expectedType}.");
+		}
+	}
+
+	private void WriteAclRotation(AclBindingCurveIds ids, float[] rotations, int numSamples, byte subTrackType, float sampleRate, float[] zeroSlopes)
+	{
+		IGenericBinding binding = GetBinding((int)ids.Rotation);
+		string path = GetCurvePath(binding.Path);
+		int keyCount = subTrackType == 2 ? numSamples : Math.Min(numSamples, 2);
+		float[] values = new float[4];
+
+		// ACL/rtm 的四元数顺序是 (x, y, z, w)，Unity 的 QuaternionCurve 也是 XYZW，可以直接写入。
+		float prevX = 0, prevY = 0, prevZ = 0, prevW = 0;
+		bool hasPrevious = false;
+		for (int keyIndex = 0; keyIndex < keyCount; keyIndex++)
+		{
+			int sampleIndex = keyCount == numSamples ? keyIndex : (keyIndex == 0 ? 0 : numSamples - 1);
+			float x = rotations[sampleIndex * 4 + 0];
+			float y = rotations[sampleIndex * 4 + 1];
+			float z = rotations[sampleIndex * 4 + 2];
+			float w = rotations[sampleIndex * 4 + 3];
+
+			// 四元数双覆盖：保证相邻关键帧走最短路径，不做任何平滑。
+			if (hasPrevious)
+			{
+				float dot = prevX * x + prevY * y + prevZ * z + prevW * w;
+				if (dot < 0f)
+				{
+					x = -x;
+					y = -y;
+					z = -z;
+					w = -w;
+				}
+			}
+
+			values[0] = x;
+			values[1] = y;
+			values[2] = z;
+			values[3] = w;
+			float time = sampleIndex / sampleRate;
+			AddTransformCurve(time, binding, values, zeroSlopes, zeroSlopes, 0, path, TangentMode.Linear);
+
+			prevX = x;
+			prevY = y;
+			prevZ = z;
+			prevW = w;
+			hasPrevious = true;
+		}
+	}
+
+	private void WriteAclTranslation(AclBindingCurveIds ids, float[] translations, int numSamples, byte subTrackType, float sampleRate, float[] zeroSlopes)
+	{
+		IGenericBinding binding = GetBinding((int)ids.Position);
+		string path = GetCurvePath(binding.Path);
+		int keyCount = subTrackType == 2 ? numSamples : Math.Min(numSamples, 2);
+		float[] values = new float[3];
+
+		for (int keyIndex = 0; keyIndex < keyCount; keyIndex++)
+		{
+			int sampleIndex = keyCount == numSamples ? keyIndex : (keyIndex == 0 ? 0 : numSamples - 1);
+			values[0] = translations[sampleIndex * 3 + 0];
+			values[1] = translations[sampleIndex * 3 + 1];
+			values[2] = translations[sampleIndex * 3 + 2];
+			float time = sampleIndex / sampleRate;
+			AddTransformCurve(time, binding, values, zeroSlopes, zeroSlopes, 0, path, TangentMode.Linear);
+		}
+	}
+
+	private void WriteAclScale(AclBindingCurveIds ids, float[] scales, int numSamples, byte subTrackType, float sampleRate, float[] zeroSlopes, bool hasScale, byte defaultScale)
+	{
+		// has_scale=0 时 ACL 输出的是默认 scale；Unity 默认 localScale 是 1，
+		// 因此 defaultScale=1 时直接跳过，不留 361 个常数关键帧。
+		if (!hasScale && defaultScale == 1)
+		{
+			return;
+		}
+
+		IGenericBinding binding = GetBinding((int)ids.Scale);
+		string path = GetCurvePath(binding.Path);
+		int keyCount = (hasScale && subTrackType == 2) ? numSamples : Math.Min(numSamples, 2);
+		float[] values = new float[3];
+
+		for (int keyIndex = 0; keyIndex < keyCount; keyIndex++)
+		{
+			int sampleIndex = keyCount == numSamples ? keyIndex : (keyIndex == 0 ? 0 : numSamples - 1);
+			values[0] = scales[sampleIndex * 3 + 0];
+			values[1] = scales[sampleIndex * 3 + 1];
+			values[2] = scales[sampleIndex * 3 + 2];
+			float time = sampleIndex / sampleRate;
+			AddTransformCurve(time, binding, values, zeroSlopes, zeroSlopes, 0, path, TangentMode.Linear);
+		}
+	}
+
 	private void AddCustomCurve(IGenericBinding binding, string path, float time, float value, float inTangent = 0, float outTangent = 0)
 	{
 		switch ((BindingCustomType)binding.CustomType)
@@ -290,7 +512,8 @@ public readonly partial struct AnimationClipConverter
 	}
 
 	private void AddTransformCurve(float time, IGenericBinding binding, ReadOnlySpan<float> curveValues,
-		ReadOnlySpan<float> inSlopeValues, ReadOnlySpan<float> outSlopeValues, int offset, string path)
+		ReadOnlySpan<float> inSlopeValues, ReadOnlySpan<float> outSlopeValues, int offset, string path,
+		TangentMode tangentMode = TangentMode.FreeFree)
 	{
 		switch (binding.TransformType())
 		{
@@ -322,7 +545,7 @@ public readonly partial struct AnimationClipConverter
 					key.OutSlope.SetValues(outX, outY, outZ);
 					key.Time = time;
 					// this enum member is version agnostic
-					key.TangentMode = TangentMode.FreeFree.ToTangent(Version);
+					key.TangentMode = tangentMode.ToTangent(Version);
 					key.WeightedMode = (int)WeightedMode.None;
 					key.InWeight?.SetValues(DefaultFloatWeight, DefaultFloatWeight, DefaultFloatWeight);
 					key.OutWeight?.SetValues(DefaultFloatWeight, DefaultFloatWeight, DefaultFloatWeight);
@@ -360,7 +583,7 @@ public readonly partial struct AnimationClipConverter
 					key.OutSlope.SetValues(outX, outY, outZ, outW);
 					key.Time = time;
 					// this enum member is version agnostic
-					key.TangentMode = TangentMode.FreeFree.ToTangent(Version);
+					key.TangentMode = tangentMode.ToTangent(Version);
 					key.WeightedMode = (int)WeightedMode.None;
 					key.InWeight?.SetValues(DefaultFloatWeight, DefaultFloatWeight, DefaultFloatWeight, DefaultFloatWeight);
 					key.OutWeight?.SetValues(DefaultFloatWeight, DefaultFloatWeight, DefaultFloatWeight, DefaultFloatWeight);
@@ -395,7 +618,7 @@ public readonly partial struct AnimationClipConverter
 					key.OutSlope.SetValues(outX, outY, outZ);
 					key.Time = time;
 					// this enum member is version agnostic
-					key.TangentMode = TangentMode.FreeFree.ToTangent(Version);
+					key.TangentMode = tangentMode.ToTangent(Version);
 					key.WeightedMode = (int)WeightedMode.None;
 					key.InWeight?.SetValues(DefaultFloatWeight, DefaultFloatWeight, DefaultFloatWeight);
 					key.OutWeight?.SetValues(DefaultFloatWeight, DefaultFloatWeight, DefaultFloatWeight);
@@ -434,7 +657,7 @@ public readonly partial struct AnimationClipConverter
 					key.OutSlope.SetValues(outX, outY, outZ);
 					key.Time = time;
 					// this enum member is version agnostic
-					key.TangentMode = TangentMode.FreeFree.ToTangent(Version);
+					key.TangentMode = tangentMode.ToTangent(Version);
 					key.WeightedMode = (int)WeightedMode.None;
 					key.InWeight?.SetValues(DefaultFloatWeight, DefaultFloatWeight, DefaultFloatWeight);
 					key.OutWeight?.SetValues(DefaultFloatWeight, DefaultFloatWeight, DefaultFloatWeight);
@@ -727,5 +950,6 @@ public readonly partial struct AnimationClipConverter
 	private readonly IAnimationClip m_clip;
 	private readonly CustomCurveResolver m_customCurveResolver;
 	private readonly Dictionary<int, IGenericBinding> m_bindingsCache = new(); //cache results from GetBinding(curveID)
+	private static bool s_aclNativeUnavailableLogged;
 	private IAnimationClipBindingConstant ClipBindingConstant => m_clip.ClipBindingConstant_C74!; //This class only supports 4.3 and newer.
 }

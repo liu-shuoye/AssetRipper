@@ -9,6 +9,7 @@ using AssetRipper.SourceGenerated.Subclasses.OffsetPtr_Clip;
 using AssetRipper.SourceGenerated.Subclasses.PPtrCurve;
 using AssetRipper.SourceGenerated.Subclasses.QuaternionCurve;
 using AssetRipper.SourceGenerated.Subclasses.Vector3Curve;
+using System.Buffers.Binary;
 
 namespace AssetRipper.Import.AssetCreation.Nikki4;
 
@@ -21,6 +22,12 @@ public class AnimationClip_Nikki4 : AnimationClip_2018_3
 	private AssetList<uint> m_aclScalarTrackId2CurveId;
 	private ulong m_aclDatabaseHashCache;
 	private readonly Clip m_ACLClip;
+
+	/// <summary>
+	/// 仅当标准 MuscleClip 三段没有有效曲线、且存在 ACL 压缩轨道时保留。
+	/// Blob 已转成连续字节，原 AssetList 仍由 StripAclData 释放，避免长期持有大量小对象。
+	/// </summary>
+	public AclClipPayload? AclPayload { get; private set; }
 
 	public AnimationClip_Nikki4(AssetInfo info) : base(info)
 	{
@@ -66,13 +73,15 @@ public class AnimationClip_Nikki4 : AnimationClip_2018_3
 		Clip.Data.StreamedClip.ReadRelease(ref reader);
 		Clip.Data.DenseClip.ReadRelease(ref reader);
 		Clip.Data.ConstantClip?.ReadRelease(ref reader);
+		// 空壳 clip 的标准三段只有空帧/空数组，真正的曲线在后面的 ACL 段。
+		bool standardClipEmpty = Clip.Data.StreamedClip.Data.Count <= 2
+			&& Clip.Data.DenseClip.CurveCount == 0
+			&& (!Clip.Data.Has_ConstantClip() || Clip.Data.ConstantClip.Data.Count == 0);
 
 		this.m_ACLClip.ReadRelease(ref reader);
 		// Nikki4 魔改引擎在标准 MuscleClip 之外附加了一份 ACL 压缩动画数据（m_ACLClip 及 cache）。
-		// 本 fork 的动画曲线由标准 MuscleClip 经 AnimationClipConverter 转换导出，这些字段除
-		// ReadRelease 外无任何消费端（grep 确认），读取后立即释放，避免 2957 万 UInt4StorageAligned
-		// 等对象驻留堆上（约 1GB）。TODO 若未来实现 ACL 解压导出，需在此恢复数据。
-		StripAclData();
+		// 标准三段为空时，这里才是唯一曲线来源；先在 ACL 段读完后保留连续 blob 与映射表，
+		// 其余大对象仍交给 StripAclData 释放。处理阶段消费完可调用 ClearAclPayload 提前释放。
 
 		this.MuscleClip_C74.StartTime = reader.ReadSingle();
 		this.MuscleClip_C74.StopTime = reader.ReadSingle();
@@ -106,6 +115,52 @@ public class AnimationClip_Nikki4 : AnimationClip_2018_3
 		this.HasGenericRootTransform_C74 = reader.ReadBoolean();
 		this.HasMotionFloatCurves_C74 = reader.ReadRelease_BooleanAlign();
 		this.Events_C74.ReadRelease_ArrayAlign_Asset<AnimationEvent_5>(ref reader);
+
+		if (standardClipEmpty && m_ACLClip.CompressedTransformTracks.Count > 0)
+		{
+			AclPayload = BuildAclPayload();
+		}
+		StripAclData();
+	}
+
+	/// <summary>
+	/// 把 ACL 轨道数组压成连续 blob，并把映射表复制成紧凑结构。
+	/// 注意：每个 UInt4StorageAligned 是 16 字节，ACL 原始数据按 16 字节补齐。
+	/// </summary>
+	private AclClipPayload BuildAclPayload()
+	{
+		int trackCount = m_ACLClip.CompressedTransformTracks.Count;
+		byte[] blob = new byte[checked(trackCount * 16)];
+		int offset = 0;
+		foreach (UInt4StorageAligned entry in m_ACLClip.CompressedTransformTracks)
+		{
+			BinaryPrimitives.WriteUInt32LittleEndian(blob.AsSpan(offset + 0), entry.X);
+			BinaryPrimitives.WriteUInt32LittleEndian(blob.AsSpan(offset + 4), entry.Y);
+			BinaryPrimitives.WriteUInt32LittleEndian(blob.AsSpan(offset + 8), entry.Z);
+			BinaryPrimitives.WriteUInt32LittleEndian(blob.AsSpan(offset + 12), entry.W);
+			offset += 16;
+		}
+
+		int mappingCount = m_ACLClip.AclTransformTrackIDToBindingCurveID.Count;
+		AclBindingCurveIds[] mapping = new AclBindingCurveIds[mappingCount];
+		for (int i = 0; i < mappingCount; i++)
+		{
+			AclTransformTrackIDToBindingCurveID entry = m_ACLClip.AclTransformTrackIDToBindingCurveID[i];
+			mapping[i] = new AclBindingCurveIds(
+				entry.RotationIDToBindingCurveID,
+				entry.PositionIDToBindingCurveID,
+				entry.ScaleIDToBindingCurveID);
+		}
+
+		return new AclClipPayload(blob, mapping);
+	}
+
+	/// <summary>
+	/// Processing 层消费完 ACL 曲线后调用，尽快释放 blob。
+	/// </summary>
+	public void ClearAclPayload()
+	{
+		AclPayload = null;
 	}
 
 	/// <summary>

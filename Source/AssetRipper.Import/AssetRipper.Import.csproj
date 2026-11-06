@@ -25,4 +25,11 @@
 		<ProjectReference Include="..\AssetRipper.SourceGenerated.Extensions\AssetRipper.SourceGenerated.Extensions.csproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<!-- ACL 原生解压器：External/acl-native/build.ps1 构建后放在 bin/acl-native.dll -->
+		<None Include="..\..\External\acl-native\bin\acl-native.dll">
+			<Link>acl-native.dll</Link>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
 </Project>
