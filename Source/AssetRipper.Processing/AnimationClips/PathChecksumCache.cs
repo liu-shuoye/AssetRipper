@@ -1,6 +1,7 @@
 using AssetRipper.Assets;
 using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
+using AssetRipper.Assets.Generics;
 using AssetRipper.Assets.Metadata;
 using AssetRipper.Checksum;
 using AssetRipper.Import.Structure.Assembly;
@@ -9,10 +10,14 @@ using AssetRipper.SerializationLogic;
 using AssetRipper.SourceGenerated.Classes.ClassID_1;
 using AssetRipper.SourceGenerated.Classes.ClassID_111;
 using AssetRipper.SourceGenerated.Classes.ClassID_115;
+using AssetRipper.SourceGenerated.Classes.ClassID_142;
 using AssetRipper.SourceGenerated.Classes.ClassID_4;
 using AssetRipper.SourceGenerated.Classes.ClassID_90;
 using AssetRipper.SourceGenerated.Classes.ClassID_95;
 using AssetRipper.SourceGenerated.Extensions;
+using System.IO;
+using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace AssetRipper.Processing.AnimationClips;
 
@@ -35,13 +40,23 @@ public readonly struct PathChecksumCache
 	public PathChecksumCache(IEnumerable<AssetCollection> collections, IAssemblyManager assemblyManager)
 	{
 		this.assemblyManager = assemblyManager;
-		BuildPathsCache(collections);
+		this.collections = collections as AssetCollection[] ?? collections.ToArray();
+		BuildPathsCache(this.collections);
 	}
 
 	private readonly Dictionary<string, uint> cachedPropertyNames = new() { { string.Empty, 0 } };
 	private readonly Dictionary<uint, string> cachedChecksums = new() { { 0, string.Empty } };
 	private readonly HashSet<AssetInfo> processedAssets = new();
+	private readonly HashSet<string> knownPaths = new();
+	private readonly AssetCollection[] collections;
+	private readonly List<string> avatarPaths = new();
 	private readonly IAssemblyManager assemblyManager;
+
+	/// <summary>
+	/// 每个游戏根 Bundle 只建一次 AssetBundle 名索引：导出阶段每个剪辑都会新建缓存，
+	/// 但集合与 AssetBundle 名通常不变，避免对 10 万级集合反复反序列化 IAssetBundle。
+	/// </summary>
+	private static readonly ConditionalWeakTable<Bundle, Dictionary<string, AssetCollection>> s_assetBundleNameIndexes = new();
 
 	private void AddAnimatorPathsToCache(IAnimator animator)
 	{
@@ -102,6 +117,7 @@ public readonly struct PathChecksumCache
 	{
 		foreach ((uint key, Utf8String value) in avatar.TOS)
 		{
+			avatarPaths.Add(value.ToString());
 			AddKeys(key, value);
 		}
 	}
@@ -204,15 +220,135 @@ public readonly struct PathChecksumCache
 		return cachedChecksums.TryGetValue(identifier, out path);
 	}
 
+	/// <summary>
+	/// Avatar TOS 里收集到的骨架路径，供 Nikki4 布料运行时挂点解析使用。
+	/// </summary>
+	public IReadOnlyList<string> AvatarPaths => avatarPaths;
+
+	/// <summary>
+	/// 缓存里出现过的全部路径名（Avatar/Animator/Animation 层级与字段路径）。
+	/// 布料挂点解析用它作为候选父路径，避免只依赖可能为空的 Avatar TOS。
+	/// </summary>
+	public IReadOnlyCollection<string> KnownPaths => knownPaths;
+
+	/// <summary>缓存覆盖的资产集合数量（用于分批/耗时评估）。</summary>
+	public int CollectionCount => collections.Length;
+
+	/// <summary>缓存里的路径名数量（用于分批/耗时评估）。</summary>
+	public int KnownPathCount => knownPaths.Count;
+
+	/// <summary>Avatar TOS 路径数量（用于分批/耗时评估）。</summary>
+	public int AvatarPathCount => avatarPaths.Count;
+
+	/// <summary>
+	/// 按 bundle 文件名查找集合（例如 <c>ph00151.prefab</c>）。
+	/// 只走一次构建的名称索引：布料解析会对每个 clip 尝试多个候选名，
+	/// 不能对每个候选线性扫描全部集合。
+	/// </summary>
+	public AssetCollection? FindCollectionByBundleFileName(string fileName)
+	{
+		return GetAssetBundleNameIndex().TryGetValue(fileName, out AssetCollection? result) ? result : null;
+	}
+
+	private Dictionary<string, AssetCollection> GetAssetBundleNameIndex()
+	{
+		if (collections.Length == 0)
+		{
+			return new Dictionary<string, AssetCollection>(StringComparer.OrdinalIgnoreCase);
+		}
+
+		Bundle root = collections[0].Bundle.GetRoot();
+		AssetCollection[] localCollections = collections;
+		return s_assetBundleNameIndexes.GetValue(root, _ => BuildAssetBundleNameIndex(localCollections));
+	}
+
+	private static Dictionary<string, AssetCollection> BuildAssetBundleNameIndex(AssetCollection[] collections)
+	{
+		Dictionary<string, AssetCollection> index = new(StringComparer.OrdinalIgnoreCase);
+		foreach (AssetCollection collection in collections)
+		{
+			// Bundle.Name 在 Nikki4 上通常是 CAB 哈希，但少数裸 SerializedFile 会带逻辑文件名。
+			string collectionName = collection.Bundle.Name;
+			if (collectionName.Length != 0)
+			{
+				index.TryAdd(collectionName, collection);
+				string collectionFileName = Path.GetFileName(collectionName);
+				if (collectionFileName.Length != 0)
+				{
+					index.TryAdd(collectionFileName, collection);
+				}
+			}
+
+			foreach (AssetCollection.AssetMetadata meta in collection.EnumerateAssetMetadata())
+			{
+				if (meta.ClassID != 142)
+				{
+					continue;
+				}
+
+				IAssetBundle? assetBundle = collection.TryGetAssetOnly<IAssetBundle>(meta.PathID);
+				if (assetBundle is null)
+				{
+					continue;
+				}
+
+				string bundleName = assetBundle.GetAssetBundleName();
+				string? assetName = assetBundle.TryGetName();
+				if (!string.IsNullOrEmpty(bundleName))
+				{
+					index.TryAdd(bundleName, collection);
+					string fileName = Path.GetFileName(bundleName);
+					if (fileName.Length != 0)
+					{
+						index.TryAdd(fileName, collection);
+					}
+				}
+
+				if (!string.IsNullOrEmpty(assetName))
+				{
+					index.TryAdd(assetName, collection);
+					string fileName = Path.GetFileName(assetName);
+					if (fileName.Length != 0)
+					{
+						index.TryAdd(fileName, collection);
+					}
+				}
+
+				// AssetBundle 的资源清单 key 才是逻辑资产路径（如 .../ph00151.prefab）；
+				// m_AssetBundleName / m_Name 在 Nikki4 上可能只是 CAB 哈希。
+				foreach (AccessPairBase<Utf8String, AssetRipper.SourceGenerated.Subclasses.AssetInfo.IAssetInfo> pair in assetBundle.Container)
+				{
+					string assetPath = pair.Key.ToString();
+					if (assetPath.Length == 0)
+					{
+						continue;
+					}
+
+					index.TryAdd(assetPath, collection);
+					string assetFileName = Path.GetFileName(assetPath);
+					if (assetFileName.Length != 0)
+					{
+						index.TryAdd(assetFileName, collection);
+					}
+				}
+				break;
+			}
+		}
+		return index;
+	}
+
 	public void Reset()
 	{
 		cachedPropertyNames.Clear();
 		cachedChecksums.Clear();
 		processedAssets.Clear();
+		knownPaths.Clear();
+		avatarPaths.Clear();
 	}
 
 	private void AddKeys(uint checksum, string propertyName)
 	{
+		knownPaths.Add(propertyName);
 		cachedPropertyNames[propertyName] = checksum;
 		cachedChecksums[checksum] = propertyName;
 	}

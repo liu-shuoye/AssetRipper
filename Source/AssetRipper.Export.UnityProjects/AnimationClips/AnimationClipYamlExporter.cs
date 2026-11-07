@@ -3,8 +3,10 @@ using AssetRipper.Assets.Bundles;
 using AssetRipper.Assets.Collections;
 using AssetRipper.Export.UnityProjects.Project;
 using AssetRipper.Import.Structure.Assembly.Managers;
+using AssetRipper.Logging;
 using AssetRipper.Processing.AnimationClips;
 using AssetRipper.SourceGenerated.Classes.ClassID_74;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
 namespace AssetRipper.Export.UnityProjects.AnimationClips;
@@ -18,6 +20,8 @@ namespace AssetRipper.Export.UnityProjects.AnimationClips;
 public sealed class AnimationClipYamlExporter : YamlExporterBase
 {
 	private readonly IAssemblyManager assemblyManager;
+	private PathChecksumCache? checksumCache;
+	private Bundle? checksumCacheRoot;
 
 	public AnimationClipYamlExporter(IAssemblyManager assemblyManager)
 	{
@@ -39,15 +43,37 @@ public sealed class AnimationClipYamlExporter : YamlExporterBase
 
 		// 导出前按需转换。路径哈希缓存（Avatar/Animator/Animation 的路径名 → CRC）处理阶段已不再构建，
 		// 这里从资产可达的集合集合重建；GameBundle 之外的独立集合退化为只含当前集合。
-		IEnumerable<AssetCollection> collections = asset.Collection.Bundle is GameBundle gameBundle
-			? gameBundle.FetchAssetCollections()
-			: [asset.Collection];
-		PathChecksumCache checksumCache = new(collections, assemblyManager);
+		// 从根 GameBundle 取全部集合：布料骨骼运行时会被移植到角色骨架，
+		// 只取当前 clip 所在的 SerializedBundle 会看不到角色 Avatar 与布料 prefab。
+		Bundle rootBundle = asset.Collection.Bundle.GetRoot();
+		if (checksumCache is null || checksumCacheRoot != rootBundle)
+		{
+			IEnumerable<AssetCollection> collections = rootBundle is GameBundle gameBundle
+				? gameBundle.FetchAssetCollections()
+				: [asset.Collection];
+			Stopwatch stopwatch = Stopwatch.StartNew();
+			long managedBefore = GC.GetTotalMemory(false);
+			long workingSetBefore = Environment.WorkingSet;
+			checksumCache = new PathChecksumCache(collections, assemblyManager);
+			stopwatch.Stop();
+			PathChecksumCache builtCache = checksumCache.Value;
+			Logger.Info(LogCategory.Export,
+				$"[Timing] PathChecksumCache build: {stopwatch.ElapsedMilliseconds} ms, "
+				+ $"collections={builtCache.CollectionCount}, knownPaths={builtCache.KnownPathCount}, "
+				+ $"avatarPaths={builtCache.AvatarPathCount}, "
+				+ $"managed={(GC.GetTotalMemory(false) - managedBefore) / (1024.0 * 1024.0):F1} MB delta, "
+				+ $"workingSet={(Environment.WorkingSet - workingSetBefore) / (1024.0 * 1024.0):F1} MB delta");
+			checksumCacheRoot = rootBundle;
+		}
+		PathChecksumCache checksumCacheValue = checksumCache.Value;
 		try
 		{
+			// 布料骨骼在运行时被移植到角色骨架挂点，静态 Avatar/Animator 路径收集不到；
+			// 先按剪辑自身的 path 哈希精确解析出运行时挂点，再转换曲线。
+			Nikki4ClothAnimationPathResolver.TryAddPaths(clip, checksumCacheValue);
 			// 转换假定曲线字段为空：先清一遍，避免上次导出异常残留导致重复追加曲线
 			StripConvertedCurves(clip);
-			AnimationClipConverter.Process(clip, checksumCache);
+			AnimationClipConverter.Process(clip, checksumCacheValue);
 			return base.Export(container, asset, path, fileSystem);
 		}
 		finally
