@@ -43,8 +43,8 @@ public static class Nikki4ClothAnimationPathResolver
 	private const int MaxDbRootsForProbe = 200;
 	/// <summary>三段式粗筛使用的 DB 链根数量。</summary>
 	private const int CoarseProbeCount = 3;
-	/// <summary>粗筛后进入精算的组合数量。</summary>
-	private const int RefineCandidateCount = 8;
+	/// <summary>三段穷举时精算的 (挂点, REG) 组合上限；要能覆盖多个挂点下的多条 REG 链。</summary>
+	private const int MaxRefineCandidates = 512;
 
 	/// <summary>部件 prefab 的骨骼布局：DB 链、REG 子树、两者的链根。</summary>
 	private sealed class BoneLayout
@@ -82,9 +82,10 @@ public static class Nikki4ClothAnimationPathResolver
 			return;
 		}
 
-		// 两段式：挂点 + DB 链（普通布料）。
+		// 快速路径：两段式（挂点 + DB 链）已经全命中时直接注入，普通布料都走这里。
 		string? bestAvatar = FindBestAvatarPath(cache, layout.DbPaths, hashes);
-		if (bestAvatar is not null)
+		int bestAvatarCovered = bestAvatar is null ? 0 : CountCovered(bestAvatar, layout.DbPaths, hashes);
+		if (bestAvatar is not null && bestAvatarCovered == hashes.Count)
 		{
 			foreach (string dbPath in layout.DbPaths)
 			{
@@ -94,30 +95,122 @@ public static class Nikki4ClothAnimationPathResolver
 			return;
 		}
 
-		// 三段式：挂点 + REG 骨骼链 + DB 链（宠物/挂件）。
-		(string Mount, string Reg)? regMount = FindBestRegMount(cache, layout, hashes);
-		if (regMount is null)
-		{
-			return;
-		}
+		// 覆盖不全时穷举“两段”和“三段”（允许不同 DB 链命中不同挂点），
+		// 再按命中总数决定是否接受：两段式只能覆盖 DB 链根那一层，不能命中 ≥3 就提前返回。
+		List<string> mounts = GetAvatarMounts(cache);
+		HashSet<uint> covered = new();
+		List<(string Mount, string Path)> hitPaths = new();
 
-		int injected = 0;
-		foreach (string regPath in layout.RegPaths)
+		foreach (string mount in mounts)
 		{
-			cache.Add($"{regMount.Value.Mount}/{regPath}");
-			injected++;
 			foreach (string dbPath in layout.DbPaths)
 			{
-				string full = $"{regMount.Value.Mount}/{regPath}/{dbPath}";
-				// 只注入真正命中哈希的组合，避免把大量无关键乘进缓存。
-				if (hashes.Contains(Crc32Algorithm.HashUTF8(full)))
+				uint hash = Crc32Algorithm.HashUTF8($"{mount}/{dbPath}");
+				if (hashes.Contains(hash))
 				{
-					cache.Add(full);
-					injected++;
+					covered.Add(hash);
+					hitPaths.Add((mount, dbPath));
 				}
 			}
 		}
-		LogResolved(clipName, regMount.Value.Mount, injected, hashes, cache, $"REG/DB，REG 前缀 '{regMount.Value.Reg}'");
+
+		// 三段式：候选 (挂点, REG) 用全部 DB 链根做探针——只用前几个根会漏掉
+		// 命中集中在其它链根的挂点（S0656H 的三段命中全在 root/hips，前 3 个根探测不到）。
+		if (layout.RegPaths.Length > 0 && layout.RegPaths.Length <= MaxRegPathsForDeepSearch
+			&& layout.DbRoots.Length > 0 && layout.DbRoots.Length <= MaxDbRootsForProbe)
+		{
+			// 超大 prefab 降级为少量探针，避免 mount × REG × DB 乘积失控。
+			int probeCount = layout.DbRoots.Length;
+			if ((long)mounts.Count * layout.RegPaths.Length * probeCount > 8_000_000)
+			{
+				probeCount = Math.Min(CoarseProbeCount, probeCount);
+			}
+
+			List<(int Hits, string Mount, string Reg)> candidates = new();
+			foreach (string mount in mounts)
+			{
+				foreach (string reg in layout.RegPaths)
+				{
+					int hits = 0;
+					for (int i = 0; i < probeCount; i++)
+					{
+						if (hashes.Contains(Crc32Algorithm.HashUTF8($"{mount}/{reg}/{layout.DbRoots[i]}")))
+						{
+							hits++;
+						}
+					}
+					if (hits > 0)
+					{
+						candidates.Add((hits, mount, reg));
+					}
+				}
+			}
+			candidates.Sort((a, b) => b.Hits - a.Hits);
+
+			int refineCount = Math.Min(MaxRefineCandidates, candidates.Count);
+			for (int c = 0; c < refineCount; c++)
+			{
+				(int Hits, string Mount, string Reg) candidate = candidates[c];
+				foreach (string dbPath in layout.DbPaths)
+				{
+					uint hash = Crc32Algorithm.HashUTF8($"{candidate.Mount}/{candidate.Reg}/{dbPath}");
+					if (hashes.Contains(hash))
+					{
+						covered.Add(hash);
+						hitPaths.Add((candidate.Mount, $"{candidate.Reg}/{dbPath}"));
+					}
+				}
+			}
+		}
+
+		if (covered.Count >= MinProbeHits)
+		{
+			foreach ((string mount, string path) in hitPaths)
+			{
+				cache.Add($"{mount}/{path}");
+			}
+			LogResolved(clipName, $"多挂点({mounts.Count} 个候选)", hitPaths.Count, hashes, cache, "两段/三段穷举");
+			return;
+		}
+
+		// 穷举仍不足 3 个命中时回落到两段式最佳挂点，保持原有行为。
+		if (bestAvatar is not null)
+		{
+			foreach (string dbPath in layout.DbPaths)
+			{
+				cache.Add($"{bestAvatar}/{dbPath}");
+			}
+			LogResolved(clipName, bestAvatar, layout.DbPaths.Length, hashes, cache, "DB");
+		}
+	}
+
+	/// <summary>统计“挂点/路径”形式能精确命中的哈希数。</summary>
+	private static int CountCovered(string mount, string[] paths, HashSet<uint> hashes)
+	{
+		HashSet<uint> covered = new();
+		foreach (string path in paths)
+		{
+			uint hash = Crc32Algorithm.HashUTF8($"{mount}/{path}");
+			if (hashes.Contains(hash))
+			{
+				covered.Add(hash);
+			}
+		}
+		return covered.Count;
+	}
+
+	private static List<string> GetAvatarMounts(PathChecksumCache cache)
+	{
+		List<string> mounts = new();
+		HashSet<string> seen = new();
+		foreach (string path in cache.AvatarPaths)
+		{
+			if (path.Length != 0 && path.Contains('/') && seen.Add(path))
+			{
+				mounts.Add(path);
+			}
+		}
+		return mounts;
 	}
 
 	private static void LogResolved(string clipName, string mount, int injected, HashSet<uint> hashes, PathChecksumCache cache, string kind)
@@ -275,95 +368,6 @@ public static class Nikki4ClothAnimationPathResolver
 		}
 
 		return bestHits >= MinProbeHits ? bestAvatar : null;
-	}
-
-	/// <summary>
-	/// 三段式挂点搜索：用 <c>挂点/REG 节点/DB 链根</c> 的哈希命中数定位挂点与 REG 前缀。
-	/// 先用少量 DB 链根粗筛，再对候选组合精算，避免 REG × 挂点 × DB 的全量乘积。
-	/// </summary>
-	private static (string Mount, string Reg)? FindBestRegMount(PathChecksumCache cache, BoneLayout layout, HashSet<uint> hashes)
-	{
-		if (layout.RegPaths.Length == 0 || layout.RegPaths.Length > MaxRegPathsForDeepSearch)
-		{
-			return null;
-		}
-		if (layout.DbRoots.Length == 0 || layout.DbRoots.Length > MaxDbRootsForProbe)
-		{
-			return null;
-		}
-
-		List<string> mounts = new();
-		HashSet<string> seenMounts = new();
-		foreach (string path in cache.AvatarPaths)
-		{
-			if (path.Length != 0 && path.Contains('/') && seenMounts.Add(path))
-			{
-				mounts.Add(path);
-			}
-		}
-		if (mounts.Count == 0)
-		{
-			return null;
-		}
-
-		int coarseCount = Math.Min(CoarseProbeCount, layout.DbRoots.Length);
-		int bestCoarse = 0;
-		string? bestMount = null;
-		string? bestReg = null;
-		foreach (string mount in mounts)
-		{
-			foreach (string reg in layout.RegPaths)
-			{
-				int hits = 0;
-				for (int i = 0; i < coarseCount; i++)
-				{
-					if (hashes.Contains(Crc32Algorithm.HashUTF8($"{mount}/{reg}/{layout.DbRoots[i]}")))
-					{
-						hits++;
-					}
-				}
-				if (hits > bestCoarse)
-				{
-					bestCoarse = hits;
-					bestMount = mount;
-					bestReg = reg;
-				}
-			}
-		}
-		if (bestMount is null || bestReg is null || bestCoarse == 0)
-		{
-			return null;
-		}
-
-		// 精算：对粗筛靠前的候选组合统计全部 DB 链根的命中数。
-		List<(int Hits, string Mount, string Reg)> candidates = new();
-		foreach (string mount in mounts)
-		{
-			foreach (string reg in layout.RegPaths)
-			{
-				int hits = 0;
-				foreach (string dbRoot in layout.DbRoots)
-				{
-					if (hashes.Contains(Crc32Algorithm.HashUTF8($"{mount}/{reg}/{dbRoot}")))
-					{
-						hits++;
-					}
-				}
-				if (hits > 0)
-				{
-					candidates.Add((hits, mount, reg));
-				}
-			}
-		}
-		candidates.Sort((a, b) => b.Hits - a.Hits);
-
-		if (candidates.Count == 0 || candidates[0].Hits < MinProbeHits)
-		{
-			return null;
-		}
-
-		// 只保留命中数最高的若干组合里最好的那个；同一部件的 DB 链通常挂在同一个 REG 前缀下。
-		return (candidates[0].Mount, candidates[0].Reg);
 	}
 
 	private static string[] GetProbePaths(string[] dbPaths)
