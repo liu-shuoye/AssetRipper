@@ -8,6 +8,7 @@ using AssetRipper.Primitives;
 using AssetRipper.Processing;
 using AssetRipper.SourceGenerated.Classes.ClassID_115;
 using AssetRipper.SourceGenerated.Extensions;
+using System.Reflection;
 
 namespace AssetRipper.Tests;
 
@@ -124,6 +125,59 @@ internal class ScriptExporterTests
 		script.Namespace = @namespace;
 		script.ClassName_R = className;
 		return script;
+	}
+
+	/// <summary>
+	/// dll 内脚本在工程 Assembly-CSharp 中存在同命名空间同类名脚本时，引用应改指向该 .cs 资源。
+	/// 用反射向生成类的私有字典注入一条记录，避免为测试污染生成数据。
+	/// </summary>
+	[Test]
+	public static void DllScriptPointerUsesProjectScriptWhenMatched()
+	{
+		const string GuidString = "1234567890abcdef1234567890abcdef";
+		(string, string, string) key = ("Assembly-CSharp", "Project.Ns", "SharedBehaviour");
+		Dictionary<(string, string, string), UnityGuid> map = GetScriptGuidMap();
+		bool hadValue = map.TryGetValue(key, out UnityGuid oldGuid);
+		map[key] = UnityGuid.Parse(GuidString);
+		try
+		{
+			IMonoScript script = CreateScript("GameLogic", "Project.Ns", "SharedBehaviour");
+			MetaPtr pointer = ScriptExporter.CreateDllScriptPointer(script);
+			// 11500000 = MonoScript 的 ClassID(115) × 100000，源码脚本的固定导出 ID
+			Assert.That(pointer.FileID, Is.EqualTo(11500000));
+			Assert.That(pointer.GUID, Is.EqualTo(UnityGuid.Parse(GuidString)));
+		}
+		finally
+		{
+			// 静态字典被所有测试共享，必须还原，避免影响其它用例
+			if (hadValue)
+			{
+				map[key] = oldGuid;
+			}
+			else
+			{
+				map.Remove(key);
+			}
+		}
+	}
+
+	/// <summary>
+	/// 未命中同名工程脚本时，dll 内脚本必须保持原有的 MD4 fileID + 程序集 GUID。
+	/// </summary>
+	[Test]
+	public static void DllScriptPointerFallsBackToDllWhenNotMatched()
+	{
+		IMonoScript script = CreateScript("GameLogic", "Unknown.Ns", "UnknownBehaviour");
+		MetaPtr pointer = ScriptExporter.CreateDllScriptPointer(script);
+		Assert.That(pointer.FileID, Is.EqualTo(ScriptHashing.CalculateScriptFileID(script)));
+		Assert.That(pointer.GUID, Is.EqualTo(ScriptHashing.CalculateAssemblyGuid(script)));
+	}
+
+	private static Dictionary<(string, string, string), UnityGuid> GetScriptGuidMap()
+	{
+		FieldInfo? field = typeof(UnityPackageAssemblyMap).GetField("s_scriptGuidMap", BindingFlags.NonPublic | BindingFlags.Static);
+		Assert.That(field, Is.Not.Null, "生成类中脚本映射字典的字段名发生变化");
+		return (Dictionary<(string, string, string), UnityGuid>)field!.GetValue(null)!;
 	}
 
 	private static VirtualFileSystem Export(ProcessedAssetCollection collection)

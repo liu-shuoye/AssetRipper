@@ -33,6 +33,10 @@ public class ScriptExporter : IAssetExporter
 	private bool HasDecompiled { get; set; } = false;
 	private static long MonoScriptDecompiledFileID { get; } = ExportIdHandler.GetMainExportID((int)ClassIDType.MonoScript);
 
+	// 采集器把 Unity 工程 Assets/Scripts 下未归属 .asmdef 的脚本归入预定义程序集 Assembly-CSharp。
+	// dll 内脚本的程序集名通常是 dll 名，因此要用这个名字单独做一次同名脚本查找。
+	private const string ProjectScriptAssemblyName = "Assembly-CSharp";
+
 	public bool TryCreateCollection(IUnityObjectBase asset, [NotNullWhen(true)] out IExportCollection? exportCollection)
 	{
 		if (asset is IMonoScript script)
@@ -70,6 +74,7 @@ public class ScriptExporter : IAssetExporter
 	/// <summary>
 	/// 创建指向该脚本资源的导出指针（供场景、预制体中的 m_Script 等引用使用）。
 	/// 采集到 .cs.meta 原始 GUID 的脚本一律使用 Unity 原生脚本引用格式；其余按导出类型沿用哈希算法。
+	/// 脚本位于 dll 内时，还会按命名空间与类名回退查找工程里的 Assembly-CSharp 同名脚本。
 	/// </summary>
 	public MetaPtr CreateExportPointer(IMonoScript script)
 	{
@@ -80,8 +85,32 @@ public class ScriptExporter : IAssetExporter
 			AssemblyExportType.Decompile => new(MonoScriptDecompiledFileID, ResolveScriptGuid(script), AssetType.Meta),
 			// Skip 分支的脚本不随工程导出，引用必须指向目标工程中已存在的脚本资源
 			AssemblyExportType.Skip => CreateSkipExportPointer(script),
-			_ => new(ScriptHashing.CalculateScriptFileID(script), ScriptHashing.CalculateAssemblyGuid(script), AssetType.Meta),
+			_ => CreateDllScriptPointer(script),
 		};
+	}
+
+	/// <summary>
+	/// 为脚本位于 dll 内（AssemblyExportType.Save）的情况创建导出指针。
+	/// 优先在采集到的 Assembly-CSharp 工程脚本中按 (命名空间, 类名) 查找同名脚本，
+	/// 命中则改用该 .cs.meta 的 GUID 与源码脚本固定 fileID；未命中保持 dll 内的引用格式不变。
+	/// </summary>
+	/// <param name="script">当前位于 dll 内的 MonoScript。</param>
+	/// <returns>指向工程脚本或 dll 内脚本的导出指针。</returns>
+	/// <remarks>
+	/// 命中时目标工程中必须已存在对应 .cs 文件；导出到全新目录且未带上该脚本时，引用会成为 Missing Script。
+	/// </remarks>
+	public static MetaPtr CreateDllScriptPointer(IMonoScript script)
+	{
+		string ns = Encoding.UTF8.GetString(script.Namespace.Data);
+		string className = Encoding.UTF8.GetString(script.ClassName_R.Data);
+		if (UnityPackageAssemblyMap.TryGetScriptGuid(ProjectScriptAssemblyName, ns, className, out UnityGuid projectScriptGuid))
+		{
+			// 源码脚本用 11500000，dll 内脚本用 MD4(namespace + className) 算出的 fileID，两者不能混用
+			return new MetaPtr(MonoScriptDecompiledFileID, projectScriptGuid, AssetType.Meta);
+		}
+
+		// 未命中：保持历史行为，引用指向 dll 资源及其内部脚本对象
+		return new MetaPtr(ScriptHashing.CalculateScriptFileID(script), ScriptHashing.CalculateAssemblyGuid(script), AssetType.Meta);
 	}
 
 	/// <summary>
