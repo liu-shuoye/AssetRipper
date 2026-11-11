@@ -67,38 +67,68 @@ public class ScriptExporter : IAssetExporter
 		return GetExportType(script.GetAssemblyNameFixed());
 	}
 
+	/// <summary>
+	/// 创建指向该脚本资源的导出指针（供场景、预制体中的 m_Script 等引用使用）。
+	/// 采集到 .cs.meta 原始 GUID 的脚本一律使用 Unity 原生脚本引用格式；其余按导出类型沿用哈希算法。
+	/// </summary>
 	public MetaPtr CreateExportPointer(IMonoScript script)
 	{
 		return GetExportType(script) switch
 		{
-			AssemblyExportType.Decompile => new(MonoScriptDecompiledFileID, ScriptHashing.CalculateScriptGuid(script), AssetType.Meta),
-			// Skip 分支：UPM 程序集优先用每个脚本的真实 .cs.meta GUID（fileID=11500000），
-			// 与 Unity Package Manager 安装后的资产 GUID 一致；未命中时回退到程序集级 GUID
+			// Decompile 会把脚本以 .cs 形式导出，其 .cs.meta 也走 ResolveScriptGuid，
+			// 两边共用同一解析结果才能保证引用与资源 GUID 一致
+			AssemblyExportType.Decompile => new(MonoScriptDecompiledFileID, ResolveScriptGuid(script), AssetType.Meta),
+			// Skip 分支的脚本不随工程导出，引用必须指向目标工程中已存在的脚本资源
 			AssemblyExportType.Skip => CreateSkipExportPointer(script),
 			_ => new(ScriptHashing.CalculateScriptFileID(script), ScriptHashing.CalculateAssemblyGuid(script), AssetType.Meta),
 		};
 	}
 
 	/// <summary>
+	/// 解析脚本资源应使用的 GUID：优先取采集到的 .cs.meta 原始 GUID（UPM 包脚本与工程 Assets/Scripts 脚本），
+	/// 未命中时回退到基于 (程序集名, 命名空间, 类名) 的哈希，保持历史导出结果不变。
+	/// </summary>
+	/// <param name="script">待解析的 MonoScript 资源。</param>
+	/// <returns>该脚本在导出工程中应使用的资产 GUID。</returns>
+	/// <remarks>
+	/// 引用指针与导出脚本的 .cs.meta 必须共用此入口，否则预制体中的 m_Script 会指向一个不存在的 GUID。
+	/// </remarks>
+	public static UnityGuid ResolveScriptGuid(IMonoScript script)
+	{
+		return TryGetCollectedScriptGuid(script, out UnityGuid guid) ? guid : ScriptHashing.CalculateScriptGuid(script);
+	}
+
+	/// <summary>
+	/// 尝试查询采集器记录的脚本原始 GUID。
+	/// </summary>
+	private static bool TryGetCollectedScriptGuid(IMonoScript script, out UnityGuid guid)
+	{
+		string assemblyName = script.GetAssemblyNameFixed();
+		// Namespace.Data 和 ClassName_R.Data 返回 ReadOnlySpan<byte>，需转为 string 用于字典查找
+		string ns = Encoding.UTF8.GetString(script.Namespace.Data);
+		string className = Encoding.UTF8.GetString(script.ClassName_R.Data);
+		return UnityPackageAssemblyMap.TryGetScriptGuid(assemblyName, ns, className, out guid);
+	}
+
+	/// <summary>
 	/// 为 Skip 路径下的脚本创建导出指针。
-	/// UPM 程序集：优先用脚本级映射（.cs.meta GUID + fileID=11500000），保证与 Unity 包内脚本引用一致。
-	/// 传统引用程序集或 UPM 脚本未命中映射时：回退到程序集级 GUID + MD4 fileID。
+	/// 只要命中脚本级 .cs.meta GUID 就用 fileID=11500000 + 该 GUID，不再限定于 UPM 程序集；
+	/// 未命中时：UPM 程序集回退到程序集级 GUID，传统引用程序集用 ReferenceAssemblyDictionary 的 GUID。
 	/// </summary>
 	private MetaPtr CreateSkipExportPointer(IMonoScript script)
 	{
+		// 采集到的脚本在目标工程里已有对应 .cs 资源，按 Unity 原生脚本引用格式指向它
+		if (TryGetCollectedScriptGuid(script, out UnityGuid scriptGuid))
+		{
+			return new MetaPtr(MonoScriptDecompiledFileID, scriptGuid, AssetType.Meta);
+		}
+
 		string assemblyName = script.GetAssemblyNameFixed();
 		if (UnityPackageAssemblyMap.TryGetInfo(assemblyName, out _))
 		{
-			// UPM 程序集：优先查脚本级 .cs.meta GUID
-			// Namespace.Data 和 ClassName_R.Data 返回 ReadOnlySpan<byte>，需转为 string 用于字典查找
+			// 脚本级映射未命中：回退到程序集级 GUID，并输出警告便于后续补充映射
 			string ns = Encoding.UTF8.GetString(script.Namespace.Data);
 			string className = Encoding.UTF8.GetString(script.ClassName_R.Data);
-			if (UnityPackageAssemblyMap.TryGetScriptGuid(assemblyName, ns, className, out UnityGuid scriptGuid))
-			{
-				// fileID=11500000 是 Unity 对 MonoScript 的固定导出 ID，与 Decompile 分支一致
-				return new MetaPtr(MonoScriptDecompiledFileID, scriptGuid, AssetType.Meta);
-			}
-			// 脚本级映射未命中：回退到程序集级 GUID，并输出警告便于后续补充映射
 			Logger.Warning(LogCategory.Export, $"UPM 程序集 '{assemblyName}' 的脚本 '{ns}.{className}' 未命中脚本级 GUID 映射，回退到程序集级 GUID。");
 			return new MetaPtr(ScriptHashing.CalculateScriptFileID(script), ResolveSkipGuid(assemblyName), AssetType.Meta);
 		}

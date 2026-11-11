@@ -1,5 +1,13 @@
+using AssetRipper.Assets.Bundles;
+using AssetRipper.Assets.Collections;
+using AssetRipper.Export.UnityProjects;
 using AssetRipper.Export.UnityProjects.Scripts;
+using AssetRipper.Import.Structure.Assembly.Managers;
+using AssetRipper.IO.Files;
 using AssetRipper.Primitives;
+using AssetRipper.Processing;
+using AssetRipper.SourceGenerated.Classes.ClassID_115;
+using AssetRipper.SourceGenerated.Extensions;
 
 namespace AssetRipper.Tests;
 
@@ -60,5 +68,69 @@ internal class ScriptExporterTests
 	{
 		bool result = UnityPackageAssemblyMap.TryGetScriptGuid("Unknown.Asm", "Unknown.Ns", "UnknownClass", out _);
 		Assert.That(result, Is.False);
+	}
+
+	/// <summary>
+	/// 采集到 .cs.meta 原始 GUID 的脚本必须返回该 GUID，而不是历史哈希值。
+	/// Text.cs.meta 的 GUID 为 5f7201a12d95ffc409449d95f23cf332。
+	/// </summary>
+	[Test]
+	public static void ResolveScriptGuidReturnsCollectedGuidForKnownScript()
+	{
+		IMonoScript script = CreateScript("UnityEngine.UI", "UnityEngine.UI", "Text");
+		Assert.That(ScriptExporter.ResolveScriptGuid(script), Is.EqualTo(UnityGuid.Parse("5f7201a12d95ffc409449d95f23cf332")));
+	}
+
+	/// <summary>
+	/// 未采集到 GUID 的脚本必须回退到历史哈希算法，保证既有工程的导出结果不发生变化。
+	/// </summary>
+	[Test]
+	public static void ResolveScriptGuidFallsBackToHashForUnknownScript()
+	{
+		IMonoScript script = CreateScript("Unknown.Asm", "Unknown.Ns", "UnknownClass");
+		Assert.That(ScriptExporter.ResolveScriptGuid(script), Is.EqualTo(ScriptHashing.CalculateScriptGuid(script)));
+	}
+
+	/// <summary>
+	/// 采集到原始 GUID 的脚本，导出出的 .cs.meta 必须使用同一个 GUID，
+	/// 否则引用指针（CreateExportPointer）会指向一个不存在的资源。
+	/// </summary>
+	[Test]
+	public static void ExportedScriptMetaUsesCollectedGuid()
+	{
+		ProcessedAssetCollection collection = AssetCreator.CreateCollection(UnityVersion.V_2022);
+		IMonoScript script = CreateScript(collection, "UnityEngine.UI", "UnityEngine.UI", "Text");
+		var monoBehaviour = collection.CreateMonoBehaviour();
+		monoBehaviour.ScriptP = script;
+		monoBehaviour.Name = "TestBehaviour";
+
+		VirtualFileSystem fileSystem = Export(collection);
+		const string MetaPath = "/output/ExportedProject/Assets/Scripts/UnityEngine.UI/UnityEngine/UI/Text.cs.meta";
+		Assert.That(fileSystem.File.Exists(MetaPath), Is.True, "脚本 .cs.meta 未被导出");
+		Assert.That(fileSystem.File.ReadAllText(MetaPath), Does.Contain("5f7201a12d95ffc409449d95f23cf332"));
+		Assert.That(fileSystem.File.ReadAllText("/output/ExportedProject/Assets/MonoBehaviour/TestBehaviour.asset"),
+			Does.Contain("guid: 5f7201a12d95ffc409449d95f23cf332"));
+	}
+
+	private static IMonoScript CreateScript(string assemblyName, string @namespace, string className)
+	{
+		return CreateScript(AssetCreator.CreateCollection(UnityVersion.V_2022), assemblyName, @namespace, className);
+	}
+
+	private static IMonoScript CreateScript(ProcessedAssetCollection collection, string assemblyName, string @namespace, string className)
+	{
+		IMonoScript script = collection.CreateMonoScript();
+		script.AssemblyName = assemblyName;
+		script.Namespace = @namespace;
+		script.ClassName_R = className;
+		return script;
+	}
+
+	private static VirtualFileSystem Export(ProcessedAssetCollection collection)
+	{
+		VirtualFileSystem fileSystem = new();
+		GameData gameData = new((GameBundle)collection.Bundle, collection.Version, new BaseManager(_ => { }), null);
+		new ExportHandler(new()).Export(gameData, "output", fileSystem);
+		return fileSystem;
 	}
 }

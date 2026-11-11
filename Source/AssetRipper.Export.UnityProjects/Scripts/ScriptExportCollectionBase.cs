@@ -94,7 +94,9 @@ public abstract class ScriptExportCollectionBase : ExportCollection
 	{
 		IMonoImporter importer = MonoImporter.Create(script.Collection, container.ExportVersion);
 		importer.ExecutionOrder = (short)script.ExecutionOrder;
-		Meta meta = new Meta(ScriptHashing.CalculateScriptGuid(script), importer);
+		// 必须与 ScriptExporter.CreateExportPointer 共用同一个 GUID 解析入口：
+		// 指针若指向采集到的 .cs.meta 原始 GUID，而这里仍写哈希 GUID，预制体的 m_Script 就会 Missing
+		Meta meta = new Meta(ScriptExporter.ResolveScriptGuid(script), importer);
 		ExportMeta(container, meta, path, fileSystem);
 	}
 }

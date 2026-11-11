@@ -11,6 +11,10 @@ internal static class Program
 	// Unity 所有 .meta 文件均以 "guid:" 行标记资源 GUID
 	private const string GuidPrefix = "guid:";
 
+	// Assets 下未被任何 .asmdef 覆盖的脚本归入 Unity 预定义程序集 Assembly-CSharp。
+	// 导出端 MonoScript 的程序集名正是这个名字，映射键必须与之保持一致才能命中。
+	private const string PredefinedAssemblyName = "Assembly-CSharp";
+
 	// 采集逻辑用到的 JSON 宽松选项：Unity 部分 .asmdef / package.json 含注释或尾随逗号
 	private static readonly JsonDocumentOptions s_jsonOptions = new() { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip, };
 
@@ -29,12 +33,13 @@ internal static class Program
 	{
 		if (args.Length != 3)
 		{
-			Console.Error.WriteLine("用法: UnityPackageGuidCollector <BuiltInPackages路径> <PackageCache路径> <输出文件路径>");
+			Console.Error.WriteLine("用法: UnityPackageGuidCollector <BuiltInPackages路径> <Unity工程根路径> <输出文件路径>");
 			return 1;
 		}
 
 		string builtInPackagesPath = args[0];
-		string packageCachePath = args[1];
+		// 第二个参数实际是 Unity 工程根路径：其下的 Library\PackageCache、Assets\Plugins、Assets\Scripts 都会被采集
+		string projectRootPath = args[1];
 		string outputPath = args[2];
 
 		Dictionary<string, Entry> entries = new(StringComparer.Ordinal);
@@ -42,8 +47,8 @@ internal static class Program
 		Dictionary<string, string> asmdefPaths = new(StringComparer.Ordinal);
 
 		CollectFromDirectory(builtInPackagesPath, EntrySource.BuiltInPackages, entries, asmdefPaths);
-		CollectFromDirectory($@"{packageCachePath}\Library\PackageCache", EntrySource.PackageCache, entries, asmdefPaths);
-		CollectFromDirectory($@"{packageCachePath}\Assets\Plugins", EntrySource.PackageCache, entries, asmdefPaths);
+		CollectFromDirectory($@"{projectRootPath}\Library\PackageCache", EntrySource.PackageCache, entries, asmdefPaths);
+		CollectFromDirectory($@"{projectRootPath}\Assets\Plugins", EntrySource.PackageCache, entries, asmdefPaths);
 
 		// 扫描 .cs + .cs.meta，建立脚本级 GUID 映射
 		List<ScriptEntry> scriptEntries = new();
@@ -52,8 +57,13 @@ internal static class Program
 			ScanScriptFiles(kvp.Value, kvp.Key, scriptEntries);
 		}
 
+		int packageScriptCount = scriptEntries.Count;
+		// 工程自建脚本不在任何 UPM 包内，需单独采集；放在包脚本之后，
+		// 这样同名键冲突时 WriteOutputFile 的去重逻辑会优先保留 UPM 包的 GUID
+		CollectProjectScripts($@"{projectRootPath}\Assets\Scripts", scriptEntries);
+
 		WriteOutputFile(outputPath, entries, scriptEntries);
-		Console.WriteLine($"已采集 {entries.Count} 条程序集记录、{scriptEntries.Count} 条脚本记录，输出到: {outputPath}");
+		Console.WriteLine($"已采集 {entries.Count} 条程序集记录、{scriptEntries.Count} 条脚本记录（其中工程脚本 {scriptEntries.Count - packageScriptCount} 条），输出到: {outputPath}");
 		return 0;
 	}
 
@@ -106,7 +116,7 @@ internal static class Program
 		(string? packageName, string? version) = ReadPackageInfo(asmdefPath, searchRoot);
 		if (string.IsNullOrEmpty(packageName) || string.IsNullOrEmpty(version))
 		{
-			Console.Error.WriteLine($"警告: 缺少 package.json 或 name/version 字段，跳过: {asmdefPath}");
+			Console.Error.WriteLine($"警告: 缺少 package.json 或 name/version 字段， {asmdefPath}");
 			// return;
 			packageName = assemblyName;
 			version = "1.0";
@@ -350,6 +360,55 @@ internal static class Program
 		return sb.ToString();
 	}
 
+	/// <summary>
+	/// 采集 Unity 工程 Assets/Scripts 下自建脚本的 .cs.meta GUID。
+	/// 只产出脚本级映射（S 记录），绝不产出程序集级映射（A 记录）：
+	/// 后者会让 ScriptExporter.GetExportType 把工程程序集误判为需跳过的 UPM 包程序集。
+	/// </summary>
+	/// <param name="scriptsRoot">工程内 Assets/Scripts 目录路径。</param>
+	/// <param name="scriptEntries">脚本级映射条目集合，新条目追加到末尾。</param>
+	private static void CollectProjectScripts(string scriptsRoot, List<ScriptEntry> scriptEntries)
+	{
+		if (!Directory.Exists(scriptsRoot))
+		{
+			// 并非所有工程都有 Assets/Scripts，缺失时按其它采集目录的惯例给出警告后跳过
+			Console.Error.WriteLine($"警告: 目录不存在，跳过工程脚本采集: {scriptsRoot}");
+			return;
+		}
+
+		string rootFull = Path.GetFullPath(scriptsRoot);
+		List<string> asmdefPaths = Directory.EnumerateFiles(rootFull, "*.asmdef", SearchOption.AllDirectories).ToList();
+		HashSet<string> asmdefDirs = new(StringComparer.OrdinalIgnoreCase);
+
+		// Assets/Scripts 下也可能自带 .asmdef，此时脚本属于该自定义程序集。
+		// 读取 name 只用于确定映射键，不写入程序集级映射（见方法说明）。
+		foreach (string asmdefPath in asmdefPaths)
+		{
+			// 无论 name 是否解析成功都要排除该目录：解析失败时无法确定程序集名，
+			// 把其中的 .cs 误归到 Assembly-CSharp 比少采集几条更糟
+			asmdefDirs.Add(Path.GetDirectoryName(asmdefPath)!);
+			try
+			{
+				string? assemblyName = ReadAssemblyNameFromAsmdef(asmdefPath);
+				if (string.IsNullOrEmpty(assemblyName))
+				{
+					Console.Error.WriteLine($"警告: 无法从 .asmdef 读取 name 字段，跳过: {asmdefPath}");
+					continue;
+				}
+
+				ScanScriptFiles(asmdefPath, assemblyName, scriptEntries);
+			}
+			catch (Exception ex)
+			{
+				// 单个 .asmdef 解析失败不应中断整体采集
+				Console.Error.WriteLine($"警告: 处理失败，跳过: {asmdefPath}。原因: {ex.Message}");
+			}
+		}
+
+		// 排除所有被 .asmdef 管辖的目录，剩下的 .cs 才属于预定义程序集 Assembly-CSharp
+		ScanCsFiles(rootFull, PredefinedAssemblyName, asmdefDirs, scriptEntries);
+	}
+
 	private static void ScanScriptFiles(string asmdefPath, string assemblyName, List<ScriptEntry> scriptEntries)
 	{
 		// .asmdef 所在目录即为该程序集的源码根目录
@@ -370,11 +429,23 @@ internal static class Program
 			}
 		}
 
-		foreach (string csPath in Directory.EnumerateFiles(asmdefDir, "*.cs", SearchOption.AllDirectories))
+		ScanCsFiles(asmdefDir, assemblyName, otherAsmdefDirs, scriptEntries);
+	}
+
+	/// <summary>
+	/// 扫描 rootDir 下的 .cs 与同名 .cs.meta，解析命名空间和类型声明后追加脚本级映射条目。
+	/// </summary>
+	/// <param name="rootDir">要递归扫描的源码根目录。</param>
+	/// <param name="assemblyName">这些脚本归属的程序集名，作为映射键的第一段。</param>
+	/// <param name="excludedDirs">属于其它程序集的目录（含其子目录），其中的 .cs 会被跳过。</param>
+	/// <param name="scriptEntries">脚本级映射条目集合，新条目追加到末尾。</param>
+	private static void ScanCsFiles(string rootDir, string assemblyName, HashSet<string> excludedDirs, List<ScriptEntry> scriptEntries)
+	{
+		foreach (string csPath in Directory.EnumerateFiles(rootDir, "*.cs", SearchOption.AllDirectories))
 		{
 			// 跳过属于其他 .asmdef 的 .cs 文件
 			string? csDir = Path.GetDirectoryName(csPath);
-			if (csDir is not null && IsUnderAnyDir(csDir, otherAsmdefDirs))
+			if (csDir is not null && IsUnderAnyDir(csDir, excludedDirs))
 			{
 				continue;
 			}
@@ -414,7 +485,7 @@ internal static class Program
 
 	/// <summary>
 	/// 判断 path 是否等于或位于 dirs 中任一目录之下。
-	/// 用于判断 .cs 文件是否属于更近的 .asmdef。
+	/// 用于判断 .cs 文件是否属于更近的 .asmdef，或是否已被某个 .asmdef 管辖。
 	/// </summary>
 	private static bool IsUnderAnyDir(string path, HashSet<string> dirs)
 	{
@@ -422,7 +493,10 @@ internal static class Program
 		foreach (string dir in dirs)
 		{
 			string dirFull = Path.GetFullPath(dir);
-			if (pathFull.StartsWith(dirFull, StringComparison.OrdinalIgnoreCase))
+			// 必须按目录边界比较，否则 "ScriptsExtra" 会被误判为位于 "Scripts" 之下而漏采
+			string prefix = Path.TrimEndingDirectorySeparator(dirFull) + Path.DirectorySeparatorChar;
+			if (pathFull.Equals(dirFull, StringComparison.OrdinalIgnoreCase)
+				|| pathFull.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
 			{
 				return true;
 			}
